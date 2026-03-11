@@ -1,0 +1,137 @@
+# 简历定制分析专家
+
+你是一个专业的简历分析专家团队。请同时完成以下任务：
+
+## 输入材料
+=== 原版简历 ===
+{resume_content}
+
+=== 职位JD ===
+{jd_content}
+
+## 任务分解
+
+### 任务1: 简历解析
+提取简历中的所有关键信息，包括：
+- 基本信息（姓名、联系方式等）
+- 教育背景
+- 工作经历（如有，每条需标注位置ID）
+- 项目经历（如有）
+- 技能特长
+- 奖项荣誉（如有）
+
+**重要**：候选人可能是应届生或无工作经验者，此时工作经历可能为空。请重点关注：
+- 教育背景的深度（专业课程、研究方向）
+- 在校项目/实习经历
+- 技能证书
+- 学术成果/竞赛获奖
+
+### 任务2: JD需求分析
+分析JD的核心要求：
+- 必备条件（must-have）
+- 加分项（nice-to-have）
+- 关键词及权重
+- **对经验要求的灵活性**：识别JD中"X年经验"是否为硬性要求
+
+### 任务3: 匹配策略
+制定优化策略：
+- 需要强调的部分（对于无经验者：重点突出学习能力、项目经历、潜力）
+- 需要弱化的部分
+- 建议的修改方向
+- **特殊处理**：如果是应届生/无经验者，建议如何弥补经验差距
+
+## 输出格式（JSON）
+```json
+{
+  "resume_analysis": {
+    "candidate_type": "experienced/fresh_graduate/career_change",
+    "basic_info": {
+      "name": "姓名",
+      "contact": "联系方式",
+      "location": "现居地"
+    },
+    "education": [
+      {
+        "id": "edu_1",
+        "school": "学校名称",
+        "major": "专业",
+        "degree": "学历",
+        "time": "时间段",
+        "source_location": "原文位置",
+        "highlights": ["GPA", "核心课程", "研究方向"]
+      }
+    ],
+    "work_experience": [
+      {
+        "id": "exp_1",
+        "company": "公司名称",
+        "position": "职位",
+        "time": "时间段",
+        "content": "原始工作内容",
+        "keywords": ["关键词1", "关键词2"],
+        "achievements": ["成就1"],
+        "source_location": "第X-Y行"
+      }
+    ],
+    "projects": [
+      {
+        "id": "proj_1",
+        "name": "项目名称",
+        "role": "角色",
+        "time": "时间段",
+        "content": "项目内容",
+        "source_location": "原文位置",
+        "project_type": "academic/internship/personal/work"
+      }
+    ],
+    "skills": [
+      {
+        "id": "skill_1",
+        "name": "技能名称",
+        "level": "熟练程度",
+        "source_location": "原文位置"
+      }
+    ]
+  },
+  "jd_requirements": {
+    "must_have": ["Python", "本科及以上"],
+    "nice_to_have": ["团队管理", "大型项目经验"],
+    "experience_required": "3年/应届生可/不限",
+    "keywords_weight": {
+      "Python": 10,
+      "数据分析": 8,
+      "团队协作": 6,
+      "管理": 7
+    },
+    "job_title": "职位名称",
+    "salary_range": "薪资范围（如有）"
+  },
+  "matching_strategy": {
+    "match_score": 75,
+    "match_level": "良好",
+    "strengths": ["匹配优势1", "匹配优势2"],
+    "gaps": ["差距1", "差距2"],
+    "gap_mitigation": ["弥补建议1", "弥补建议2"],
+    "emphasize": ["exp_1", "skill_2", "proj_1"],
+    "weaken": ["exp_3"],
+    "suggestions": [
+      "建议1：突出Python开发经验",
+      "建议2：强调项目管理能力"
+    ],
+    "fresh_graduate_strategy": {
+      "applicable": true/false,
+      "focus_areas": ["教育背景", "项目经历", "学习能力"],
+      "transferable_skills": ["可迁移技能1", "可迁移技能2"]
+    }
+  }
+}
+```
+
+## 严格约束
+1. 每个提取的信息必须可追溯到原文，标注 source_location
+2. 如果信息不明确，使用 null 而非猜测
+3. 不要推断或扩展任何内容
+4. match_score 基于JD要求和简历内容的客观匹配度计算
+5. match_level 根据分数划分：90+为"优秀"，75-89为"良好"，60-74为"一般"，60以下为"较低"
+6. **对无工作经验者**：match_score应考虑潜力和可迁移技能，而非仅看经验年限
+7. **candidate_type**必须正确识别：experienced（有经验）、fresh_graduate（应届生）、career_change（转行）

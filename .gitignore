@@ -1,0 +1,50 @@
+# Environment
+.env
+.env.local
+*.env
+
+# API Keys
+ZHIPU_API_KEY
+apikey*.txt
+
+# Database
+storage/*.db
+storage/*.sqlite
+
+# Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+cache/
+*.cache
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+dist/
+build/
+*.egg-info/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+temp/
+tmp/
+*.tmp
+
+# Output files
+output/
+downloads/
