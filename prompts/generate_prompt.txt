@@ -44,95 +44,95 @@
 
 ## 输出格式（JSON）
 ```json
-{
-  "tailored_resume": {
+{{
+  "tailored_resume": {{
     "resume_type": "standard/fresh_graduate",
-    "basic_info": {
+    "basic_info": {{
       "name": "姓名",
       "phone": "手机号",
       "email": "邮箱",
       "location": "现居地",
       "age": "年龄",
       "gender": "性别"
-    },
+    }},
     "summary": "优化后的个人简介（100-200字，根据JD要求定制。对应届生强调学习能力和专业基础）",
     "education": [
-      {
+      {{
         "id": "edu_1",
         "original": "原始内容",
         "tailored": "优化后内容",
         "highlights": ["核心课程", "GPA", "研究方向"],
-        "evidence": {
+        "evidence": {{
           "source": "原简历-教育背景-第1条",
           "modification_type": "rephrase",
           "added_keywords": [],
           "confidence": 0.95
-        }
-      }
+        }}
+      }}
     ],
     "work_experience": [
-      {
+      {{
         "id": "exp_1",
         "original": "原始内容",
         "tailored": "优化后内容",
-        "evidence": {
+        "evidence": {{
           "source": "原简历-工作经历-第1条",
           "modification_type": "emphasize",
           "added_keywords": ["核心", "系统", "主导"],
           "confidence": 0.9,
           "validation": "pass"
-        }
-      }
+        }}
+      }}
     ],
     "projects": [
-      {
+      {{
         "id": "proj_1",
         "original": "原始内容",
         "tailored": "优化后内容",
         "project_type": "academic/internship/personal/work",
-        "evidence": {
+        "evidence": {{
           "source": "原简历-项目经历-第1条",
           "modification_type": "reorder",
           "added_keywords": [],
           "confidence": 0.85
-        }
-      }
+        }}
+      }}
     ],
     "skills": [
-      {
+      {{
         "id": "skill_1",
         "name": "技能名称",
         "tailored_description": "优化后的技能描述",
-        "evidence": {
+        "evidence": {{
           "source": "原简历-技能-第1条",
           "confidence": 0.9
-        }
-      }
+        }}
+      }}
     ],
     "awards": [...],
     "certificates": [...],
     "self_evaluation": "优化后的自我评价（应届生强调学习能力和成长潜力）"
-  },
-  "evidence_report": {
+  }},
+  "evidence_report": {{
     "total_items": 10,
     "validated": 9,
     "needs_review": 1,
     "coverage": 0.9,
     "details": [
-      {
+      {{
         "item_id": "exp_1",
         "validation_status": "pass",
         "confidence": 0.9
-      },
-      {
+      }},
+      {{
         "item_id": "exp_2",
         "validation_status": "needs_review",
         "confidence": 0.65,
         "reason": "原文匹配度较低"
-      }
+      }}
     ]
-  },
-  "optimization_summary": {
+  }},
+  "optimization_summary": {{
     "jd_match_improvement": "+15%",
     "key_changes": [
       "突出Python开发经验",
@@ -144,8 +144,8 @@
       "强化项目经历描述",
       "突出学习能力"
     ]
-  }
-}
+  }}
+}}
 ```
 
 ## confidence 评分标准

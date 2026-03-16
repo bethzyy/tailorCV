@@ -1,45 +1,37 @@
 """
-模型管理器模块
+单模型管理器模块
 
-负责管理 ZhipuAI 模型调用，包括主备切换和重试机制。
+负责管理单个模型提供者的调用，支持主备切换和重试机制。
+用于简版工具。
 """
 
-import os
-import time
-import json
 import logging
-from typing import Optional, Dict, Any, List
-from dataclasses import dataclass
+from typing import Dict, Any, List, Optional
 
-from zhipuai import ZhipuAI
-
+from .providers.base_provider import BaseModelProvider, ModelResponse
+from .providers.zhipu_provider import ZhipuProvider
 from .config import config
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class ModelResponse:
-    """模型响应数据结构"""
-    success: bool
-    content: str
-    model_used: str
-    tokens_used: int = 0
-    latency_ms: int = 0
-    error_message: str = ""
-
-
 class ModelManager:
-    """模型管理器 - 主备切换和重试机制"""
+    """单模型管理器 - 使用提供者模式"""
 
-    def __init__(self):
-        self.api_key = config.ZHIPU_API_KEY
-        if not self.api_key:
-            raise ValueError("ZHIPU_API_KEY 未配置")
+    def __init__(self, provider: BaseModelProvider = None):
+        """
+        初始化模型管理器
 
-        self.client = ZhipuAI(api_key=self.api_key)
+        Args:
+            provider: 模型提供者（可选，默认使用智谱）
+        """
+        if provider is None:
+            # 默认使用智谱提供者
+            provider = ZhipuProvider()
+
+        self.provider = provider
         self.primary_model = config.PRIMARY_MODEL
-        self.fallback_models = config.FALLBACK_MODEL.split(',') if isinstance(config.FALLBACK_MODEL, str) else [config.FALLBACK_MODEL]
+        self.fallback_models = self._parse_fallback_models()
 
         # 调用统计
         self.stats = {
@@ -50,6 +42,23 @@ class ModelManager:
             'total_tokens': 0,
             'total_latency_ms': 0
         }
+
+    def _parse_fallback_models(self) -> List[str]:
+        """解析备用模型列表"""
+        fallback = config.FALLBACK_MODEL
+        if isinstance(fallback, str):
+            return [m.strip() for m in fallback.split(',') if m.strip()]
+        return [fallback] if fallback else []
+
+    @property
+    def current_model(self) -> str:
+        """获取当前使用的模型"""
+        return self.primary_model
+
+    @property
+    def current_provider(self) -> str:
+        """获取当前提供者ID"""
+        return self.provider.provider_id
 
     def call(self, prompt: str, task_type: str = 'analyze',
              max_tokens: int = 4096, temperature: float = 0.7,
@@ -80,57 +89,32 @@ class ModelManager:
         last_error = None
 
         for model in models_to_try:
-            for attempt in range(max_retries):
-                try:
-                    start_time = time.time()
+            # 检查模型是否在提供者的可用模型中
+            if model not in self.provider.available_models:
+                continue
 
-                    response = self.client.chat.completions.create(
-                        model=model,
-                        messages=[{
-                            "role": "user",
-                            "content": prompt
-                        }],
-                        max_tokens=max_tokens,
-                        temperature=temperature
-                    )
+            response = self.provider.call(
+                prompt=prompt,
+                model_id=model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                max_retries=max_retries
+            )
 
-                    latency_ms = int((time.time() - start_time) * 1000)
+            if response.success:
+                # 更新统计
+                self.stats['success_calls'] += 1
+                self.stats['total_tokens'] += response.tokens_used
+                self.stats['total_latency_ms'] += response.latency_ms
 
-                    # 提取内容
-                    content = response.choices[0].message.content
+                if model != preferred_model:
+                    self.stats['fallback_used'] += 1
+                    logger.info(f"使用备用模型: {model}")
 
-                    # 统计
-                    self.stats['success_calls'] += 1
-                    self.stats['total_tokens'] += response.usage.total_tokens
-                    self.stats['total_latency_ms'] += latency_ms
-
-                    if model != preferred_model:
-                        self.stats['fallback_used'] += 1
-                        logger.info(f"使用备用模型: {model}")
-
-                    logger.info(f"模型调用成功: {model}, tokens={response.usage.total_tokens}, latency={latency_ms}ms")
-
-                    return ModelResponse(
-                        success=True,
-                        content=content,
-                        model_used=model,
-                        tokens_used=response.usage.total_tokens,
-                        latency_ms=latency_ms
-                    )
-
-                except Exception as e:
-                    last_error = e
-                    logger.warning(f"模型调用失败 (model={model}, attempt={attempt+1}): {e}")
-
-                    # 如果是配额错误，立即切换模型
-                    if self._is_quota_error(e):
-                        logger.info(f"检测到配额错误，切换模型")
-                        break
-
-                    # 其他错误，等待后重试
-                    if attempt < max_retries - 1:
-                        wait_time = (attempt + 1) * 2  # 指数退避
-                        time.sleep(wait_time)
+                return response
+            else:
+                last_error = response.error_message
+                logger.warning(f"模型调用失败: model={model}, error={response.error_message}")
 
         # 所有模型都失败
         self.stats['failed_calls'] += 1
@@ -139,15 +123,10 @@ class ModelManager:
         return ModelResponse(
             success=False,
             content="",
-            model_used="",
+            model_id="",
+            model_name="",
             error_message=str(last_error)
         )
-
-    def _is_quota_error(self, error: Exception) -> bool:
-        """判断是否为配额错误"""
-        error_str = str(error).lower()
-        quota_keywords = ['quota', 'limit', 'exhausted', 'rate', '1310']
-        return any(kw in error_str for kw in quota_keywords)
 
     def get_stats(self) -> Dict[str, Any]:
         """获取调用统计"""
@@ -155,4 +134,13 @@ class ModelManager:
         if stats['success_calls'] > 0:
             stats['avg_latency_ms'] = stats['total_latency_ms'] // stats['success_calls']
             stats['avg_tokens'] = stats['total_tokens'] // stats['success_calls']
+
+        # 合并提供者统计
+        provider_stats = self.provider.get_stats()
+        stats['provider'] = provider_stats
+
         return stats
+
+    def is_available(self) -> bool:
+        """检查模型管理器是否可用"""
+        return self.provider.is_available()

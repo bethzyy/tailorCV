@@ -19,6 +19,7 @@ from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
 from .config import config
+from .resume_parser import StyleMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -115,19 +116,21 @@ class ResumeGenerator:
             return word_path
 
     def generate_bytes(self, tailored_resume: Dict[str, Any],
-                       format: str = 'word') -> bytes:
+                       format: str = 'word',
+                       style_metadata: StyleMetadata = None) -> bytes:
         """
         生成文档字节流
 
         Args:
             tailored_resume: 定制后的简历数据
             format: 格式 ('word' 或 'pdf')
+            style_metadata: 样式元数据（可选）
 
         Returns:
             bytes: 文档字节流
         """
         # 生成到内存
-        doc = self._create_document(tailored_resume)
+        doc = self._create_document(tailored_resume, style_metadata)
 
         # 保存到字节流
         bio = io.BytesIO()
@@ -140,54 +143,60 @@ class ResumeGenerator:
 
         return bio.read()
 
-    def _create_document(self, tailored_resume: Dict[str, Any]) -> Document:
+    def _create_document(self, tailored_resume: Dict[str, Any],
+                        style_metadata: StyleMetadata = None) -> Document:
         """创建文档对象"""
         doc = Document()
 
-        # 设置页面边距
-        for section in doc.sections:
-            section.top_margin = Cm(2.5)
-            section.bottom_margin = Cm(2.5)
-            section.left_margin = Cm(2)
-            section.right_margin = Cm(2)
+        # 使用传入的样式元数据或默认值
+        if style_metadata is None:
+            style_metadata = StyleMetadata()
 
-        self._set_document_font(doc)
+        # 设置页面边距（使用提取的边距）
+        for section in doc.sections:
+            section.top_margin = Cm(style_metadata.margin_top)
+            section.bottom_margin = Cm(style_metadata.margin_bottom)
+            section.left_margin = Cm(style_metadata.margin_left)
+            section.right_margin = Cm(style_metadata.margin_right)
+
+        self._set_document_font(doc, style_metadata)
 
         # 添加内容
-        self._add_basic_info(doc, tailored_resume.get('basic_info', {}))
-        self._add_summary(doc, tailored_resume.get('summary', ''))
-        self._add_education(doc, tailored_resume.get('education', []))
-        self._add_work_experience(doc, tailored_resume.get('work_experience', []))
-        self._add_projects(doc, tailored_resume.get('projects', []))
-        self._add_skills(doc, tailored_resume.get('skills', []))
-        self._add_awards(doc, tailored_resume.get('awards', []))
-        self._add_certificates(doc, tailored_resume.get('certificates', []))
-        self._add_self_evaluation(doc, tailored_resume.get('self_evaluation', ''))
+        self._add_basic_info(doc, tailored_resume.get('basic_info', {}), style_metadata)
+        self._add_summary(doc, tailored_resume.get('summary', ''), style_metadata)
+        self._add_education(doc, tailored_resume.get('education', []), style_metadata)
+        self._add_work_experience(doc, tailored_resume.get('work_experience', []), style_metadata)
+        self._add_projects(doc, tailored_resume.get('projects', []), style_metadata)
+        self._add_skills(doc, tailored_resume.get('skills', []), style_metadata)
+        self._add_awards(doc, tailored_resume.get('awards', []), style_metadata)
+        self._add_certificates(doc, tailored_resume.get('certificates', []), style_metadata)
+        self._add_self_evaluation(doc, tailored_resume.get('self_evaluation', ''), style_metadata)
 
         return doc
 
-    def _set_document_font(self, doc: Document):
-        """设置文档默认字体"""
+    def _set_document_font(self, doc: Document, style_metadata: StyleMetadata):
+        """设置文档默认字体（使用提取的样式）"""
         # 设置正文样式
         style = doc.styles['Normal']
         font = style.font
-        font.name = 'Microsoft YaHei'
-        font.size = Pt(10.5)
+        font.name = style_metadata.primary_font
+        font.size = Pt(style_metadata.body_font_size)
 
         # 设置中文字体
-        style._element.rPr.rFonts.set(qn('w:eastAsia'), 'Microsoft YaHei')
+        style._element.rPr.rFonts.set(qn('w:eastAsia'), style_metadata.primary_font)
 
-    def _add_basic_info(self, doc: Document, basic_info: Dict[str, Any]):
-        """添加基本信息"""
+    def _add_basic_info(self, doc: Document, basic_info: Dict[str, Any],
+                       style_metadata: StyleMetadata):
+        """添加基本信息（使用动态字号）"""
         name = basic_info.get('name', '')
         if not name:
             return
 
-        # 姓名（标题）
+        # 姓名（标题）- 使用动态字号
         title = doc.add_paragraph()
         title_run = title.add_run(name)
         title_run.bold = True
-        title_run.font.size = Pt(18)
+        title_run.font.size = Pt(style_metadata.get_name_font_size())
         title.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
         # 联系方式（一行）
@@ -199,43 +208,54 @@ class ResumeGenerator:
         if basic_info.get('location'):
             contact_parts.append(f"现居: {basic_info['location']}")
         if basic_info.get('age'):
-            contact_parts.append(f"年龄: {basic_info['age']}岁")
+            age = str(basic_info['age'])
+            if not age.endswith('岁'):
+                age = f"{age}岁"
+            contact_parts.append(f"年龄: {age}")
         if basic_info.get('gender'):
             contact_parts.append(f"性别: {basic_info['gender']}")
 
         if contact_parts:
             contact = doc.add_paragraph()
             contact_run = contact.add_run(' | '.join(contact_parts))
-            contact_run.font.size = Pt(10)
+            contact_run.font.size = Pt(style_metadata.get_time_font_size())
             contact.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
         # 分隔线
         doc.add_paragraph('─' * 40)
 
-    def _add_summary(self, doc: Document, summary: str):
+    def _add_summary(self, doc: Document, summary: str, style_metadata: StyleMetadata):
         """添加个人简介"""
         if not summary:
             return
 
-        self._add_section_title(doc, '个人简介')
+        self._add_section_title(doc, '个人简介', style_metadata)
         p = doc.add_paragraph(summary)
         p.paragraph_format.first_line_indent = Cm(0.74)  # 两字符缩进
 
-    def _add_education(self, doc: Document, education: List[Dict[str, Any]]):
-        """添加教育背景"""
+    def _add_education(self, doc: Document, education: List[Dict[str, Any]],
+                      style_metadata: StyleMetadata):
+        """添加教育背景 - 支持复杂对象格式"""
         if not education:
             return
 
-        self._add_section_title(doc, '教育背景')
+        self._add_section_title(doc, '教育背景', style_metadata)
 
         for edu in education:
             p = doc.add_paragraph()
 
+            # 如果有 tailored 字段（优化后内容），使用它
+            tailored = edu.get('tailored', '')
+            if tailored:
+                p.add_run(tailored)
+                continue
+
+            # 否则从各字段组装
             # 时间
             time = edu.get('time', '')
             if time:
                 run = p.add_run(time + '  ')
-                run.font.size = Pt(10)
+                run.font.size = Pt(style_metadata.get_time_font_size())
 
             # 学校和专业
             school = edu.get('school', '')
@@ -249,14 +269,22 @@ class ResumeGenerator:
                 p.add_run(f'  {major}')
             if degree:
                 run = p.add_run(f'  [{degree}]')
-                run.font.size = Pt(9)
+                run.font.size = Pt(style_metadata.get_degree_font_size())
 
-    def _add_work_experience(self, doc: Document, work_experience: List[Dict[str, Any]]):
+            # 如果有 highlights，添加核心课程等信息
+            highlights = edu.get('highlights', [])
+            if highlights:
+                p2 = doc.add_paragraph()
+                p2.add_run('核心课程/亮点: ' + ' | '.join(highlights))
+                p2.paragraph_format.left_indent = Cm(0.5)
+
+    def _add_work_experience(self, doc: Document, work_experience: List[Dict[str, Any]],
+                            style_metadata: StyleMetadata):
         """添加工作经历"""
         if not work_experience:
             return
 
-        self._add_section_title(doc, '工作经历')
+        self._add_section_title(doc, '工作经历', style_metadata)
 
         for exp in work_experience:
             # 标题行：时间 公司 职位
@@ -265,7 +293,7 @@ class ResumeGenerator:
             time = exp.get('time', '')
             if time:
                 run = p.add_run(time + '  ')
-                run.font.size = Pt(10)
+                run.font.size = Pt(style_metadata.get_time_font_size())
 
             company = exp.get('company', '')
             if company:
@@ -287,12 +315,13 @@ class ResumeGenerator:
                         p = doc.add_paragraph(line, style='List Bullet')
                         p.paragraph_format.left_indent = Cm(0.5)
 
-    def _add_projects(self, doc: Document, projects: List[Dict[str, Any]]):
+    def _add_projects(self, doc: Document, projects: List[Dict[str, Any]],
+                     style_metadata: StyleMetadata):
         """添加项目经历"""
         if not projects:
             return
 
-        self._add_section_title(doc, '项目经历')
+        self._add_section_title(doc, '项目经历', style_metadata)
 
         for proj in projects:
             # 标题行
@@ -301,7 +330,7 @@ class ResumeGenerator:
             time = proj.get('time', '')
             if time:
                 run = p.add_run(time + '  ')
-                run.font.size = Pt(10)
+                run.font.size = Pt(style_metadata.get_time_font_size())
 
             name = proj.get('name', '')
             if name:
@@ -322,12 +351,13 @@ class ResumeGenerator:
                         p = doc.add_paragraph(line, style='List Bullet')
                         p.paragraph_format.left_indent = Cm(0.5)
 
-    def _add_skills(self, doc: Document, skills: List[Any]):
+    def _add_skills(self, doc: Document, skills: List[Any],
+                   style_metadata: StyleMetadata):
         """添加专业技能"""
         if not skills:
             return
 
-        self._add_section_title(doc, '专业技能')
+        self._add_section_title(doc, '专业技能', style_metadata)
 
         # 处理不同的技能格式
         if isinstance(skills, list):
@@ -347,43 +377,59 @@ class ResumeGenerator:
             if skill_names:
                 p = doc.add_paragraph(' | '.join(skill_names))
 
-    def _add_awards(self, doc: Document, awards: List[str]):
-        """添加奖项荣誉"""
+    def _add_awards(self, doc: Document, awards: List[Any],
+                   style_metadata: StyleMetadata):
+        """添加奖项荣誉 - 支持字符串和对象格式"""
         if not awards:
             return
 
-        self._add_section_title(doc, '奖项荣誉')
+        self._add_section_title(doc, '奖项荣誉', style_metadata)
 
         for award in awards:
-            if award:
+            if isinstance(award, dict):
+                # 对象格式：提取 name 字段
+                name = award.get('name', '')
+                if name:
+                    p = doc.add_paragraph(name, style='List Bullet')
+            elif isinstance(award, str) and award:
+                # 字符串格式：直接使用
                 p = doc.add_paragraph(award, style='List Bullet')
 
-    def _add_certificates(self, doc: Document, certificates: List[str]):
-        """添加证书资质"""
+    def _add_certificates(self, doc: Document, certificates: List[Any],
+                         style_metadata: StyleMetadata):
+        """添加证书资质 - 支持字符串和对象格式"""
         if not certificates:
             return
 
-        self._add_section_title(doc, '证书资质')
+        self._add_section_title(doc, '证书资质', style_metadata)
 
         for cert in certificates:
-            if cert:
+            if isinstance(cert, dict):
+                # 对象格式：提取 name 字段
+                name = cert.get('name', '')
+                if name:
+                    p = doc.add_paragraph(name, style='List Bullet')
+            elif isinstance(cert, str) and cert:
+                # 字符串格式：直接使用
                 p = doc.add_paragraph(cert, style='List Bullet')
 
-    def _add_self_evaluation(self, doc: Document, self_evaluation: str):
+    def _add_self_evaluation(self, doc: Document, self_evaluation: str,
+                            style_metadata: StyleMetadata):
         """添加自我评价"""
         if not self_evaluation:
             return
 
-        self._add_section_title(doc, '自我评价')
+        self._add_section_title(doc, '自我评价', style_metadata)
         p = doc.add_paragraph(self_evaluation)
         p.paragraph_format.first_line_indent = Cm(0.74)
 
-    def _add_section_title(self, doc: Document, title: str):
-        """添加章节标题"""
+    def _add_section_title(self, doc: Document, title: str,
+                          style_metadata: StyleMetadata):
+        """添加章节标题（使用动态字号）"""
         p = doc.add_paragraph()
         run = p.add_run(title)
         run.bold = True
-        run.font.size = Pt(12)
+        run.font.size = Pt(style_metadata.get_section_title_font_size())
         p.paragraph_format.space_before = Pt(12)
         p.paragraph_format.space_after = Pt(6)
 

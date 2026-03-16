@@ -108,6 +108,17 @@ class Database:
                 )
             ''')
 
+            # 用户配置表
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS user_config (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    config_key TEXT UNIQUE NOT NULL,
+                    config_value TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
             # 创建索引
             cursor.execute('''
                 CREATE INDEX IF NOT EXISTS idx_history_created_at
@@ -120,6 +131,10 @@ class Database:
             cursor.execute('''
                 CREATE INDEX IF NOT EXISTS idx_tasks_status
                 ON tasks(status)
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_user_config_key
+                ON user_config(config_key)
             ''')
 
             logger.info(f"数据库初始化完成: {self.db_path}")
@@ -298,6 +313,71 @@ class Database:
             return cursor.rowcount > 0
 
     # ==================== 缓存管理 ====================
+
+    def save_config(self, key: str, value: str) -> bool:
+        """
+        保存用户配置
+
+        Args:
+            key: 配置键
+            value: 配置值
+
+        Returns:
+            bool: 是否保存成功
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT OR REPLACE INTO user_config (config_key, config_value, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+            ''', (key, value))
+            return cursor.rowcount > 0
+
+    def get_config(self, key: str, default: str = '') -> str:
+        """
+        获取用户配置
+
+        Args:
+            key: 配置键
+            default: 默认值
+
+        Returns:
+            str: 配置值
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT config_value FROM user_config WHERE config_key = ?', (key,))
+            row = cursor.fetchone()
+            if row:
+                return row['config_value'] or default
+            return default
+
+    def get_all_config(self) -> Dict[str, str]:
+        """
+        获取所有用户配置
+
+        Returns:
+            Dict[str, str]: 配置字典
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT config_key, config_value FROM user_config')
+            return {row['config_key']: row['config_value'] or '' for row in cursor.fetchall()}
+
+    def delete_config(self, key: str) -> bool:
+        """
+        删除用户配置
+
+        Args:
+            key: 配置键
+
+        Returns:
+            bool: 是否删除成功
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM user_config WHERE config_key = ?', (key,))
+            return cursor.rowcount > 0
 
     def save_analysis_cache(self, cache_key: str, resume_hash: str,
                             jd_hash: str, analysis_result: dict) -> bool:

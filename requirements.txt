@@ -8,10 +8,12 @@ PyPDF2>=3.0.0
 
 # Word Processing
 python-docx>=1.1.0
+docxtpl>=0.16.7
 docx2pdf>=0.1.8
 
 # AI SDK
 zhipuai>=2.0.0
+openai>=1.0.0  # For Alibaba Coding Plan API
 
 # Text Processing
 python-Levenshtein>=0.21.0

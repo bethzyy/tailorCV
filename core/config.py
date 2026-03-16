@@ -2,6 +2,7 @@
 tailorCV 配置管理模块
 
 负责加载和管理应用配置，包括 API 密钥、模型配置等。
+支持多模型配置。
 """
 
 import os
@@ -18,34 +19,48 @@ class Config:
     # 项目根目录
     BASE_DIR = Path(__file__).resolve().parent.parent
 
-    # API 配置
+    # ==================== 智谱AI 配置 ====================
     ZHIPU_API_KEY = os.getenv('ZHIPU_API_KEY', '')
 
-    # 模型配置
+    # ==================== 阿里云 配置 ====================
+    ALIBABA_API_KEY = os.getenv('ALIBABA_API_KEY', '')
+
+    # ==================== 模型配置 ====================
+    # 智谱模型
     PRIMARY_MODEL = os.getenv('PRIMARY_MODEL', 'glm-4.6')
     FALLBACK_MODEL = os.getenv('FALLBACK_MODEL', 'glm-4-flash')
 
-    # 任务-模型映射
+    # 阿里云模型
+    ALIBABA_PRIMARY_MODEL = os.getenv('ALIBABA_PRIMARY_MODEL', 'qwen3.5-plus')
+
+    # 任务-模型映射（智谱）
     TASK_MODEL_MAPPING = {
         'analyze': 'glm-4.6',      # 分析任务
         'generate': 'glm-4.6',     # 生成任务
         'validate': 'glm-4-flash'  # 验证任务（低成本）
     }
 
-    # 处理配置
+    # 任务-模型映射（阿里云）
+    ALIBABA_TASK_MODEL_MAPPING = {
+        'analyze': 'qwen3.5-plus',
+        'generate': 'qwen3-max-2026-01-23',
+        'validate': 'qwen3.5-plus'
+    }
+
+    # ==================== 处理配置 ====================
     MAX_PROCESSING_TIME = int(os.getenv('MAX_PROCESSING_TIME', 60))
     EVIDENCE_THRESHOLD = float(os.getenv('EVIDENCE_THRESHOLD', 0.7))
 
-    # 存储配置
+    # ==================== 存储配置 ====================
     DATABASE_PATH = os.getenv('DATABASE_PATH', str(BASE_DIR / 'storage' / 'tailorcv.db'))
     HISTORY_RETENTION_DAYS = int(os.getenv('HISTORY_RETENTION_DAYS', 30))
 
-    # 验证配置
+    # ==================== 验证配置 ====================
     SIMILARITY_THRESHOLD = float(os.getenv('SIMILARITY_THRESHOLD', 0.6))
     CONFIDENCE_THRESHOLD = float(os.getenv('CONFIDENCE_THRESHOLD', 0.7))
     EVIDENCE_COVERAGE_TARGET = float(os.getenv('EVIDENCE_COVERAGE_TARGET', 0.90))
 
-    # 置信度计算权重配置（可配置化）
+    # ==================== 置信度计算权重配置 ====================
     # 适用于有工作经验者
     CONFIDENCE_WEIGHTS_EXPERIENCED = {
         'basic_info': 0.20,        # 基本信息
@@ -66,7 +81,7 @@ class Config:
         'awards_bonus': 0.05,      # 奖项/证书额外加分
     }
 
-    # 可疑关键词模式（中英文）
+    # ==================== 可疑关键词模式 ====================
     SUSPICIOUS_PATTERNS = [
         # 中文模式
         r'精通',
@@ -96,7 +111,7 @@ class Config:
         r'\bpioneering\b',
     ]
 
-    # AI验证Prompt配置
+    # ==================== AI验证Prompt配置 ====================
     AI_VALIDATION_CONFIG = {
         'max_context_length': 2000,    # 原版简历上下文最大长度
         'max_content_length': 500,     # 待验证内容最大长度
@@ -104,9 +119,14 @@ class Config:
         'max_tokens': 512,             # 验证响应最大token数
     }
 
-    # Flask 配置
+    # ==================== Flask 配置 ====================
     SECRET_KEY = os.getenv('SECRET_KEY', 'tailorcv-secret-key-change-in-production')
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB 最大文件大小
+
+    # ==================== 端口配置 ====================
+    SIMPLE_APP_PORT = int(os.getenv('SIMPLE_APP_PORT', 5001))
+    MULTI_APP_PORT = int(os.getenv('MULTI_APP_PORT', 5002))
+    HUB_APP_PORT = int(os.getenv('HUB_APP_PORT', 5000))
 
     @classmethod
     def validate(cls) -> bool:
@@ -116,8 +136,17 @@ class Config:
         return True
 
     @classmethod
-    def get_model_for_task(cls, task_type: str) -> str:
+    def validate_multi(cls) -> bool:
+        """验证多模型配置是否有效"""
+        if not cls.ZHIPU_API_KEY and not cls.ALIBABA_API_KEY:
+            raise ValueError("至少需要配置一个模型提供者的 API 密钥")
+        return True
+
+    @classmethod
+    def get_model_for_task(cls, task_type: str, provider: str = 'zhipu') -> str:
         """获取指定任务类型的模型"""
+        if provider == 'alibaba':
+            return cls.ALIBABA_TASK_MODEL_MAPPING.get(task_type, cls.ALIBABA_PRIMARY_MODEL)
         return cls.TASK_MODEL_MAPPING.get(task_type, cls.PRIMARY_MODEL)
 
     @classmethod
@@ -137,6 +166,16 @@ class Config:
     def get_ai_validation_config(cls) -> dict:
         """获取AI验证配置"""
         return cls.AI_VALIDATION_CONFIG.copy()
+
+    @classmethod
+    def get_available_providers(cls) -> list:
+        """获取可用的提供者列表"""
+        providers = []
+        if cls.ZHIPU_API_KEY:
+            providers.append('zhipu')
+        if cls.ALIBABA_API_KEY or Path(r'C:\D\CAIE_tool\LLM_Configs\ali\apikey.txt').exists():
+            providers.append('alibaba')
+        return providers
 
 
 # 创建全局配置实例

@@ -10,9 +10,10 @@ import json
 import base64
 import uuid
 import logging
+import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Tuple
 
 from flask import Flask, request, jsonify, render_template, send_file
 from flask_cors import CORS
@@ -25,6 +26,8 @@ from core.expert_team import ExpertTeam, AnalysisResult, GenerationResult
 from core.evidence_tracker import EvidenceTracker
 from core.resume_generator import ResumeGenerator
 from core.cache_manager import CacheManager
+from core.template_processor import TemplateProcessor
+from core.database import db
 
 # 配置日志
 logging.basicConfig(
@@ -48,9 +51,128 @@ builder = ResumeBuilder()
 expert_team = ExpertTeam()
 generator = ResumeGenerator()
 cache_manager = CacheManager()
+template_processor = TemplateProcessor()
 
 # 任务状态存储（简单实现，生产环境应使用 Redis）
 task_status: Dict[str, Dict[str, Any]] = {}
+
+
+# ==================== 文件保存辅助函数 ====================
+
+def save_uploaded_file(file, session_id: str) -> str:
+    """
+    保存上传的原始文件
+
+    Args:
+        file: Flask 文件对象
+        session_id: 会话ID
+
+    Returns:
+        str: 保存的文件路径
+    """
+    upload_dir = Path('storage/uploads') / session_id
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    # 保留原始扩展名
+    ext = Path(file.filename).suffix.lower()
+    file_path = upload_dir / f'original{ext}'
+    file.save(str(file_path))
+
+    logger.info(f"原始文件已保存: {file_path}")
+    return str(file_path)
+
+
+def save_uploaded_bytes(content: bytes, filename: str, session_id: str) -> str:
+    """
+    保存上传的原始文件内容（字节形式）
+
+    Args:
+        content: 文件内容（字节）
+        filename: 原始文件名
+        session_id: 会话ID
+
+    Returns:
+        str: 保存的文件路径
+    """
+    upload_dir = Path('storage/uploads') / session_id
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    # 保留原始扩展名
+    ext = Path(filename).suffix.lower()
+    file_path = upload_dir / f'original{ext}'
+
+    with open(file_path, 'wb') as f:
+        f.write(content)
+
+    logger.info(f"原始文件已保存: {file_path}")
+    return str(file_path)
+
+
+def save_tailored_file(content: bytes, session_id: str) -> str:
+    """
+    保存定制后的文件
+
+    Args:
+        content: 文件内容（字节）
+        session_id: 会话ID
+
+    Returns:
+        str: 保存的文件路径
+    """
+    output_dir = Path('storage/tailored') / session_id
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    file_path = output_dir / 'tailored.docx'
+    with open(file_path, 'wb') as f:
+        f.write(content)
+
+    logger.info(f"定制文件已保存: {file_path}")
+    return str(file_path)
+
+
+def parse_jd_info(jd_content: str) -> Tuple[str, str]:
+    """
+    从 JD 内容中提取职位名称和公司名称
+
+    Args:
+        jd_content: JD 文本内容
+
+    Returns:
+        Tuple[str, str]: (职位名称, 公司名称)
+    """
+    job_title = ''
+    company = ''
+
+    lines = jd_content.strip().split('\n')
+    for line in lines[:10]:  # 只检查前10行
+        line = line.strip()
+        if not line:
+            continue
+
+        # 常见的职位标识
+        if any(kw in line for kw in ['职位', '岗位', '招聘', 'Job Title']):
+            # 尝试提取职位名称
+            if '：' in line:
+                job_title = line.split('：')[-1].strip()
+            elif ':' in line:
+                job_title = line.split(':')[-1].strip()
+            elif not job_title and len(line) < 50:
+                job_title = line
+
+        # 常见的公司标识
+        if any(kw in line for kw in ['公司', '企业', 'Company', '招聘方']):
+            if '：' in line:
+                company = line.split('：')[-1].strip()
+            elif ':' in line:
+                company = line.split(':')[-1].strip()
+
+    # 如果没有提取到，使用第一行作为职位（通常是标题）
+    if not job_title and lines:
+        first_line = lines[0].strip()
+        if len(first_line) < 100:  # 避免使用太长的行
+            job_title = first_line
+
+    return job_title[:100] if job_title else '', company[:50] if company else ''
 
 
 def allowed_file(filename: str) -> bool:
@@ -105,6 +227,9 @@ def tailor_file():
         - evidence_report: 依据报告
     """
     try:
+        # 记录开始时间
+        start_time = time.time()
+
         # 检查文件
         if 'resume' not in request.files:
             return jsonify({'error': '未上传简历文件'}), 400
@@ -138,10 +263,36 @@ def tailor_file():
 
         # 解析简历
         resume_content = resume_file.read()
+
+        # 保存原始文件
+        save_uploaded_bytes(resume_content, resume_file.filename, session_id)
+
         parsed_resume = parser.parse(
             file_content=resume_content,
             filename=resume_file.filename
         )
+
+        # 模板预处理（仅 Word 格式）
+        template_result = None
+        original_doc = None
+        if parsed_resume.source_format == 'word':
+            task_status[session_id]['progress'] = 10
+            task_status[session_id]['message'] = '正在提取模板样式...'
+            try:
+                from docx import Document
+                import io as docx_io
+                original_doc = Document(docx_io.BytesIO(resume_content))
+                template_result = template_processor.preprocess(
+                    original_doc,
+                    resume_file.filename,
+                    original_content=resume_content  # 传递原始内容用于去重
+                )
+                if template_result.success:
+                    logger.info(f"模板预处理成功: {template_result.template_id}")
+                else:
+                    logger.warning(f"模板预处理失败: {template_result.error_message}")
+            except Exception as e:
+                logger.warning(f"模板预处理异常: {e}")
 
         task_status[session_id]['progress'] = 20
         task_status[session_id]['message'] = '正在分析JD需求...'
@@ -176,20 +327,52 @@ def tailor_file():
 
         # 生成文档
         style = request.form.get('style', 'original')
-        word_bytes = generator.generate_bytes(generation.tailored_resume)
+        style_preserved = False
+
+        # 优先使用模板渲染（Word 格式）
+        if template_result and template_result.success and original_doc:
+            task_status[session_id]['message'] = '正在应用原简历样式...'
+            try:
+                word_bytes, used_template = template_processor.render_with_fallback(
+                    original_doc,
+                    generation.tailored_resume,
+                    parsed_resume.style_metadata,
+                    resume_file.filename
+                )
+                style_preserved = used_template
+                logger.info(f"文档生成完成，使用模板: {used_template}")
+            except Exception as e:
+                logger.warning(f"模板渲染失败，降级到样式方案: {e}")
+                word_bytes = generator.generate_bytes(
+                    generation.tailored_resume,
+                    style_metadata=parsed_resume.style_metadata
+                )
+        else:
+            # PDF/文本：使用样式元数据提取（已实现）
+            word_bytes = generator.generate_bytes(
+                generation.tailored_resume,
+                style_metadata=parsed_resume.style_metadata
+            )
 
         task_status[session_id]['progress'] = 100
         task_status[session_id]['status'] = 'completed'
         task_status[session_id]['message'] = '完成'
 
         # 构建响应
+        processing_time_ms = int((time.time() - start_time) * 1000)
         result = {
             'session_id': session_id,
             'status': 'completed',
-            'processing_time': 0,  # TODO: 计算实际时间
+            'processing_time': processing_time_ms,
             'tailored_word': base64.b64encode(word_bytes).decode('utf-8'),
             'evidence_report': evidence_report.to_dict(),
             'validation_result': 'pass' if evidence_report.coverage >= 0.9 else 'pass_with_review',
+            'style_preserved': style_preserved,  # 是否保留了原简历样式
+            'style_info': {
+                'font': parsed_resume.style_metadata.primary_font,
+                'font_size': parsed_resume.style_metadata.body_font_size,
+                'source': parsed_resume.style_metadata.source
+            },
             'analysis': {
                 'match_score': analysis.matching_strategy.get('match_score', 0),
                 'match_level': analysis.matching_strategy.get('match_level', ''),
@@ -201,10 +384,41 @@ def tailor_file():
         # 缓存结果
         cache_manager.set(parsed_resume.raw_text, jd_content, result)
 
+        # 保存定制后的文件
+        save_tailored_file(word_bytes, session_id)
+
+        # 保存历史记录
+        job_title, company = parse_jd_info(jd_content)
+        # 判断候选人类型：有工作经验为 experienced，否则为 entry_level
+        has_experience = bool(parsed_resume.sections.get('work_experience'))
+        db.save_history(session_id, {
+            'candidate_name': parsed_resume.basic_info.get('name', ''),
+            'candidate_type': 'experienced' if has_experience else 'entry_level',
+            'job_title': job_title,
+            'company': company,
+            'match_score': analysis.matching_strategy.get('match_score', 0),
+            'match_level': analysis.matching_strategy.get('match_level', ''),
+            'original_resume': parsed_resume.raw_text,
+            'tailored_resume': generation.tailored_resume,
+            'jd_content': jd_content,
+            'evidence_report': evidence_report.to_dict(),
+            'optimization_summary': {
+                'style_preserved': style_preserved,
+                'source_format': parsed_resume.source_format
+            },
+            'model_used': expert_team.model_manager.current_model,
+            'tokens_used': 0,  # TODO: 从模型响应中获取
+            'processing_time_ms': processing_time_ms
+        })
+
         return jsonify(result)
 
     except Exception as e:
-        logger.error(f"文件定制失败: {e}")
+        logger.error(f"文件定制失败: {e}", exc_info=True)  # 添加完整堆栈
+        # 不要直接显示技术错误给用户
+        error_str = str(e)
+        if "resume_analysis" in error_str or "{" in error_str or "JSON" in error_str.upper():
+            return jsonify({'error': 'AI响应解析失败，请重试'}), 500
         return jsonify({'error': str(e)}), 500
 
 
@@ -223,6 +437,9 @@ def tailor_form():
         - evidence_report: 依据报告
     """
     try:
+        # 记录开始时间
+        start_time = time.time()
+
         data = request.get_json()
         if not data:
             return jsonify({'error': '未提供表单数据'}), 400
@@ -271,7 +488,7 @@ def tailor_form():
         task_status[session_id]['progress'] = 80
         task_status[session_id]['message'] = '正在生成文档...'
 
-        # 生成文档
+        # 生成文档（引导输入模式使用默认样式）
         word_bytes = generator.generate_bytes(generation.tailored_resume)
 
         task_status[session_id]['progress'] = 100
@@ -279,9 +496,11 @@ def tailor_form():
         task_status[session_id]['message'] = '完成'
 
         # 构建响应
+        processing_time_ms = int((time.time() - start_time) * 1000)
         result = {
             'session_id': session_id,
             'status': 'completed',
+            'processing_time': processing_time_ms,
             'tailored_word': base64.b64encode(word_bytes).decode('utf-8'),
             'evidence_report': evidence_report.to_dict(),
             'validation_result': 'pass' if evidence_report.coverage >= 0.9 else 'pass_with_review',
@@ -296,10 +515,42 @@ def tailor_form():
         # 缓存结果
         cache_manager.set(resume_text, jd_content, result)
 
+        # 保存定制后的文件
+        save_tailored_file(word_bytes, session_id)
+
+        # 保存历史记录
+        job_title, company = parse_jd_info(jd_content)
+        # 从表单数据中获取基本信息
+        basic_info = builder.build_structured(data).get('basic_info', {})
+        # 判断候选人类型：有工作经验为 experienced，否则为 entry_level
+        has_experience = bool(data.get('work_experience') or data.get('work_count', 0) > 0)
+        db.save_history(session_id, {
+            'candidate_name': basic_info.get('name', ''),
+            'candidate_type': 'experienced' if has_experience else 'entry_level',
+            'job_title': job_title,
+            'company': company,
+            'match_score': analysis.matching_strategy.get('match_score', 0),
+            'match_level': analysis.matching_strategy.get('match_level', ''),
+            'original_resume': resume_text,
+            'tailored_resume': generation.tailored_resume,
+            'jd_content': jd_content,
+            'evidence_report': evidence_report.to_dict(),
+            'optimization_summary': {
+                'input_mode': 'guided'
+            },
+            'model_used': expert_team.model_manager.current_model,
+            'tokens_used': 0,  # TODO: 从模型响应中获取
+            'processing_time_ms': processing_time_ms
+        })
+
         return jsonify(result)
 
     except Exception as e:
-        logger.error(f"表单定制失败: {e}")
+        logger.error(f"表单定制失败: {e}", exc_info=True)  # 添加完整堆栈
+        # 不要直接显示技术错误给用户
+        error_str = str(e)
+        if "resume_analysis" in error_str or "{" in error_str or "JSON" in error_str.upper():
+            return jsonify({'error': 'AI响应解析失败，请重试'}), 500
         return jsonify({'error': str(e)}), 500
 
 
@@ -352,24 +603,138 @@ def get_history():
     """
     获取历史记录列表
 
-    TODO: 实现数据库存储
+    查询参数:
+        - limit: 返回数量限制（默认50）
+        - offset: 偏移量（默认0）
+
+    响应:
+        - history: 历史记录列表
+        - total: 总数
     """
-    return jsonify({
-        'history': [],
-        'message': '历史记录功能开发中'
-    })
+    try:
+        limit = request.args.get('limit', 50, type=int)
+        offset = request.args.get('offset', 0, type=int)
+
+        history_list = db.get_history_list(limit=limit, offset=offset)
+        total = db.get_history_count()
+
+        return jsonify({
+            'history': history_list,
+            'total': total
+        })
+
+    except Exception as e:
+        logger.error(f"获取历史记录失败: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/history/<history_id>', methods=['GET'])
 def get_history_item(history_id: str):
     """
-    获取特定历史记录
+    获取特定历史记录详情
 
-    TODO: 实现数据库存储
+    参数:
+        - history_id: 会话ID（session_id）
+
+    响应:
+        - 完整的历史记录详情
     """
-    return jsonify({
-        'error': '历史记录功能开发中'
-    }), 404
+    try:
+        item = db.get_history(history_id)
+        if item:
+            return jsonify(item)
+        return jsonify({'error': '记录不存在'}), 404
+
+    except Exception as e:
+        logger.error(f"获取历史记录详情失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/history/<history_id>', methods=['DELETE'])
+def delete_history_item(history_id: str):
+    """
+    删除历史记录
+
+    参数:
+        - history_id: 会话ID（session_id）
+
+    响应:
+        - success: 是否成功
+    """
+    try:
+        success = db.delete_history(history_id)
+        if success:
+            return jsonify({'success': True})
+        return jsonify({'error': '删除失败，记录不存在'}), 404
+
+    except Exception as e:
+        logger.error(f"删除历史记录失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== 用户配置 API ====================
+
+@app.route('/api/config', methods=['GET'])
+def get_config():
+    """
+    获取用户配置
+
+    响应:
+        - 配置字典
+    """
+    try:
+        config_data = db.get_all_config()
+        return jsonify(config_data)
+
+    except Exception as e:
+        logger.error(f"获取配置失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/config', methods=['POST'])
+def save_config():
+    """
+    保存用户配置
+
+    请求:
+        - JSON 格式的配置键值对
+
+    响应:
+        - success: 是否成功
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': '未提供配置数据'}), 400
+
+        for key, value in data.items():
+            db.save_config(key, str(value) if value is not None else '')
+
+        return jsonify({'success': True})
+
+    except Exception as e:
+        logger.error(f"保存配置失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/config/<key>', methods=['DELETE'])
+def delete_config(key: str):
+    """
+    删除用户配置
+
+    参数:
+        - key: 配置键
+
+    响应:
+        - success: 是否成功
+    """
+    try:
+        success = db.delete_config(key)
+        return jsonify({'success': success})
+
+    except Exception as e:
+        logger.error(f"删除配置失败: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/stats', methods=['GET'])

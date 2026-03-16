@@ -5,7 +5,16 @@
       "Bash(pip install:*)",
       "Bash(python:*)",
       "Bash(findstr :5000:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(cat:*)",
+      "Bash(tasklist:*)",
+      "Bash(pip search:*)",
+      "WebSearch",
+      "mcp__web-reader__webReader",
+      "Bash(ls:*)",
+      "Bash(pkill:*)",
+      "Bash(rm:*)",
+      "Bash(git:*)"
     ]
   }
 }

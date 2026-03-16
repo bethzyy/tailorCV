@@ -28,11 +28,40 @@ except ImportError:
 # Word 解析
 try:
     from docx import Document
+    from docx.oxml.ns import qn
     HAS_PYTHON_DOCX = True
 except ImportError:
     HAS_PYTHON_DOCX = False
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class StyleMetadata:
+    """从原简历提取的样式元数据"""
+    primary_font: str = "Microsoft YaHei"
+    body_font_size: float = 10.5
+    margin_top: float = 2.5
+    margin_bottom: float = 2.5
+    margin_left: float = 2.0
+    margin_right: float = 2.0
+    source: str = "default"  # "word", "pdf", "default"
+
+    def get_name_font_size(self) -> float:
+        """获取姓名字号 = 正文字号 × 1.7"""
+        return round(self.body_font_size * 1.7, 1)
+
+    def get_section_title_font_size(self) -> float:
+        """获取章节标题字号 = 正文字号 × 1.14"""
+        return round(self.body_font_size * 1.14, 1)
+
+    def get_time_font_size(self) -> float:
+        """获取时间字号 = 正文字号 × 0.95"""
+        return round(self.body_font_size * 0.95, 1)
+
+    def get_degree_font_size(self) -> float:
+        """获取学位字号 = 正文字号 × 0.86"""
+        return round(self.body_font_size * 0.86, 1)
 
 
 @dataclass
@@ -49,6 +78,7 @@ class ParsedResume:
     self_evaluation: str = ""                         # 自我评价
     source_format: str = ""                           # 来源格式
     parse_confidence: float = 0.0                     # 解析置信度
+    style_metadata: StyleMetadata = field(default_factory=StyleMetadata)  # 样式元数据
 
 
 class ResumeParser:
@@ -93,15 +123,21 @@ class ResumeParser:
             raise ValueError(f"不支持的文件格式: {suffix}")
 
         # 根据格式选择解析方法
+        style_metadata = StyleMetadata()  # 默认样式
         if suffix == '.pdf':
             text = self._parse_pdf(content)
             source_format = 'pdf'
+            style_metadata.source = 'pdf'
         elif suffix in ['.docx', '.doc']:
-            text = self._parse_word(content)
+            doc, text = self._parse_word(content)
             source_format = 'word'
+            # 提取 Word 文档的样式元数据
+            style_metadata = self._extract_style_metadata(doc)
+            style_metadata.source = 'word'
         else:
             text = content.decode('utf-8', errors='ignore')
             source_format = 'text'
+            style_metadata.source = 'default'
 
         if not text or len(text.strip()) < 50:
             raise ValueError("解析结果内容过少，可能解析失败")
@@ -109,6 +145,7 @@ class ResumeParser:
         # 解析结构化信息
         parsed = self._extract_structured_info(text)
         parsed.source_format = source_format
+        parsed.style_metadata = style_metadata
 
         return parsed
 
@@ -158,8 +195,13 @@ class ResumeParser:
         self.parse_stats['failed'] += 1
         raise ValueError("PDF 解析失败，请尝试上传 Word 或文本格式")
 
-    def _parse_word(self, content: bytes) -> str:
-        """Word 文档解析"""
+    def _parse_word(self, content: bytes) -> tuple:
+        """
+        Word 文档解析
+
+        Returns:
+            tuple: (Document对象, 提取的文本)
+        """
         if not HAS_PYTHON_DOCX:
             raise ValueError("未安装 python-docx，无法解析 Word 文档")
 
@@ -177,10 +219,103 @@ class ResumeParser:
 
             self.parse_stats['docx'] += 1
             logger.info(f"Word 解析成功: {len(text)} 字符")
-            return text
+            return doc, text
         except Exception as e:
             self.parse_stats['failed'] += 1
             raise ValueError(f"Word 解析失败: {e}")
+
+    def _extract_style_metadata(self, doc: 'Document') -> StyleMetadata:
+        """
+        从 Word 文档提取样式元数据
+
+        提取策略：
+        1. 统计所有段落中最常见的字体和字号作为主样式
+        2. 提取页面边距设置
+
+        Args:
+            doc: python-docx Document 对象
+
+        Returns:
+            StyleMetadata: 提取的样式元数据
+        """
+        from collections import Counter
+        from docx.shared import Pt
+
+        # 默认值
+        primary_font = "Microsoft YaHei"
+        body_font_size = 10.5
+        margin_top = 2.5
+        margin_bottom = 2.5
+        margin_left = 2.0
+        margin_right = 2.0
+
+        try:
+            # 1. 提取页面边距
+            if doc.sections:
+                section = doc.sections[0]
+                # 转换为 cm
+                margin_top = round(section.top_margin.cm, 1) if section.top_margin else 2.5
+                margin_bottom = round(section.bottom_margin.cm, 1) if section.bottom_margin else 2.5
+                margin_left = round(section.left_margin.cm, 1) if section.left_margin else 2.0
+                margin_right = round(section.right_margin.cm, 1) if section.right_margin else 2.0
+
+            # 2. 统计最常见的字体和字号
+            font_counter = Counter()
+            font_size_counter = Counter()
+
+            for para in doc.paragraphs:
+                if not para.text.strip():
+                    continue
+
+                # 遍历段落中的所有 run
+                for run in para.runs:
+                    # 提取字体
+                    font_name = run.font.name
+                    if font_name:
+                        # 处理中文字体
+                        east_asia_font = None
+                        try:
+                            rPr = run._element.rPr
+                            if rPr is not None:
+                                rFonts = rPr.find(qn('w:rFonts'))
+                                if rFonts is not None:
+                                    east_asia_font = rFonts.get(qn('w:eastAsia'))
+                        except:
+                            pass
+
+                        # 优先使用东亚字体（中文字体）
+                        actual_font = east_asia_font or font_name
+                        font_counter[actual_font] += len(run.text)
+
+                    # 提取字号
+                    font_size = run.font.size
+                    if font_size:
+                        size_pt = font_size.pt
+                        if size_pt and 8 <= size_pt <= 24:  # 合理的字号范围
+                            font_size_counter[size_pt] += len(run.text)
+
+            # 3. 选择最常见的字体和字号
+            if font_counter:
+                primary_font = font_counter.most_common(1)[0][0]
+                logger.info(f"提取到主字体: {primary_font}")
+
+            if font_size_counter:
+                body_font_size = font_size_counter.most_common(1)[0][0]
+                logger.info(f"提取到正文字号: {body_font_size}pt")
+
+            return StyleMetadata(
+                primary_font=primary_font,
+                body_font_size=body_font_size,
+                margin_top=margin_top,
+                margin_bottom=margin_bottom,
+                margin_left=margin_left,
+                margin_right=margin_right,
+                source='word'
+            )
+
+        except Exception as e:
+            logger.warning(f"样式提取失败，使用默认样式: {e}")
+            return StyleMetadata(source='default')
 
     def _extract_structured_info(self, text: str) -> ParsedResume:
         """从文本中提取结构化信息"""

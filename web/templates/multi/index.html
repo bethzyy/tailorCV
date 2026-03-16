@@ -1,0 +1,1409 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>tailorCV 多模型工具 - 智能简历定制</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 25px 0 30px;
+            color: white;
+        }
+
+        .header-title h1 {
+            font-size: 2em;
+            margin-bottom: 5px;
+        }
+
+        .header-title p {
+            font-size: 1em;
+            opacity: 0.9;
+        }
+
+        .model-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            background: rgba(255, 255, 255, 0.25);
+            border-radius: 15px;
+            font-size: 12px;
+            margin-left: 8px;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.25);
+            color: white;
+            text-decoration: none;
+            border-radius: 25px;
+            font-size: 14px;
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+
+        .nav-link:hover {
+            background: rgba(255, 255, 255, 0.35);
+        }
+
+        .shutdown-btn {
+            padding: 10px 20px;
+            background: rgba(255, 100, 100, 0.3);
+            color: white;
+            text-decoration: none;
+            border-radius: 25px;
+            font-size: 14px;
+            transition: all 0.3s;
+            border: none;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .shutdown-btn:hover {
+            background: rgba(255, 100, 100, 0.5);
+        }
+
+        .main-card {
+            background: white;
+            border-radius: 16px;
+            padding: 30px 35px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        /* 进度指示器 */
+        .progress-indicator {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 30px;
+            padding: 15px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .progress-step {
+            display: flex;
+            align-items: center;
+            color: #999;
+            font-size: 14px;
+        }
+
+        .progress-step.active {
+            color: #f5576c;
+            font-weight: 600;
+        }
+
+        .progress-step.completed {
+            color: #4caf50;
+        }
+
+        .step-number {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            border: 2px solid currentColor;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 8px;
+            font-size: 13px;
+        }
+
+        .progress-step.completed .step-number {
+            background: #4caf50;
+            border-color: #4caf50;
+            color: white;
+        }
+
+        .progress-step.active .step-number {
+            background: #f5576c;
+            border-color: #f5576c;
+            color: white;
+        }
+
+        .progress-arrow {
+            color: #ddd;
+            margin: 0 20px;
+            font-size: 20px;
+        }
+
+        /* 区域样式 */
+        .section {
+            margin-bottom: 25px;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .section-number {
+            width: 26px;
+            height: 26px;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        /* 提供者选择 */
+        .providers-grid {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .provider-checkbox {
+            display: none;
+        }
+
+        .provider-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 20px;
+            background: #f8f9fa;
+            border: 2px solid #eee;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .provider-checkbox:checked + .provider-label {
+            border-color: #f5576c;
+            background: rgba(245, 87, 108, 0.1);
+        }
+
+        .provider-icon {
+            width: 30px;
+            height: 30px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+
+        .provider-icon.zhipu {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .provider-icon.alibaba {
+            background: linear-gradient(135deg, #ff6a00 0%, #ee0979 100%);
+            color: white;
+        }
+
+        /* JD输入区域 */
+        .jd-input-area {
+            position: relative;
+        }
+
+        .jd-textarea {
+            width: 100%;
+            min-height: 180px;
+            padding: 15px;
+            padding-bottom: 40px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 14px;
+            resize: vertical;
+            transition: all 0.3s;
+            line-height: 1.6;
+        }
+
+        .jd-textarea:focus {
+            outline: none;
+            border-color: #f5576c;
+        }
+
+        .jd-textarea.dragover {
+            border-color: #f5576c;
+            background: #fff5f7;
+        }
+
+        .jd-hint {
+            position: absolute;
+            bottom: 12px;
+            left: 15px;
+            font-size: 12px;
+            color: #999;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        /* 输入方式切换 */
+        .input-mode-tabs {
+            display: flex;
+            background: #f5f5f5;
+            border-radius: 8px;
+            padding: 4px;
+            margin-bottom: 15px;
+        }
+
+        .mode-tab {
+            flex: 1;
+            padding: 10px 20px;
+            text-align: center;
+            cursor: pointer;
+            border-radius: 6px;
+            font-size: 14px;
+            color: #666;
+            transition: all 0.3s;
+            border: none;
+            background: transparent;
+        }
+
+        .mode-tab:hover {
+            color: #333;
+        }
+
+        .mode-tab.active {
+            background: white;
+            color: #f5576c;
+            font-weight: 600;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .mode-icon {
+            margin-right: 6px;
+        }
+
+        .input-panel {
+            display: none;
+        }
+
+        .input-panel.active {
+            display: block;
+        }
+
+        /* 文件上传区域 */
+        .upload-area {
+            border: 2px dashed #ddd;
+            border-radius: 10px;
+            padding: 35px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .upload-area:hover, .upload-area.dragover {
+            border-color: #f5576c;
+            background: #fff5f7;
+        }
+
+        .upload-icon {
+            font-size: 40px;
+            color: #f5576c;
+            margin-bottom: 12px;
+        }
+
+        .upload-text {
+            color: #666;
+            font-size: 15px;
+        }
+
+        .upload-hint {
+            color: #999;
+            font-size: 13px;
+            margin-top: 8px;
+        }
+
+        .file-info {
+            display: none;
+            background: #fff5f7;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .file-info.show {
+            display: flex;
+        }
+
+        .file-name {
+            color: #333;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .file-remove {
+            color: #e53935;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        /* 引导输入表单 */
+        .guided-form {
+            max-height: 350px;
+            overflow-y: auto;
+            padding-right: 8px;
+        }
+
+        .form-section {
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .form-section:last-child {
+            border-bottom: none;
+        }
+
+        .form-section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #f5576c;
+            margin-bottom: 12px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 10px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 4px;
+            font-weight: 500;
+            color: #555;
+            font-size: 13px;
+        }
+
+        .form-group label .required {
+            color: #e53935;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #f5576c;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 60px;
+        }
+
+        .entry-item {
+            background: #fff5f7;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 8px;
+            position: relative;
+        }
+
+        .entry-remove {
+            position: absolute;
+            top: 8px;
+            right: 10px;
+            color: #e53935;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .btn-add {
+            padding: 8px 16px;
+            background: #fff5f7;
+            border: 1px dashed #f5576c;
+            color: #f5576c;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            width: 100%;
+        }
+
+        .btn-add:hover {
+            background: #ffe8eb;
+        }
+
+        /* 按钮区域 */
+        .btn-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            margin-top: 25px;
+        }
+
+        .btn {
+            padding: 14px 50px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(245, 87, 108, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-reset {
+            background: transparent;
+            border: none;
+            color: #999;
+            font-size: 13px;
+            cursor: pointer;
+            padding: 5px 10px;
+        }
+
+        .btn-reset:hover {
+            color: #666;
+            text-decoration: underline;
+        }
+
+        /* 进度条 */
+        .progress-container {
+            display: none;
+            margin-top: 25px;
+        }
+
+        .progress-container.show {
+            display: block;
+        }
+
+        .progress-bar {
+            height: 18px;
+            background: #f0f0f0;
+            border-radius: 9px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .progress-text {
+            text-align: center;
+            margin-top: 8px;
+            color: #666;
+            font-size: 14px;
+        }
+
+        /* 结果显示 */
+        .result-container {
+            display: none;
+            margin-top: 25px;
+            padding-top: 25px;
+            border-top: 1px solid #eee;
+        }
+
+        .result-container.show {
+            display: block;
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .result-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        .result-card {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 20px;
+            border: 2px solid #eee;
+        }
+
+        .result-card.best {
+            border-color: #f5576c;
+            box-shadow: 0 5px 20px rgba(245, 87, 108, 0.2);
+        }
+
+        .result-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .provider-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .provider-badge.zhipu {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .provider-badge.alibaba {
+            background: linear-gradient(135deg, #ff6a00 0%, #ee0979 100%);
+            color: white;
+        }
+
+        .best-badge {
+            background: #ffd700;
+            color: #333;
+            padding: 5px 10px;
+            border-radius: 10px;
+            font-size: 12px;
+        }
+
+        .result-score {
+            text-align: center;
+            margin-bottom: 15px;
+            padding: 15px 0;
+            background: white;
+            border-radius: 10px;
+        }
+
+        .score-value {
+            font-size: 36px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .score-label {
+            font-size: 14px;
+            color: #666;
+        }
+
+        .result-analysis {
+            margin-bottom: 15px;
+        }
+
+        .analysis-section {
+            margin-bottom: 10px;
+        }
+
+        .analysis-section h5 {
+            font-size: 13px;
+            margin-bottom: 5px;
+            color: #666;
+        }
+
+        .analysis-section.strengths h5 {
+            color: #2e7d32;
+        }
+
+        .analysis-section.gaps h5 {
+            color: #e65100;
+        }
+
+        .analysis-section ul {
+            list-style: none;
+            padding-left: 0;
+            font-size: 12px;
+        }
+
+        .analysis-section li {
+            padding: 3px 0;
+        }
+
+        .model-info {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .download-btn {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            text-decoration: none;
+            display: block;
+            text-align: center;
+            transition: all 0.3s;
+        }
+
+        .download-btn:hover {
+            opacity: 0.9;
+        }
+
+        footer {
+            text-align: center;
+            padding: 25px 0;
+            color: white;
+            opacity: 0.8;
+            font-size: 14px;
+        }
+
+        /* 滚动条样式 */
+        .guided-form::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        .guided-form::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 3px;
+        }
+
+        .guided-form::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 3px;
+        }
+
+        /* 响应式 */
+        @media (max-width: 600px) {
+            header {
+                flex-direction: column;
+                text-align: center;
+                gap: 15px;
+            }
+
+            .header-title h1 {
+                font-size: 1.6em;
+            }
+
+            .progress-indicator {
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+
+            .progress-arrow {
+                display: none;
+            }
+
+            .progress-step {
+                font-size: 12px;
+            }
+
+            .results-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-title">
+                <h1>🔀 tailorCV 多模型工具</h1>
+                <p>多模型并行生成，结果对比选择</p>
+            </div>
+            <div class="nav-links">
+                <a href="http://localhost:5000" class="nav-link">
+                    <span>🏠</span>
+                    <span>返回首页</span>
+                </a>
+                <button class="shutdown-btn" onclick="shutdownServer()">🔌 关闭服务</button>
+            </div>
+        </header>
+
+        <div class="main-card">
+            <!-- 进度指示器 -->
+            <div class="progress-indicator">
+                <div class="progress-step active" id="step1">
+                    <div class="step-number">1</div>
+                    <span>选择模型</span>
+                </div>
+                <span class="progress-arrow">→</span>
+                <div class="progress-step" id="step2">
+                    <div class="step-number">2</div>
+                    <span>输入内容</span>
+                </div>
+                <span class="progress-arrow">→</span>
+                <div class="progress-step" id="step3">
+                    <div class="step-number">3</div>
+                    <span>对比结果</span>
+                </div>
+            </div>
+
+            <!-- Step 1: 选择模型 -->
+            <div class="section">
+                <div class="section-header">
+                    <div class="section-number">1</div>
+                    <div class="section-title">选择使用的模型（可多选）</div>
+                </div>
+                <div class="providers-grid">
+                    {% for pid, pname in providers.items() %}
+                    <div>
+                        <input type="checkbox" class="provider-checkbox" id="provider-{{ pid }}" value="{{ pid }}" checked>
+                        <label class="provider-label" for="provider-{{ pid }}">
+                            <span class="provider-icon {{ pid }}">{{ '🟣' if pid == 'zhipu' else '🟠' }}</span>
+                            <span>{{ pname }}</span>
+                        </label>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Step 2: 输入内容 -->
+            <div class="section">
+                <div class="section-header">
+                    <div class="section-number">2</div>
+                    <div class="section-title">目标职位JD</div>
+                </div>
+                <div class="jd-input-area">
+                    <textarea id="jdText" class="jd-textarea" placeholder="粘贴职位描述...
+
+例如：
+职位名称：高级Python开发工程师
+岗位职责：
+1. 负责后端服务开发...
+2. 参与系统架构设计...
+
+任职要求：
+1. 3年以上Python开发经验...
+2. 熟悉Django/Flask框架..."></textarea>
+                    <div class="jd-hint">
+                        <span>💡</span>
+                        <span>也可拖拽JD文件到此处（支持 PDF、Word、TXT）</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-header">
+                    <div class="section-number">3</div>
+                    <div class="section-title">原版简历</div>
+                </div>
+
+                <div class="input-mode-tabs">
+                    <button class="mode-tab active" data-mode="upload">
+                        <span class="mode-icon">📄</span>上传文件
+                    </button>
+                    <button class="mode-tab" data-mode="guided">
+                        <span class="mode-icon">✏️</span>引导填写
+                    </button>
+                </div>
+
+                <!-- 文件上传面板 -->
+                <div class="input-panel active" id="uploadPanel">
+                    <div class="upload-area" id="resumeUpload">
+                        <div class="upload-icon">📄</div>
+                        <div class="upload-text">拖拽简历文件到此处，或点击选择</div>
+                        <div class="upload-hint">支持 PDF、Word、TXT、Markdown 格式</div>
+                        <input type="file" id="resumeFile" name="resume" accept=".pdf,.docx,.doc,.txt,.md" style="display: none;">
+                    </div>
+                    <div class="file-info" id="resumeInfo">
+                        <span class="file-name" id="resumeName"></span>
+                        <span class="file-remove" onclick="removeResume()">✕ 移除</span>
+                    </div>
+                </div>
+
+                <!-- 引导输入面板 -->
+                <div class="input-panel" id="guidedPanel">
+                    <div class="guided-form" id="guidedForm">
+                        <div class="form-section">
+                            <div class="form-section-title">基本信息</div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>姓名 <span class="required">*</span></label>
+                                    <input type="text" id="g_name">
+                                </div>
+                                <div class="form-group">
+                                    <label>手机</label>
+                                    <input type="tel" id="g_phone">
+                                </div>
+                                <div class="form-group">
+                                    <label>邮箱</label>
+                                    <input type="email" id="g_email">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-section">
+                            <div class="form-section-title">教育背景</div>
+                            <div id="educationList">
+                                <div class="entry-item">
+                                    <span class="entry-remove" onclick="removeEntry(this)">✕</span>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>学校</label>
+                                            <input type="text" class="edu-school">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>专业</label>
+                                            <input type="text" class="edu-major">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>学历</label>
+                                            <select class="edu-degree">
+                                                <option value="">请选择</option>
+                                                <option value="大专">大专</option>
+                                                <option value="本科">本科</option>
+                                                <option value="硕士">硕士</option>
+                                                <option value="博士">博士</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>时间</label>
+                                            <input type="text" class="edu-time" placeholder="2018.09-2022.06">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <button type="button" class="btn-add" onclick="addEducation()">+ 添加教育经历</button>
+                        </div>
+
+                        <div class="form-section">
+                            <div class="form-section-title">工作经历</div>
+                            <div id="workList">
+                                <div class="entry-item">
+                                    <span class="entry-remove" onclick="removeEntry(this)">✕</span>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>公司</label>
+                                            <input type="text" class="work-company">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>职位</label>
+                                            <input type="text" class="work-position">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>时间</label>
+                                            <input type="text" class="work-time" placeholder="2022.07-至今">
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>工作内容与成就</label>
+                                        <textarea class="work-content" placeholder="描述主要职责和成就..."></textarea>
+                                    </div>
+                                </div>
+                            </div>
+                            <button type="button" class="btn-add" onclick="addWork()">+ 添加工作经历</button>
+                        </div>
+
+                        <div class="form-section">
+                            <div class="form-section-title">技能特长</div>
+                            <div class="form-group">
+                                <textarea id="g_skills" placeholder="如：Python, JavaScript, 数据分析, 项目管理..."></textarea>
+                            </div>
+                        </div>
+
+                        <div class="form-section">
+                            <div class="form-section-title">自我评价</div>
+                            <div class="form-group">
+                                <textarea id="g_evaluation" placeholder="简要描述优势和职业目标..."></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 提交按钮 -->
+            <div class="btn-group">
+                <button type="button" class="btn btn-primary" id="submitBtn">
+                    🚀 多模型并行生成
+                </button>
+                <button type="button" class="btn-reset" id="resetBtn">
+                    清空重填
+                </button>
+            </div>
+
+            <!-- 进度条 -->
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="progress-text" id="progressText">正在处理...</div>
+            </div>
+
+            <!-- 结果显示 -->
+            <div class="result-container" id="resultContainer">
+                <div class="result-header">
+                    <h3 class="result-title">✅ 多模型结果对比</h3>
+                </div>
+                <div class="results-grid" id="resultsGrid">
+                    <!-- 动态生成结果卡片 -->
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>© 2026 tailorCV - 多模型智能定制</p>
+        </footer>
+    </div>
+
+    <script>
+        let currentMode = 'upload';
+
+        // 关闭服务器
+        async function shutdownServer() {
+            if (!confirm('确定要关闭此服务吗？\n关闭后需要从工具选择器重新启动。')) {
+                return;
+            }
+
+            try {
+                await fetch('http://localhost:5000/api/stop/multi', { method: 'POST' });
+                alert('服务已关闭，即将返回首页');
+                window.location.href = 'http://localhost:5000';
+            } catch (error) {
+                try {
+                    await fetch('/api/shutdown', { method: 'POST' });
+                } catch (e) {
+                    // 忽略错误
+                }
+                alert('服务正在关闭...');
+                setTimeout(() => window.close(), 1000);
+            }
+        }
+
+        // 更新进度指示器
+        function updateProgressIndicator(currentStep) {
+            ['step1', 'step2', 'step3'].forEach((id, index) => {
+                const el = document.getElementById(id);
+                el.classList.remove('active', 'completed');
+                if (index + 1 < currentStep) {
+                    el.classList.add('completed');
+                } else if (index + 1 === currentStep) {
+                    el.classList.add('active');
+                }
+            });
+        }
+
+        // 模式切换
+        document.querySelectorAll('.mode-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const mode = tab.dataset.mode;
+                if (mode === currentMode) return;
+
+                document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+
+                document.querySelectorAll('.input-panel').forEach(p => p.classList.remove('active'));
+                document.getElementById(mode === 'upload' ? 'uploadPanel' : 'guidedPanel').classList.add('active');
+
+                currentMode = mode;
+            });
+        });
+
+        // JD拖拽上传
+        const jdTextarea = document.getElementById('jdText');
+        jdTextarea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            jdTextarea.classList.add('dragover');
+        });
+        jdTextarea.addEventListener('dragleave', () => {
+            jdTextarea.classList.remove('dragover');
+        });
+        jdTextarea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            jdTextarea.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                const file = e.dataTransfer.files[0];
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    jdTextarea.value = ev.target.result;
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        // 简历上传
+        const resumeUpload = document.getElementById('resumeUpload');
+        const resumeFile = document.getElementById('resumeFile');
+        const resumeInfo = document.getElementById('resumeInfo');
+        const resumeName = document.getElementById('resumeName');
+
+        resumeUpload.addEventListener('click', () => resumeFile.click());
+        resumeUpload.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            resumeUpload.classList.add('dragover');
+        });
+        resumeUpload.addEventListener('dragleave', () => {
+            resumeUpload.classList.remove('dragover');
+        });
+        resumeUpload.addEventListener('drop', (e) => {
+            e.preventDefault();
+            resumeUpload.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                resumeFile.files = e.dataTransfer.files;
+                updateResumeInfo();
+            }
+        });
+        resumeFile.addEventListener('change', updateResumeInfo);
+
+        function updateResumeInfo() {
+            if (resumeFile.files.length) {
+                resumeName.textContent = resumeFile.files[0].name;
+                resumeInfo.classList.add('show');
+            }
+        }
+
+        function removeResume() {
+            resumeFile.value = '';
+            resumeInfo.classList.remove('show');
+        }
+
+        // 引导输入
+        function addEducation() {
+            const list = document.getElementById('educationList');
+            const item = document.createElement('div');
+            item.className = 'entry-item';
+            item.innerHTML = `
+                <span class="entry-remove" onclick="removeEntry(this)">✕</span>
+                <div class="form-row">
+                    <div class="form-group"><label>学校</label><input type="text" class="edu-school"></div>
+                    <div class="form-group"><label>专业</label><input type="text" class="edu-major"></div>
+                    <div class="form-group"><label>学历</label>
+                        <select class="edu-degree">
+                            <option value="">请选择</option>
+                            <option value="大专">大专</option>
+                            <option value="本科">本科</option>
+                            <option value="硕士">硕士</option>
+                            <option value="博士">博士</option>
+                        </select>
+                    </div>
+                    <div class="form-group"><label>时间</label><input type="text" class="edu-time" placeholder="2018.09-2022.06"></div>
+                </div>
+            `;
+            list.appendChild(item);
+        }
+
+        function addWork() {
+            const list = document.getElementById('workList');
+            const item = document.createElement('div');
+            item.className = 'entry-item';
+            item.innerHTML = `
+                <span class="entry-remove" onclick="removeEntry(this)">✕</span>
+                <div class="form-row">
+                    <div class="form-group"><label>公司</label><input type="text" class="work-company"></div>
+                    <div class="form-group"><label>职位</label><input type="text" class="work-position"></div>
+                    <div class="form-group"><label>时间</label><input type="text" class="work-time" placeholder="2022.07-至今"></div>
+                </div>
+                <div class="form-group"><label>工作内容与成就</label><textarea class="work-content" placeholder="描述主要职责和成就..."></textarea></div>
+            `;
+            list.appendChild(item);
+        }
+
+        function removeEntry(btn) {
+            btn.parentElement.remove();
+        }
+
+        function collectGuidedData() {
+            return {
+                basic_info: {
+                    name: document.getElementById('g_name').value,
+                    phone: document.getElementById('g_phone').value,
+                    email: document.getElementById('g_email').value
+                },
+                education: Array.from(document.querySelectorAll('#educationList .entry-item')).map(item => ({
+                    school: item.querySelector('.edu-school').value,
+                    major: item.querySelector('.edu-major').value,
+                    degree: item.querySelector('.edu-degree').value,
+                    time: item.querySelector('.edu-time').value
+                })),
+                work_experience: Array.from(document.querySelectorAll('#workList .entry-item')).map(item => ({
+                    company: item.querySelector('.work-company').value,
+                    position: item.querySelector('.work-position').value,
+                    time: item.querySelector('.work-time').value,
+                    content: item.querySelector('.work-content').value
+                })),
+                skills: document.getElementById('g_skills').value,
+                self_evaluation: document.getElementById('g_evaluation').value
+            };
+        }
+
+        function guidedDataToText(data) {
+            let text = '';
+            text += `【基本信息】\n姓名：${data.basic_info.name}\n`;
+            if (data.basic_info.phone) text += `手机：${data.basic_info.phone}\n`;
+            if (data.basic_info.email) text += `邮箱：${data.basic_info.email}\n\n`;
+
+            if (data.education.length) {
+                text += `【教育背景】\n`;
+                data.education.forEach(e => {
+                    if (e.school || e.major) text += `${e.time || ''} ${e.school || ''} ${e.major || ''} ${e.degree || ''}\n`;
+                });
+                text += '\n';
+            }
+
+            if (data.work_experience.length) {
+                text += `【工作经历】\n`;
+                data.work_experience.forEach(w => {
+                    if (w.company || w.position) {
+                        text += `${w.time || ''} ${w.company || ''} ${w.position || ''}\n${w.content || ''}\n\n`;
+                    }
+                });
+            }
+
+            if (data.skills) text += `【技能特长】\n${data.skills}\n\n`;
+            if (data.self_evaluation) text += `【自我评价】\n${data.self_evaluation}\n`;
+            return text;
+        }
+
+        // 提交
+        const submitBtn = document.getElementById('submitBtn');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        const resultContainer = document.getElementById('resultContainer');
+
+        submitBtn.addEventListener('click', async () => {
+            const jdText = document.getElementById('jdText').value.trim();
+
+            // 获取选中的提供者
+            const selectedProviders = [];
+            document.querySelectorAll('.provider-checkbox:checked').forEach(cb => {
+                selectedProviders.push(cb.value);
+            });
+
+            if (selectedProviders.length === 0) {
+                alert('请至少选择一个模型');
+                return;
+            }
+
+            if (!jdText) {
+                alert('请输入目标职位JD');
+                document.getElementById('jdText').focus();
+                return;
+            }
+
+            if (currentMode === 'upload' && !resumeFile.files.length) {
+                alert('请上传简历文件');
+                return;
+            }
+
+            if (currentMode === 'guided') {
+                const guidedData = collectGuidedData();
+                if (!guidedData.basic_info.name) {
+                    alert('请填写姓名');
+                    return;
+                }
+            }
+
+            // 更新进度指示器
+            updateProgressIndicator(3);
+
+            // 显示进度
+            progressContainer.classList.add('show');
+            resultContainer.classList.remove('show');
+            submitBtn.disabled = true;
+            progressFill.style.width = '0%';
+
+            try {
+                progressText.textContent = '正在上传...';
+                progressFill.style.width = '10%';
+
+                let response;
+
+                if (currentMode === 'upload') {
+                    const formData = new FormData();
+                    formData.append('resume', resumeFile.files[0]);
+                    formData.append('jd_text', jdText);
+                    formData.append('providers', JSON.stringify(selectedProviders));
+
+                    progressText.textContent = '多模型并行分析中...';
+                    progressFill.style.width = '30%';
+
+                    response = await fetch('/api/tailor/file', {
+                        method: 'POST',
+                        body: formData
+                    });
+                } else {
+                    const guidedData = collectGuidedData();
+                    const resumeText = guidedDataToText(guidedData);
+
+                    progressText.textContent = '多模型并行分析中...';
+                    progressFill.style.width = '30%';
+
+                    response = await fetch('/api/tailor/text', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            resume_text: resumeText,
+                            jd_text: jdText,
+                            providers: selectedProviders
+                        })
+                    });
+                }
+
+                progressFill.style.width = '70%';
+                progressText.textContent = '正在生成简历...';
+
+                const result = await response.json();
+
+                if (result.error) {
+                    throw new Error(result.error);
+                }
+
+                progressFill.style.width = '100%';
+                progressText.textContent = '完成！';
+
+                showResults(result);
+
+            } catch (error) {
+                alert('处理失败: ' + error.message);
+                progressContainer.classList.remove('show');
+                updateProgressIndicator(2);
+            } finally {
+                submitBtn.disabled = false;
+            }
+        });
+
+        function showResults(result) {
+            resultContainer.classList.add('show');
+            resultContainer.scrollIntoView({ behavior: 'smooth' });
+
+            const resultsGrid = document.getElementById('resultsGrid');
+            resultsGrid.innerHTML = '';
+
+            const bestProvider = result.best_provider;
+
+            for (const [providerId, data] of Object.entries(result.results)) {
+                const isBest = providerId === bestProvider;
+
+                const card = document.createElement('div');
+                card.className = 'result-card' + (isBest ? ' best' : '');
+
+                const providerName = providerId === 'zhipu' ? '智谱AI' : '阿里云';
+                const providerIcon = providerId === 'zhipu' ? '🟣' : '🟠';
+                const analysis = data.analysis || {};
+
+                card.innerHTML = `
+                    <div class="result-card-header">
+                        <span class="provider-badge ${providerId}">
+                            ${providerIcon} ${providerName}
+                        </span>
+                        ${isBest ? '<span class="best-badge">⭐ 推荐</span>' : ''}
+                    </div>
+                    <div class="result-score">
+                        <div class="score-value">${analysis.match_score || '-'}</div>
+                        <div class="score-label">${analysis.match_level || '匹配分数'}</div>
+                    </div>
+                    <div class="model-info">模型: ${data.model_used}</div>
+                    <div class="result-analysis">
+                        <div class="analysis-section strengths">
+                            <h5>✓ 匹配优势</h5>
+                            <ul>${(analysis.strengths || []).map(s => `<li>${s}</li>`).join('')}</ul>
+                        </div>
+                        <div class="analysis-section gaps">
+                            <h5>△ 待提升</h5>
+                            <ul>${(analysis.gaps || []).map(g => `<li>${g}</li>`).join('')}</ul>
+                        </div>
+                    </div>
+                    <a href="#" class="download-btn" id="download-${providerId}">📥 下载此版本</a>
+                `;
+
+                resultsGrid.appendChild(card);
+
+                // 设置下载链接
+                if (data.tailored_word) {
+                    const downloadBtn = document.getElementById(`download-${providerId}`);
+                    const blob = base64ToBlob(data.tailored_word, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+                    downloadBtn.href = URL.createObjectURL(blob);
+                    downloadBtn.download = `定制简历_${providerName}.docx`;
+                }
+            }
+        }
+
+        function base64ToBlob(base64, mimeType) {
+            const byteCharacters = atob(base64);
+            const byteArrays = [];
+            for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+                const slice = byteCharacters.slice(offset, offset + 512);
+                const byteNumbers = new Array(slice.length);
+                for (let i = 0; i < slice.length; i++) byteNumbers[i] = slice.charCodeAt(i);
+                byteArrays.push(new Uint8Array(byteNumbers));
+            }
+            return new Blob(byteArrays, { type: mimeType });
+        }
+
+        // 重置按钮
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            if (confirm('确定要清空所有内容吗？')) {
+                document.getElementById('jdText').value = '';
+                resumeFile.value = '';
+                resumeInfo.classList.remove('show');
+                document.getElementById('guidedForm').reset();
+                progressContainer.classList.remove('show');
+                resultContainer.classList.remove('show');
+                updateProgressIndicator(1);
+            }
+        });
+    </script>
+</body>
+</html>

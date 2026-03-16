@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>结果对比 - tailorCV 多模型工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 25px 0 30px;
+            color: white;
+        }
+
+        .nav-link {
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.25);
+            color: white;
+            text-decoration: none;
+            border-radius: 25px;
+            font-size: 14px;
+        }
+
+        .compare-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+
+        .compare-card {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+        }
+
+        .compare-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #eee;
+        }
+
+        .provider-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .provider-badge.zhipu {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .provider-badge.alibaba {
+            background: linear-gradient(135deg, #ff6a00 0%, #ee0979 100%);
+            color: white;
+        }
+
+        .score-display {
+            text-align: center;
+        }
+
+        .score-value {
+            font-size: 48px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .score-label {
+            font-size: 14px;
+            color: #666;
+        }
+
+        .resume-preview {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-size: 14px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+
+        .download-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 20px;
+            text-decoration: none;
+            display: block;
+            text-align: center;
+        }
+
+        @media (max-width: 900px) {
+            .compare-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 结果对比</h1>
+            <a href="/" class="nav-link">🏠 返回</a>
+        </header>
+
+        <div class="compare-grid" id="compare-grid">
+            <!-- 动态生成对比卡片 -->
+            <div class="compare-card">
+                <div class="compare-header">
+                    <span class="provider-badge zhipu">🟣 智谱AI</span>
+                    <div class="score-display">
+                        <div class="score-value">85</div>
+                        <div class="score-label">匹配分数</div>
+                    </div>
+                </div>
+                <div class="resume-preview">
+                    等待加载...
+                </div>
+                <a href="#" class="download-btn">📥 下载此版本</a>
+            </div>
+
+            <div class="compare-card">
+                <div class="compare-header">
+                    <span class="provider-badge alibaba">🟠 阿里云</span>
+                    <div class="score-display">
+                        <div class="score-value">82</div>
+                        <div class="score-label">匹配分数</div>
+                    </div>
+                </div>
+                <div class="resume-preview">
+                    等待加载...
+                </div>
+                <a href="#" class="download-btn">📥 下载此版本</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

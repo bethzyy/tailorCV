@@ -42,16 +42,16 @@
 
 ## 输出格式（JSON）
 ```json
-{
-  "resume_analysis": {
+{{
+  "resume_analysis": {{
     "candidate_type": "experienced/fresh_graduate/career_change",
-    "basic_info": {
+    "basic_info": {{
       "name": "姓名",
       "contact": "联系方式",
       "location": "现居地"
-    },
+    }},
     "education": [
-      {
+      {{
         "id": "edu_1",
         "school": "学校名称",
         "major": "专业",
@@ -59,10 +59,10 @@
         "time": "时间段",
         "source_location": "原文位置",
         "highlights": ["GPA", "核心课程", "研究方向"]
-      }
+      }}
     ],
     "work_experience": [
-      {
+      {{
         "id": "exp_1",
         "company": "公司名称",
         "position": "职位",
@@ -71,10 +71,10 @@
         "keywords": ["关键词1", "关键词2"],
         "achievements": ["成就1"],
         "source_location": "第X-Y行"
-      }
+      }}
     ],
     "projects": [
-      {
+      {{
         "id": "proj_1",
         "name": "项目名称",
         "role": "角色",
@@ -82,31 +82,31 @@
         "content": "项目内容",
         "source_location": "原文位置",
         "project_type": "academic/internship/personal/work"
-      }
+      }}
     ],
     "skills": [
-      {
+      {{
         "id": "skill_1",
         "name": "技能名称",
         "level": "熟练程度",
         "source_location": "原文位置"
-      }
+      }}
     ]
-  },
-  "jd_requirements": {
+  }},
+  "jd_requirements": {{
     "must_have": ["Python", "本科及以上"],
     "nice_to_have": ["团队管理", "大型项目经验"],
     "experience_required": "3年/应届生可/不限",
-    "keywords_weight": {
+    "keywords_weight": {{
       "Python": 10,
       "数据分析": 8,
       "团队协作": 6,
       "管理": 7
-    },
+    }},
     "job_title": "职位名称",
     "salary_range": "薪资范围（如有）"
-  },
-  "matching_strategy": {
+  }},
+  "matching_strategy": {{
     "match_score": 75,
     "match_level": "良好",
     "strengths": ["匹配优势1", "匹配优势2"],
@@ -118,13 +118,13 @@
       "建议1：突出Python开发经验",
       "建议2：强调项目管理能力"
     ],
-    "fresh_graduate_strategy": {
+    "fresh_graduate_strategy": {{
       "applicable": true/false,
       "focus_areas": ["教育背景", "项目经历", "学习能力"],
       "transferable_skills": ["可迁移技能1", "可迁移技能2"]
-    }
-  }
-}
+    }}
+  }}
+}}
 ```
 
 ## 严格约束

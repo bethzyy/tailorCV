@@ -4,17 +4,21 @@ AI 专家团队模块
 实现两阶段调用架构：
 - 阶段1: 分析+策略（合并3专家为1次调用）
 - 阶段2: 生成+自验证（合并2层为1次调用）
+
+支持依赖注入，可接受不同的模型管理器。
 """
 
 import json
 import logging
 import re
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, TYPE_CHECKING
 from pathlib import Path
 from dataclasses import dataclass, field
 
-from .model_manager import ModelManager, ModelResponse
 from .config import config
+
+if TYPE_CHECKING:
+    from .model_manager import ModelManager
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +48,18 @@ class GenerationResult:
 class ExpertTeam:
     """AI 专家团队 - 两阶段调用"""
 
-    def __init__(self):
-        self.model_manager = ModelManager()
+    def __init__(self, model_manager: 'ModelManager' = None):
+        """
+        初始化专家团队
+
+        Args:
+            model_manager: 模型管理器（可选，默认自动创建）
+        """
+        if model_manager is None:
+            from .model_manager import ModelManager
+            model_manager = ModelManager()
+
+        self.model_manager = model_manager
 
         # 加载 Prompt 模板
         self.prompts_dir = config.BASE_DIR / 'prompts'
@@ -188,67 +202,77 @@ class ExpertTeam:
         return analysis, generation
 
     def _parse_analysis_response(self, response: str) -> AnalysisResult:
-        """解析分析阶段响应 - 增强版fallback机制"""
+        """解析分析阶段响应 - 增强版fallback机制
+
+        确保所有异常都被捕获，永远返回有效的 AnalysisResult 对象
+        """
         result = AnalysisResult()
 
-        # 多级JSON提取策略
-        json_str = None
-        extraction_method = None
+        try:
+            # 多级JSON提取策略
+            json_str = None
+            extraction_method = None
 
-        # Level 1: 尝试匹配 ```json ... ``` 格式
-        json_pattern = r'```json\s*([\s\S]*?)\s*```'
-        match = re.search(json_pattern, response)
-        if match:
-            json_str = match.group(1)
-            extraction_method = 'code_block'
-
-        # Level 2: 尝试匹配 { ... } 格式（非贪婪）
-        if not json_str:
-            # 使用栈匹配来正确处理嵌套JSON
-            json_str = self._extract_balanced_json(response)
-            if json_str:
-                extraction_method = 'balanced'
-
-        # Level 3: 尝试正则匹配（兜底）
-        if not json_str:
-            json_pattern = r'\{[\s\S]*\}'
+            # Level 1: 尝试匹配 ```json ... ``` 格式
+            json_pattern = r'```json\s*([\s\S]*?)\s*```'
             match = re.search(json_pattern, response)
             if match:
-                json_str = match.group(0)
-                extraction_method = 'regex'
+                json_str = match.group(1)
+                extraction_method = 'code_block'
 
-        if json_str:
-            try:
-                data = json.loads(json_str)
-                logger.info(f"JSON解析成功 (方法: {extraction_method})")
+            # Level 2: 尝试匹配 { ... } 格式（非贪婪）
+            if not json_str:
+                # 使用栈匹配来正确处理嵌套JSON
+                json_str = self._extract_balanced_json(response)
+                if json_str:
+                    extraction_method = 'balanced'
 
-                # 安全获取各字段，带完整默认值
-                result.resume_analysis = self._safe_get_dict(data, 'resume_analysis')
-                result.jd_requirements = self._safe_get_dict(data, 'jd_requirements')
-                result.matching_strategy = self._safe_get_dict(data, 'matching_strategy')
+            # Level 3: 尝试正则匹配（兜底）
+            if not json_str:
+                json_pattern = r'\{[\s\S]*\}'
+                match = re.search(json_pattern, response)
+                if match:
+                    json_str = match.group(0)
+                    extraction_method = 'regex'
 
-                # 验证关键字段
-                self._validate_analysis_result(result)
+            if json_str:
+                try:
+                    data = json.loads(json_str)
+                    logger.info(f"JSON解析成功 (方法: {extraction_method})")
 
-            except json.JSONDecodeError as e:
-                logger.error(f"JSON解析失败: {e}, 尝试修复...")
-                # 尝试修复常见JSON错误
-                fixed_json = self._repair_json(json_str)
-                if fixed_json:
-                    try:
-                        data = json.loads(fixed_json)
-                        result.resume_analysis = self._safe_get_dict(data, 'resume_analysis')
-                        result.jd_requirements = self._safe_get_dict(data, 'jd_requirements')
-                        result.matching_strategy = self._safe_get_dict(data, 'matching_strategy')
-                        logger.info("JSON修复成功")
-                    except json.JSONDecodeError:
-                        logger.error("JSON修复失败，使用默认结构")
+                    # 安全获取各字段，带完整默认值
+                    result.resume_analysis = self._safe_get_dict(data, 'resume_analysis')
+                    result.jd_requirements = self._safe_get_dict(data, 'jd_requirements')
+                    result.matching_strategy = self._safe_get_dict(data, 'matching_strategy')
+
+                    # 验证关键字段
+                    self._validate_analysis_result(result)
+
+                except json.JSONDecodeError as e:
+                    logger.error(f"JSON解析失败: {e}, 尝试修复...")
+                    # 尝试修复常见JSON错误
+                    fixed_json = self._repair_json(json_str)
+                    if fixed_json:
+                        try:
+                            data = json.loads(fixed_json)
+                            result.resume_analysis = self._safe_get_dict(data, 'resume_analysis')
+                            result.jd_requirements = self._safe_get_dict(data, 'jd_requirements')
+                            result.matching_strategy = self._safe_get_dict(data, 'matching_strategy')
+                            logger.info("JSON修复成功")
+                        except json.JSONDecodeError:
+                            logger.error("JSON修复失败，使用默认结构")
+                            result = self._create_fallback_analysis_result(response)
+                    else:
                         result = self._create_fallback_analysis_result(response)
-                else:
-                    result = self._create_fallback_analysis_result(response)
-        else:
-            logger.warning("未找到JSON响应，尝试从文本提取关键信息")
-            result = self._extract_from_text(response)
+            else:
+                logger.warning("未找到JSON响应，尝试从文本提取关键信息")
+                result = self._extract_from_text(response)
+
+        except Exception as e:
+            # 捕获所有异常，确保不会传播到调用方
+            logger.error(f"解析响应时发生异常: {e}")
+            logger.debug(f"原始响应前200字符: {response[:200] if response else 'empty'}")
+            result = self._create_fallback_analysis_result(response)
 
         return result
 
@@ -272,30 +296,52 @@ class ExpertTeam:
         return self._try_complete_json(text)
 
     def _try_complete_json(self, text: str) -> Optional[str]:
-        """尝试补全不完整的JSON（缺少外层{}）"""
-        # 检测是否以 JSON 键开头（如 "resume_analysis":）
+        """尝试补全不完整的JSON（缺少外层{}）
+
+        处理多种前导字符情况：
+        - 空格、换行符、制表符开头
+        - 以 "key": 开头但缺少外层 {}
+        - 以 } 结尾但缺少开头 {
+        """
+        # 先去除前导空白，保留原始内容
         trimmed = text.strip()
 
-        # 如果以 " 开头但不是 { 开头，可能是缺少外层 {}
+        if not trimmed:
+            return None
+
+        # 情况1：以 " 开头但不是 { 开头 → 缺少外层 {}
         if trimmed.startswith('"') and not trimmed.startswith('{'):
-            # 尝试在开头加 {，结尾加 }
             completed = '{' + trimmed + '}'
             try:
                 json.loads(completed)
-                logger.info("成功补全不完整的JSON（添加外层{}）")
+                logger.info("成功补全JSON（添加外层{}）")
                 return completed
-            except json.JSONDecodeError:
-                pass
+            except json.JSONDecodeError as e:
+                logger.debug(f"补全尝试1失败: {e}")
+                # 继续尝试其他方案
 
-        # 如果以 } 结尾但缺少开头 {
+        # 情况2：以 } 结尾但缺少开头 {
         if trimmed.endswith('}') and not trimmed.startswith('{'):
             completed = '{' + trimmed
             try:
                 json.loads(completed)
-                logger.info("成功补全不完整的JSON（添加开头{）")
+                logger.info("成功补全JSON（添加开头{）")
                 return completed
-            except json.JSONDecodeError:
-                pass
+            except json.JSONDecodeError as e:
+                logger.debug(f"补全尝试2失败: {e}")
+
+        # 情况3：尝试查找第一个 " 和最后一个 } 之间的内容
+        first_quote = trimmed.find('"')
+        last_brace = trimmed.rfind('}')
+        if first_quote != -1 and last_brace != -1 and first_quote < last_brace:
+            inner = trimmed[first_quote:last_brace+1]
+            completed = '{' + inner + '}'
+            try:
+                json.loads(completed)
+                logger.info("成功补全JSON（提取内部内容）")
+                return completed
+            except json.JSONDecodeError as e:
+                logger.debug(f"补全尝试3失败: {e}")
 
         return None
 
@@ -410,65 +456,75 @@ class ExpertTeam:
             return '较低'
 
     def _parse_generation_response(self, response: str) -> GenerationResult:
-        """解析生成阶段响应 - 增强版fallback机制"""
+        """解析生成阶段响应 - 增强版fallback机制
+
+        确保所有异常都被捕获，永远返回有效的 GenerationResult 对象
+        """
         result = GenerationResult()
 
-        # 多级JSON提取策略
-        json_str = None
-        extraction_method = None
+        try:
+            # 多级JSON提取策略
+            json_str = None
+            extraction_method = None
 
-        # Level 1: 尝试匹配 ```json ... ``` 格式
-        json_pattern = r'```json\s*([\s\S]*?)\s*```'
-        match = re.search(json_pattern, response)
-        if match:
-            json_str = match.group(1)
-            extraction_method = 'code_block'
-
-        # Level 2: 使用栈匹配提取平衡JSON
-        if not json_str:
-            json_str = self._extract_balanced_json(response)
-            if json_str:
-                extraction_method = 'balanced'
-
-        # Level 3: 正则匹配（兜底）
-        if not json_str:
-            json_pattern = r'\{[\s\S]*\}'
+            # Level 1: 尝试匹配 ```json ... ``` 格式
+            json_pattern = r'```json\s*([\s\S]*?)\s*```'
             match = re.search(json_pattern, response)
             if match:
-                json_str = match.group(0)
-                extraction_method = 'regex'
+                json_str = match.group(1)
+                extraction_method = 'code_block'
 
-        if json_str:
-            try:
-                data = json.loads(json_str)
-                logger.info(f"生成JSON解析成功 (方法: {extraction_method})")
+            # Level 2: 使用栈匹配提取平衡JSON
+            if not json_str:
+                json_str = self._extract_balanced_json(response)
+                if json_str:
+                    extraction_method = 'balanced'
 
-                # 安全获取各字段，带完整默认值
-                result.tailored_resume = self._safe_get_dict(data, 'tailored_resume')
-                result.evidence_report = self._safe_get_dict(data, 'evidence_report')
-                result.optimization_summary = self._safe_get_dict(data, 'optimization_summary')
+            # Level 3: 正则匹配（兜底）
+            if not json_str:
+                json_pattern = r'\{[\s\S]*\}'
+                match = re.search(json_pattern, response)
+                if match:
+                    json_str = match.group(0)
+                    extraction_method = 'regex'
 
-                # 验证和补全关键字段
-                self._validate_generation_result(result)
+            if json_str:
+                try:
+                    data = json.loads(json_str)
+                    logger.info(f"生成JSON解析成功 (方法: {extraction_method})")
 
-            except json.JSONDecodeError as e:
-                logger.error(f"生成JSON解析失败: {e}, 尝试修复...")
-                fixed_json = self._repair_json(json_str)
-                if fixed_json:
-                    try:
-                        data = json.loads(fixed_json)
-                        result.tailored_resume = self._safe_get_dict(data, 'tailored_resume')
-                        result.evidence_report = self._safe_get_dict(data, 'evidence_report')
-                        result.optimization_summary = self._safe_get_dict(data, 'optimization_summary')
-                        self._validate_generation_result(result)
-                        logger.info("生成JSON修复成功")
-                    except json.JSONDecodeError:
-                        logger.error("生成JSON修复失败，使用默认结构")
+                    # 安全获取各字段，带完整默认值
+                    result.tailored_resume = self._safe_get_dict(data, 'tailored_resume')
+                    result.evidence_report = self._safe_get_dict(data, 'evidence_report')
+                    result.optimization_summary = self._safe_get_dict(data, 'optimization_summary')
+
+                    # 验证和补全关键字段
+                    self._validate_generation_result(result)
+
+                except json.JSONDecodeError as e:
+                    logger.error(f"生成JSON解析失败: {e}, 尝试修复...")
+                    fixed_json = self._repair_json(json_str)
+                    if fixed_json:
+                        try:
+                            data = json.loads(fixed_json)
+                            result.tailored_resume = self._safe_get_dict(data, 'tailored_resume')
+                            result.evidence_report = self._safe_get_dict(data, 'evidence_report')
+                            result.optimization_summary = self._safe_get_dict(data, 'optimization_summary')
+                            self._validate_generation_result(result)
+                            logger.info("生成JSON修复成功")
+                        except json.JSONDecodeError:
+                            logger.error("生成JSON修复失败，使用默认结构")
+                            result = self._create_fallback_generation_result(response)
+                    else:
                         result = self._create_fallback_generation_result(response)
-                else:
-                    result = self._create_fallback_generation_result(response)
-        else:
-            logger.warning("未找到生成JSON响应")
+            else:
+                logger.warning("未找到生成JSON响应")
+                result = self._create_fallback_generation_result(response)
+
+        except Exception as e:
+            # 捕获所有异常，确保不会传播到调用方
+            logger.error(f"解析生成响应时发生异常: {e}")
+            logger.debug(f"原始响应前200字符: {response[:200] if response else 'empty'}")
             result = self._create_fallback_generation_result(response)
 
         return result
