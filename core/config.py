@@ -26,18 +26,18 @@ class Config:
     ALIBABA_API_KEY = os.getenv('ALIBABA_API_KEY', '')
 
     # ==================== 模型配置 ====================
-    # 智谱模型
-    PRIMARY_MODEL = os.getenv('PRIMARY_MODEL', 'glm-4.6')
-    FALLBACK_MODEL = os.getenv('FALLBACK_MODEL', 'glm-4-flash')
+    # 智谱模型（使用 Anthropic 兼容端点）
+    PRIMARY_MODEL = os.getenv('PRIMARY_MODEL', 'glm-5')
+    FALLBACK_MODEL = os.getenv('FALLBACK_MODEL', 'glm-4.6')
 
     # 阿里云模型
     ALIBABA_PRIMARY_MODEL = os.getenv('ALIBABA_PRIMARY_MODEL', 'qwen3.5-plus')
 
     # 任务-模型映射（智谱）
     TASK_MODEL_MAPPING = {
-        'analyze': 'glm-4.6',      # 分析任务
-        'generate': 'glm-4.6',     # 生成任务
-        'validate': 'glm-4-flash'  # 验证任务（低成本）
+        'analyze': 'glm-5',          # 分析任务
+        'generate': 'glm-5',         # 生成任务
+        'validate': 'glm-4-flash'    # 验证任务（低成本）
     }
 
     # 任务-模型映射（阿里云）

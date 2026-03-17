@@ -37,7 +37,7 @@ if __name__ == '__main__':
     print(f"\n{'='*50}")
     print(f"  tailorCV 简版工具")
     print(f"  访问地址: http://localhost:{port}")
-    print(f"  模型: 智谱AI (GLM-4.6)")
+    print(f"  模型: 智谱AI (GLM-5)")
     print(f"{'='*50}\n")
 
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(host='0.0.0.0', port=port, debug=True, use_reloader=False)

@@ -12,6 +12,7 @@ docxtpl>=0.16.7
 docx2pdf>=0.1.8
 
 # AI SDK
+anthropic>=0.39.0  # For ZhipuAI Anthropic-compatible endpoint
 zhipuai>=2.0.0
 openai>=1.0.0  # For Alibaba Coding Plan API
 

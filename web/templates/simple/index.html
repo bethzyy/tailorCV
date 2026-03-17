@@ -487,6 +487,73 @@
             display: block;
         }
 
+        /* 五阶段步骤指示器 */
+        .progress-steps {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        .progress-steps::before {
+            content: '';
+            position: absolute;
+            top: 15px;
+            left: 10%;
+            right: 10%;
+            height: 2px;
+            background: #e0e0e0;
+            z-index: 0;
+        }
+
+        .progress-step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .step-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #e0e0e0;
+            color: #999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+
+        .step-label {
+            margin-top: 6px;
+            font-size: 12px;
+            color: #999;
+            transition: all 0.3s;
+        }
+
+        .progress-step.active .step-icon {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .progress-step.active .step-label {
+            color: #667eea;
+            font-weight: 500;
+        }
+
+        .progress-step.completed .step-icon {
+            background: #4caf50;
+            color: white;
+        }
+
+        .progress-step.completed .step-label {
+            color: #4caf50;
+        }
+
         .progress-bar {
             height: 18px;
             background: #f0f0f0;
@@ -665,6 +732,131 @@
             color: #333;
         }
 
+        /* 简历预览卡片 */
+        .resume-preview-card {
+            background: white;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .preview-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .preview-header:hover {
+            background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
+        }
+
+        .preview-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .preview-toggle {
+            color: #667eea;
+            font-size: 13px;
+        }
+
+        .preview-content {
+            padding: 20px;
+            display: none;
+            border-top: 1px solid #eee;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .preview-content.show {
+            display: block;
+        }
+
+        .preview-section {
+            margin-bottom: 20px;
+        }
+
+        .preview-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .preview-section-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 2px solid #667eea;
+            display: inline-block;
+        }
+
+        .preview-item {
+            margin-bottom: 15px;
+            padding-left: 10px;
+            border-left: 3px solid #e9ecef;
+        }
+
+        .preview-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .preview-item-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+
+        .preview-item-title {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .preview-item-time {
+            color: #888;
+            font-size: 13px;
+        }
+
+        .preview-item-subtitle {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+
+        .preview-item-content {
+            color: #555;
+            font-size: 14px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+
+        .preview-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .preview-tag {
+            display: inline-block;
+            padding: 4px 10px;
+            background: #f0f4ff;
+            color: #667eea;
+            border-radius: 15px;
+            font-size: 12px;
+        }
+
+        .preview-empty {
+            color: #999;
+            font-size: 14px;
+            padding: 10px;
+            text-align: center;
+        }
+
         footer {
             text-align: center;
             padding: 25px 0;
@@ -728,7 +920,7 @@
         <header>
             <div class="header-title">
                 <h1>⚡ tailorCV 简版工具</h1>
-                <p>单模型快速生成 <span class="model-badge">智谱AI GLM-4.6</span></p>
+                <p>单模型快速生成 <span class="model-badge">智谱AI GLM-5</span></p>
             </div>
             <div class="nav-links">
                 <a href="http://localhost:5000" class="nav-link">
@@ -925,6 +1117,29 @@
 
             <!-- 进度条 -->
             <div class="progress-container" id="progressContainer">
+                <!-- 五阶段步骤指示器 -->
+                <div class="progress-steps" id="progressSteps">
+                    <div class="progress-step" id="stage0">
+                        <div class="step-icon">1</div>
+                        <div class="step-label">简历解析</div>
+                    </div>
+                    <div class="progress-step" id="stage1">
+                        <div class="step-icon">2</div>
+                        <div class="step-label">JD分析</div>
+                    </div>
+                    <div class="progress-step" id="stage2">
+                        <div class="step-icon">3</div>
+                        <div class="step-label">匹配分析</div>
+                    </div>
+                    <div class="progress-step" id="stage3">
+                        <div class="step-icon">4</div>
+                        <div class="step-label">内容重写</div>
+                    </div>
+                    <div class="progress-step" id="stage4">
+                        <div class="step-icon">5</div>
+                        <div class="step-label">质量验证</div>
+                    </div>
+                </div>
                 <div class="progress-bar">
                     <div class="progress-fill" id="progressFill"></div>
                 </div>
@@ -973,6 +1188,28 @@
                     </div>
                 </div>
 
+                <!-- 简历预览区域 -->
+                <div class="resume-preview-card" id="resumePreviewCard">
+                    <div class="preview-header" onclick="toggleResumePreview()">
+                        <span class="preview-title">📄 定制简历预览</span>
+                        <span class="preview-toggle" id="previewToggle">▼ 点击展开</span>
+                    </div>
+                    <div class="preview-content" id="resumePreviewContent">
+                        <!-- 基本信息 -->
+                        <div class="preview-section" id="previewBasicInfo"></div>
+                        <!-- 教育背景 -->
+                        <div class="preview-section" id="previewEducation"></div>
+                        <!-- 工作经历 -->
+                        <div class="preview-section" id="previewWork"></div>
+                        <!-- 项目经历 -->
+                        <div class="preview-section" id="previewProjects"></div>
+                        <!-- 技能 -->
+                        <div class="preview-section" id="previewSkills"></div>
+                        <!-- 自我评价 -->
+                        <div class="preview-section" id="previewEvaluation"></div>
+                    </div>
+                </div>
+
                 <div class="download-buttons">
                     <a href="#" class="btn-download" id="downloadWord">📄 下载 Word 文档</a>
                     <button type="button" class="btn-download btn-retry" id="retryBtn">🔄 换个职位试试</button>
@@ -987,6 +1224,114 @@
 
     <script>
         let currentMode = 'upload';
+
+        // ==================== 用户参数持久化 ====================
+        const STORAGE_KEY = 'tailorCV_userData';
+
+        // 保存用户输入到 localStorage
+        function saveUserData() {
+            const data = {
+                jdText: document.getElementById('jdText').value,
+                currentMode: currentMode,
+                guidedData: collectGuidedData(),
+                timestamp: Date.now()
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        }
+
+        // 从 localStorage 加载用户输入
+        function loadUserData() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (!saved) return;
+
+            try {
+                const data = JSON.parse(saved);
+                // 恢复 JD 文本
+                if (data.jdText) {
+                    document.getElementById('jdText').value = data.jdText;
+                }
+                // 恢复引导模式数据
+                if (data.guidedData) {
+                    restoreGuidedData(data.guidedData);
+                }
+                // 恢复模式（如果是引导模式）
+                if (data.currentMode === 'guided') {
+                    document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
+                    document.querySelector('.mode-tab[data-mode="guided"]').classList.add('active');
+                    document.querySelectorAll('.input-panel').forEach(p => p.classList.remove('active'));
+                    document.getElementById('guidedPanel').classList.add('active');
+                    currentMode = 'guided';
+                }
+            } catch (e) {
+                console.warn('加载保存的用户数据失败:', e);
+            }
+        }
+
+        // 恢复引导模式数据
+        function restoreGuidedData(data) {
+            if (!data) return;
+
+            // 基本信息
+            if (data.basic_info) {
+                document.getElementById('g_name').value = data.basic_info.name || '';
+                document.getElementById('g_phone').value = data.basic_info.phone || '';
+                document.getElementById('g_email').value = data.basic_info.email || '';
+            }
+
+            // 教育背景（先清空再恢复）
+            if (data.education && data.education.length > 0) {
+                const eduList = document.getElementById('educationList');
+                eduList.innerHTML = '';
+                data.education.forEach((edu, index) => {
+                    if (index === 0) {
+                        addEducation();
+                    } else {
+                        addEducation();
+                    }
+                    const items = eduList.querySelectorAll('.entry-item');
+                    const item = items[items.length - 1];
+                    item.querySelector('.edu-school').value = edu.school || '';
+                    item.querySelector('.edu-major').value = edu.major || '';
+                    item.querySelector('.edu-degree').value = edu.degree || '';
+                    item.querySelector('.edu-time').value = edu.time || '';
+                });
+            }
+
+            // 工作经历（先清空再恢复）
+            if (data.work_experience && data.work_experience.length > 0) {
+                const workList = document.getElementById('workList');
+                workList.innerHTML = '';
+                data.work_experience.forEach((work, index) => {
+                    addWork();
+                    const items = workList.querySelectorAll('.entry-item');
+                    const item = items[items.length - 1];
+                    item.querySelector('.work-company').value = work.company || '';
+                    item.querySelector('.work-position').value = work.position || '';
+                    item.querySelector('.work-time').value = work.time || '';
+                    item.querySelector('.work-content').value = work.content || '';
+                });
+            }
+
+            // 技能和自我评价
+            document.getElementById('g_skills').value = data.skills || '';
+            document.getElementById('g_evaluation').value = data.self_evaluation || '';
+        }
+
+        // 页面加载时恢复数据（兼容 DOM 已加载完成的情况）
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', loadUserData);
+        } else {
+            loadUserData();
+        }
+
+        // JD 文本变化时自动保存
+        document.getElementById('jdText').addEventListener('input', saveUserData);
+
+        // 引导表单输入时自动保存（使用事件委托）
+        document.getElementById('guidedPanel').addEventListener('input', saveUserData);
+        document.getElementById('guidedPanel').addEventListener('change', saveUserData);
+
+        // ==================== 原有功能 ====================
 
         // 关闭服务器
         async function shutdownServer() {
@@ -1202,6 +1547,60 @@
         const progressText = document.getElementById('progressText');
         const resultContainer = document.getElementById('resultContainer');
 
+        // 当前会话ID和轮询定时器
+        let currentSessionId = null;
+        let statusInterval = null;
+
+        // 更新步骤指示器
+        function updateStepIndicator(currentStage) {
+            for (let i = 0; i <= 4; i++) {
+                const stepEl = document.getElementById(`stage${i}`);
+                if (stepEl) {
+                    stepEl.classList.remove('active', 'completed');
+                    if (i < currentStage) {
+                        stepEl.classList.add('completed');
+                    } else if (i === currentStage) {
+                        stepEl.classList.add('active');
+                    }
+                }
+            }
+        }
+
+        // 轮询获取状态
+        async function checkStatus() {
+            if (!currentSessionId) return;
+
+            try {
+                const response = await fetch(`/api/status/${currentSessionId}`);
+                if (!response.ok) return;
+
+                const status = await response.json();
+
+                // 更新进度条
+                if (status.progress !== undefined) {
+                    progressFill.style.width = status.progress + '%';
+                }
+
+                // 更新步骤文本
+                if (status.message) {
+                    progressText.textContent = status.message;
+                }
+
+                // 更新步骤指示器
+                if (status.stage !== undefined) {
+                    updateStepIndicator(status.stage);
+                }
+
+                // 如果完成，停止轮询
+                if (status.status === 'completed') {
+                    clearInterval(statusInterval);
+                    statusInterval = null;
+                }
+            } catch (e) {
+                console.error('获取状态失败:', e);
+            }
+        }
+
         submitBtn.addEventListener('click', async () => {
             const jdText = document.getElementById('jdText').value.trim();
 
@@ -1232,10 +1631,20 @@
             resultContainer.classList.remove('show');
             submitBtn.disabled = true;
             progressFill.style.width = '0%';
+            progressText.textContent = '正在启动...';
+
+            // 重置步骤指示器
+            updateStepIndicator(-1);
+
+            // 清理之前的轮询
+            if (statusInterval) {
+                clearInterval(statusInterval);
+                statusInterval = null;
+            }
 
             try {
                 progressText.textContent = '正在上传...';
-                progressFill.style.width = '10%';
+                progressFill.style.width = '5%';
 
                 let response;
 
@@ -1244,9 +1653,7 @@
                     formData.append('resume', resumeFile.files[0]);
                     formData.append('jd_text', jdText);
                     formData.append('style', 'original');
-
-                    progressText.textContent = '正在AI分析...';
-                    progressFill.style.width = '30%';
+                    formData.append('no_cache', 'true');  // 强制不使用缓存，每次重新处理
 
                     response = await fetch('/api/tailor/file', {
                         method: 'POST',
@@ -1256,22 +1663,17 @@
                     const guidedData = collectGuidedData();
                     const resumeText = guidedDataToText(guidedData);
 
-                    progressText.textContent = '正在AI分析...';
-                    progressFill.style.width = '30%';
-
                     response = await fetch('/api/tailor/text', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             resume_text: resumeText,
                             jd_text: jdText,
-                            style: 'original'
+                            style: 'original',
+                            no_cache: true  // 强制不使用缓存，每次重新处理
                         })
                     });
                 }
-
-                progressFill.style.width = '70%';
-                progressText.textContent = '正在生成简历...';
 
                 const result = await response.json();
 
@@ -1279,21 +1681,43 @@
                     throw new Error(result.error);
                 }
 
+                // 获取会话ID并启动轮询
+                if (result.session_id) {
+                    currentSessionId = result.session_id;
+                    // 启动轮询（每1秒）
+                    statusInterval = setInterval(checkStatus, 1000);
+                }
+
                 progressFill.style.width = '100%';
                 progressText.textContent = '完成！';
+                updateStepIndicator(5); // 所有步骤完成
 
                 showResult(result);
 
             } catch (error) {
-                alert('处理失败: ' + error.message);
+                let errorMsg = error.message;
+                if (error.name === 'TypeError' && error.message === 'Failed to fetch') {
+                    errorMsg = '网络请求失败，可能原因：\n1. 服务器响应超时\n2. 网络连接问题\n3. 服务已停止';
+                }
+                alert('处理失败: ' + errorMsg);
+                console.error('详细错误:', error);
                 progressContainer.classList.remove('show');
                 updateProgressIndicator(1);
             } finally {
                 submitBtn.disabled = false;
+                // 清理轮询
+                if (statusInterval) {
+                    clearInterval(statusInterval);
+                    statusInterval = null;
+                }
             }
         });
 
         function showResult(result) {
+            // 调试日志：查看API返回的数据结构
+            console.log('API返回结果:', result);
+            console.log('tailored_resume:', result.tailored_resume);
+
             resultContainer.classList.add('show');
             resultContainer.scrollIntoView({ behavior: 'smooth' });
 
@@ -1302,15 +1726,36 @@
             document.getElementById('matchLevel').textContent = analysis.match_level || '良好匹配';
 
             const strengthsList = document.getElementById('strengthsList');
-            strengthsList.innerHTML = (analysis.strengths || []).map(s => `<li>${s}</li>`).join('');
+            strengthsList.innerHTML = (analysis.strengths || []).map(s => {
+                // 支持对象格式 {item: "..."} 和字符串格式
+                const text = typeof s === 'object' ? (s.item || s.text || JSON.stringify(s)) : s;
+                return `<li>${text}</li>`;
+            }).join('');
 
             const gapsList = document.getElementById('gapsList');
-            gapsList.innerHTML = (analysis.gaps || []).map(g => `<li>${g}</li>`).join('');
+            gapsList.innerHTML = (analysis.gaps || []).map(g => {
+                // 支持对象格式 {item: "...", mitigation: "..."} 和字符串格式
+                const text = typeof g === 'object' ? (g.item || g.text || JSON.stringify(g)) : g;
+                return `<li>${text}</li>`;
+            }).join('');
 
             const evidence = result.evidence_report || {};
             document.getElementById('totalItems').textContent = evidence.total_items || 0;
             document.getElementById('validatedItems').textContent = evidence.validated || 0;
             document.getElementById('coverageRate').textContent = Math.round((evidence.coverage || 0) * 100) + '%';
+
+            // 新增：展示简历预览
+            if (result.tailored_resume) {
+                renderResumePreview(result.tailored_resume);
+            } else {
+                // 清空预览区域
+                document.getElementById('previewBasicInfo').innerHTML = '';
+                document.getElementById('previewEducation').innerHTML = '';
+                document.getElementById('previewWork').innerHTML = '';
+                document.getElementById('previewProjects').innerHTML = '';
+                document.getElementById('previewSkills').innerHTML = '';
+                document.getElementById('previewEvaluation').innerHTML = '';
+            }
 
             if (result.tailored_word) {
                 const blob = base64ToBlob(result.tailored_word, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
@@ -1318,6 +1763,148 @@
                 document.getElementById('downloadWord').href = url;
                 document.getElementById('downloadWord').download = '定制简历.docx';
             }
+        }
+
+        // 切换简历预览展开/收起
+        function toggleResumePreview() {
+            const content = document.getElementById('resumePreviewContent');
+            const toggle = document.getElementById('previewToggle');
+
+            if (content.classList.contains('show')) {
+                content.classList.remove('show');
+                toggle.textContent = '▼ 点击展开';
+            } else {
+                content.classList.add('show');
+                toggle.textContent = '▲ 点击收起';
+            }
+        }
+
+        // 渲染简历预览
+        function renderResumePreview(resume) {
+            // 基本信息
+            const basicInfo = resume.basic_info || {};
+            let basicHtml = '<div class="preview-section-title">基本信息</div>';
+            basicHtml += '<div class="preview-item">';
+            basicHtml += `<div class="preview-item-title">${basicInfo.name || '未填写姓名'}</div>`;
+            let contactParts = [];
+            if (basicInfo.phone) contactParts.push(basicInfo.phone);
+            if (basicInfo.email) contactParts.push(basicInfo.email);
+            if (basicInfo.location) contactParts.push(basicInfo.location);
+            if (contactParts.length > 0) {
+                basicHtml += `<div class="preview-item-subtitle">${contactParts.join(' | ')}</div>`;
+            }
+            basicHtml += '</div>';
+            document.getElementById('previewBasicInfo').innerHTML = basicHtml;
+
+            // 教育背景
+            const education = resume.education || [];
+            if (education.length > 0) {
+                let eduHtml = '<div class="preview-section-title">教育背景</div>';
+                education.forEach(e => {
+                    eduHtml += '<div class="preview-item">';
+                    eduHtml += '<div class="preview-item-header">';
+                    eduHtml += `<span class="preview-item-title">${e.school || ''}</span>`;
+                    eduHtml += `<span class="preview-item-time">${e.time || ''}</span>`;
+                    eduHtml += '</div>';
+                    eduHtml += `<div class="preview-item-subtitle">${e.major || ''} | ${e.degree || ''}</div>`;
+                    eduHtml += '</div>';
+                });
+                document.getElementById('previewEducation').innerHTML = eduHtml;
+            } else {
+                document.getElementById('previewEducation').innerHTML = '';
+            }
+
+            // 工作经历（重点展示）
+            const workExp = resume.work_experience || [];
+            if (workExp.length > 0) {
+                let workHtml = '<div class="preview-section-title">工作经历</div>';
+                workExp.forEach(w => {
+                    workHtml += '<div class="preview-item">';
+                    workHtml += '<div class="preview-item-header">';
+                    workHtml += `<span class="preview-item-title">${w.company || ''}</span>`;
+                    workHtml += `<span class="preview-item-time">${w.time || ''}</span>`;
+                    workHtml += '</div>';
+                    workHtml += `<div class="preview-item-subtitle">${w.position || ''}</div>`;
+                    // 处理职责/成就
+                    if (w.tailored_bullets && w.tailored_bullets.length > 0) {
+                        workHtml += '<div class="preview-item-content">';
+                        w.tailored_bullets.forEach(b => {
+                            const content = typeof b === 'string' ? b : (b.content || '');
+                            if (content) workHtml += `• ${content}<br>`;
+                        });
+                        workHtml += '</div>';
+                    } else if (w.responsibilities && w.responsibilities.length > 0) {
+                        workHtml += '<div class="preview-item-content">';
+                        w.responsibilities.forEach(r => {
+                            workHtml += `• ${r}<br>`;
+                        });
+                        workHtml += '</div>';
+                    } else if (w.description) {
+                        workHtml += `<div class="preview-item-content">${w.description}</div>`;
+                    }
+                    workHtml += '</div>';
+                });
+                document.getElementById('previewWork').innerHTML = workHtml;
+            } else {
+                document.getElementById('previewWork').innerHTML = '';
+            }
+
+            // 项目经历
+            const projects = resume.projects || [];
+            if (projects.length > 0) {
+                let projHtml = '<div class="preview-section-title">项目经历</div>';
+                projects.forEach(p => {
+                    projHtml += '<div class="preview-item">';
+                    projHtml += '<div class="preview-item-header">';
+                    projHtml += `<span class="preview-item-title">${p.name || ''}</span>`;
+                    projHtml += `<span class="preview-item-time">${p.time || ''}</span>`;
+                    projHtml += '</div>';
+                    if (p.role) {
+                        projHtml += `<div class="preview-item-subtitle">${p.role}</div>`;
+                    }
+                    const desc = p.tailored_description || p.description || '';
+                    if (desc) {
+                        projHtml += `<div class="preview-item-content">${desc}</div>`;
+                    }
+                    projHtml += '</div>';
+                });
+                document.getElementById('previewProjects').innerHTML = projHtml;
+            } else {
+                document.getElementById('previewProjects').innerHTML = '';
+            }
+
+            // 技能
+            const skills = resume.skills || {};
+            const skillList = skills.ordered_by_jd_relevance || skills.technical || skills.all || [];
+            if (skillList.length > 0) {
+                let skillsHtml = '<div class="preview-section-title">技能特长</div>';
+                skillsHtml += '<div class="preview-tags">';
+                skillList.forEach(s => {
+                    if (typeof s === 'string') {
+                        skillsHtml += `<span class="preview-tag">${s}</span>`;
+                    } else if (s.skill) {
+                        skillsHtml += `<span class="preview-tag">${s.skill}${s.level ? ' (' + s.level + ')' : ''}</span>`;
+                    }
+                });
+                skillsHtml += '</div>';
+                document.getElementById('previewSkills').innerHTML = skillsHtml;
+            } else {
+                document.getElementById('previewSkills').innerHTML = '';
+            }
+
+            // 自我评价
+            const evaluation = resume.self_evaluation || resume.summary || '';
+            if (evaluation) {
+                let evalHtml = '<div class="preview-section-title">自我评价</div>';
+                evalHtml += `<div class="preview-item-content">${evaluation}</div>`;
+                document.getElementById('previewEvaluation').innerHTML = evalHtml;
+            } else {
+                document.getElementById('previewEvaluation').innerHTML = '';
+            }
+
+            // 默认展开预览
+            document.getElementById('resumePreviewContent').classList.add('show');
+            document.getElementById('previewToggle').textContent = '▲ 点击收起';
         }
 
         function base64ToBlob(base64, mimeType) {
@@ -1342,6 +1929,8 @@
                 progressContainer.classList.remove('show');
                 resultContainer.classList.remove('show');
                 updateProgressIndicator(1);
+                // 清除保存的用户数据
+                localStorage.removeItem(STORAGE_KEY);
             }
         });
 

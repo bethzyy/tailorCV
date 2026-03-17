@@ -1,7 +1,8 @@
 """
 智谱AI 模型提供者
 
-实现智谱AI（GLM系列）模型的调用接口。
+使用 Anthropic 兼容端点调用智谱AI（GLM系列）模型。
+端点: https://open.bigmodel.cn/api/anthropic
 """
 
 import os
@@ -15,10 +16,15 @@ logger = logging.getLogger(__name__)
 
 
 class ZhipuProvider(BaseModelProvider):
-    """智谱AI 模型提供者"""
+    """智谱AI 模型提供者 - Anthropic 兼容端点"""
+
+    # Anthropic 兼容端点
+    BASE_URL = "https://open.bigmodel.cn/api/anthropic"
 
     # 支持的模型列表
     MODELS = {
+        'glm-5': 'GLM-5',
+        'glm-4.7': 'GLM-4.7',
         'glm-4.6': 'GLM-4.6',
         'glm-4-flash': 'GLM-4-Flash',
         'glm-4': 'GLM-4',
@@ -48,10 +54,14 @@ class ZhipuProvider(BaseModelProvider):
         """确保客户端已初始化"""
         if self._client is None and self._api_key:
             try:
-                from zhipuai import ZhipuAI
-                self._client = ZhipuAI(api_key=self._api_key)
+                from anthropic import Anthropic
+                self._client = Anthropic(
+                    api_key=self._api_key,
+                    base_url=self.BASE_URL
+                )
+                logger.info(f"智谱AI客户端初始化成功 (Anthropic兼容端点: {self.BASE_URL})")
             except ImportError:
-                logger.error("zhipuai 未安装，请运行: pip install zhipuai")
+                logger.error("anthropic 未安装，请运行: pip install anthropic")
                 raise
 
     @property
@@ -78,7 +88,7 @@ class ZhipuProvider(BaseModelProvider):
 
         Args:
             prompt: 输入提示词
-            model_id: 模型ID（默认 glm-4.6）
+            model_id: 模型ID（默认 glm-5）
             max_tokens: 最大输出token数
             temperature: 温度参数
             max_retries: 最大重试次数
@@ -88,7 +98,7 @@ class ZhipuProvider(BaseModelProvider):
         """
         self._ensure_client()
 
-        model_id = model_id or 'glm-4.6'
+        model_id = model_id or 'glm-5'
         model_name = self.get_model_name(model_id)
 
         self.stats['total_calls'] += 1
@@ -98,32 +108,33 @@ class ZhipuProvider(BaseModelProvider):
             try:
                 start_time = time.time()
 
-                response = self._client.chat.completions.create(
+                # Anthropic 风格的 API 调用
+                response = self._client.messages.create(
                     model=model_id,
+                    max_tokens=max_tokens,
                     messages=[{
                         "role": "user",
                         "content": prompt
-                    }],
-                    max_tokens=max_tokens,
-                    temperature=temperature
+                    }]
                 )
 
                 latency_ms = int((time.time() - start_time) * 1000)
-                content = response.choices[0].message.content
+                content = response.content[0].text
 
                 # 更新统计
+                total_tokens = response.usage.input_tokens + response.usage.output_tokens
                 self.stats['success_calls'] += 1
-                self.stats['total_tokens'] += response.usage.total_tokens
+                self.stats['total_tokens'] += total_tokens
                 self.stats['total_latency_ms'] += latency_ms
 
-                logger.info(f"智谱AI调用成功: model={model_id}, tokens={response.usage.total_tokens}, latency={latency_ms}ms")
+                logger.info(f"智谱AI调用成功: model={model_id}, tokens={total_tokens}, latency={latency_ms}ms")
 
                 return ModelResponse(
                     success=True,
                     content=content,
                     model_id=model_id,
                     model_name=model_name,
-                    tokens_used=response.usage.total_tokens,
+                    tokens_used=total_tokens,
                     latency_ms=latency_ms
                 )
 
@@ -155,7 +166,7 @@ class ZhipuProvider(BaseModelProvider):
     def _is_quota_error(self, error: Exception) -> bool:
         """判断是否为配额错误"""
         error_str = str(error).lower()
-        quota_keywords = ['quota', 'limit', 'exhausted', 'rate', '1310']
+        quota_keywords = ['quota', 'limit', 'exhausted', 'rate', '1302', '1310']
         return any(kw in error_str for kw in quota_keywords)
 
     def get_stats(self) -> Dict[str, Any]:

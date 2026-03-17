@@ -249,7 +249,7 @@ class Database:
                 data.get('match_score'),
                 data.get('match_level', ''),
                 data.get('original_resume', ''),
-                data.get('tailored_resume', ''),
+                json.dumps(data.get('tailored_resume', {}), ensure_ascii=False) if isinstance(data.get('tailored_resume'), dict) else data.get('tailored_resume', ''),
                 data.get('jd_content', ''),
                 json.dumps(data.get('evidence_report', {}), ensure_ascii=False),
                 json.dumps(data.get('optimization_summary', {}), ensure_ascii=False),
@@ -272,6 +272,11 @@ class Database:
                     result['evidence_report'] = json.loads(result['evidence_report'])
                 if result.get('optimization_summary'):
                     result['optimization_summary'] = json.loads(result['optimization_summary'])
+                if result.get('tailored_resume'):
+                    try:
+                        result['tailored_resume'] = json.loads(result['tailored_resume'])
+                    except (json.JSONDecodeError, TypeError):
+                        pass  # 保持原值（可能是字符串）
                 return result
             return None
 

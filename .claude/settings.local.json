@@ -14,7 +14,14 @@
       "Bash(ls:*)",
       "Bash(pkill:*)",
       "Bash(rm:*)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Bash(findstr :5001:*)",
+      "Bash(start:*)",
+      "mcp__zai-mcp-server__diagnose_error_screenshot",
+      "Bash(netstat:*)",
+      "Bash(taskkill:*)",
+      "Bash(pip show:*)",
+      "Bash(rg:*)"
     ]
   }
 }
