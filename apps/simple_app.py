@@ -34,6 +34,7 @@ from core.evidence_tracker import EvidenceTracker
 from core.resume_generator import ResumeGenerator
 from core.cache_manager import CacheManager
 from core.template_processor import TemplateProcessor
+from core.template_manager import TemplateManager
 from core.database import db
 
 # 是否使用新版五阶段流程
@@ -74,6 +75,7 @@ def create_app() -> Flask:
     generator = ResumeGenerator()
     cache_manager = CacheManager()
     template_processor = TemplateProcessor()
+    template_manager = TemplateManager()
 
     # 任务状态存储
     task_status: Dict[str, Dict[str, Any]] = {}
@@ -130,6 +132,55 @@ def create_app() -> Flask:
     def allowed_file(filename: str) -> bool:
         allowed_extensions = {'.pdf', '.docx', '.doc', '.txt', '.md'}
         return Path(filename).suffix.lower() in allowed_extensions
+
+    def get_sample_resume_data() -> Dict[str, Any]:
+        """获取示例简历数据用于模板预览"""
+        return {
+            "basic_info": {
+                "name": "张明",
+                "phone": "138-0000-0001",
+                "email": "zhangming@example.com",
+                "location": "北京",
+                "age": 28
+            },
+            "summary": "资深软件工程师，拥有5年互联网行业经验，精通Python、Java开发，具备良好的团队协作能力和项目管理经验。",
+            "education": [
+                {
+                    "school": "北京大学",
+                    "degree": "硕士",
+                    "major": "计算机科学与技术",
+                    "time": "2016-2019",
+                    "tailored": "北京大学 | 计算机科学与技术 | 硕士 | 2016-2019"
+                }
+            ],
+            "work_experience": [
+                {
+                    "company": "科技有限公司",
+                    "position": "高级软件工程师",
+                    "time": "2019-至今",
+                    "tailored": "• 主导核心系统架构设计，提升系统性能30%\n• 带领5人团队完成多个重点项目\n• 负责技术选型和代码审查",
+                    "content": "主导核心系统架构设计，带领团队完成项目开发"
+                }
+            ],
+            "projects": [
+                {
+                    "name": "智能推荐系统",
+                    "role": "技术负责人",
+                    "time": "2021-2022",
+                    "tailored": "• 设计并实现基于机器学习的推荐算法\n• 日均处理百万级用户请求",
+                    "content": "智能推荐系统的设计与实现"
+                }
+            ],
+            "skills": [
+                {"name": "Python", "tailored_description": "精通Python开发，有丰富的Web开发经验"},
+                {"name": "Java", "tailored_description": "熟练使用Java进行企业级应用开发"},
+                {"name": "MySQL", "tailored_description": "熟悉数据库设计与优化"},
+                {"name": "Docker", "tailored_description": "容器化部署与运维"}
+            ],
+            "awards": [{"name": "年度优秀员工"}, {"name": "技术创新奖"}],
+            "certificates": [{"name": "PMP项目管理认证"}, {"name": "AWS架构师认证"}],
+            "self_evaluation": "具备扎实的编程基础和丰富的项目经验，善于解决复杂技术问题，有良好的沟通能力和团队协作精神。"
+        }
 
     def run_tailor_pipeline(resume_text: str, jd_content: str, session_id: str = None):
         """
@@ -314,9 +365,38 @@ def create_app() -> Flask:
             task_status[session_id]['message'] = '正在生成文档...'
 
             style = request.form.get('style', 'original')
+            template_id = request.form.get('template_id', '')
+            template_mode = request.form.get('template_mode', 'auto')  # auto/selected/original
             style_preserved = False
+            used_template_id = None
 
-            if template_result and template_result.success and original_doc:
+            # 根据模板模式选择渲染方式
+            if template_mode == 'selected' and template_id:
+                # 用户指定模板
+                selected_template = template_manager.get_template(template_id)
+                if selected_template:
+                    try:
+                        word_bytes = template_processor.render(
+                            template_id, tailored_resume, parsed_resume.style_metadata
+                        )
+                        used_template_id = template_id
+                        style_preserved = True
+                        template_manager.increment_use_count(template_id)
+                        logger.info(f"使用选定模板: {selected_template['name']} ({template_id})")
+                    except Exception as e:
+                        logger.warning(f"选定模板渲染失败: {e}")
+                        word_bytes = generator.generate_bytes(
+                            tailored_resume,
+                            style_metadata=parsed_resume.style_metadata
+                        )
+                else:
+                    logger.warning(f"选定模板不存在: {template_id}")
+                    word_bytes = generator.generate_bytes(
+                        tailored_resume,
+                        style_metadata=parsed_resume.style_metadata
+                    )
+            elif template_mode == 'original' or (template_mode == 'auto' and template_result and template_result.success and original_doc):
+                # 使用原简历样式
                 try:
                     word_bytes, used_template = template_processor.render_with_fallback(
                         original_doc,
@@ -325,6 +405,8 @@ def create_app() -> Flask:
                         resume_file.filename
                     )
                     style_preserved = used_template
+                    if used_template:
+                        used_template_id = template_result.template_id
                 except Exception as e:
                     logger.warning(f"模板渲染失败: {e}")
                     word_bytes = generator.generate_bytes(
@@ -332,10 +414,30 @@ def create_app() -> Flask:
                         style_metadata=parsed_resume.style_metadata
                     )
             else:
-                word_bytes = generator.generate_bytes(
-                    tailored_resume,
-                    style_metadata=parsed_resume.style_metadata
-                )
+                # 使用默认模板或生成器
+                default_template = template_manager.get_default_template()
+                if default_template and template_mode == 'auto':
+                    try:
+                        word_bytes = template_processor.render(
+                            default_template['template_id'],
+                            tailored_resume,
+                            parsed_resume.style_metadata
+                        )
+                        used_template_id = default_template['template_id']
+                        style_preserved = True
+                        template_manager.increment_use_count(default_template['template_id'])
+                        logger.info(f"使用默认模板: {default_template['name']}")
+                    except Exception as e:
+                        logger.warning(f"默认模板渲染失败: {e}")
+                        word_bytes = generator.generate_bytes(
+                            tailored_resume,
+                            style_metadata=parsed_resume.style_metadata
+                        )
+                else:
+                    word_bytes = generator.generate_bytes(
+                        tailored_resume,
+                        style_metadata=parsed_resume.style_metadata
+                    )
 
             task_status[session_id]['progress'] = 100
             task_status[session_id]['status'] = 'completed'
@@ -357,6 +459,7 @@ def create_app() -> Flask:
                 'evidence_report': evidence_report if isinstance(evidence_report, dict) else evidence_report.to_dict(),
                 'validation_result': 'pass' if coverage >= 0.9 else 'pass_with_review',
                 'style_preserved': style_preserved,
+                'template_id': used_template_id,
                 'style_info': {
                     'font': parsed_resume.style_metadata.primary_font,
                     'font_size': parsed_resume.style_metadata.body_font_size,
@@ -669,8 +772,256 @@ def create_app() -> Flask:
         return jsonify({
             'model_stats': expert_team.get_stats(),
             'cache_stats': cache_manager.get_stats(),
-            'parser_stats': parser.get_stats()
+            'parser_stats': parser.get_stats(),
+            'template_stats': template_manager.get_stats()
         })
+
+    # ==================== 模板管理 API ====================
+
+    @app.route('/api/templates', methods=['GET'])
+    def get_templates():
+        """获取模板列表"""
+        source = request.args.get('source')
+        templates = template_manager.get_templates(source=source)
+        return jsonify({
+            'templates': templates,
+            'stats': template_manager.get_stats()
+        })
+
+    @app.route('/api/templates', methods=['POST'])
+    def upload_template():
+        """上传新模板"""
+        try:
+            if 'template' not in request.files:
+                return jsonify({'error': '未上传模板文件'}), 400
+
+            template_file = request.files['template']
+            if template_file.filename == '':
+                return jsonify({'error': '未选择模板文件'}), 400
+
+            ext = Path(template_file.filename).suffix.lower()
+            if ext not in ['.docx']:
+                return jsonify({'error': '仅支持 .docx 格式'}), 400
+
+            name = request.form.get('name', '')
+            description = request.form.get('description', '')
+            tags_str = request.form.get('tags', '')
+            tags = [t.strip() for t in tags_str.split(',') if t.strip()] if tags_str else []
+
+            file_content = template_file.read()
+            template_id, error = template_manager.upload_template(
+                file_content, template_file.filename, name, description, tags
+            )
+
+            if error and not template_id:
+                return jsonify({'error': error}), 400
+
+            return jsonify({
+                'template_id': template_id,
+                'message': error if error else '模板上传成功'
+            })
+
+        except Exception as e:
+            logger.error(f"上传模板失败: {e}", exc_info=True)
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/templates/<template_id>', methods=['GET'])
+    def get_template(template_id: str):
+        """获取模板详情"""
+        template = template_manager.get_template(template_id)
+        if not template:
+            return jsonify({'error': '模板不存在'}), 404
+        return jsonify(template)
+
+    @app.route('/api/templates/<template_id>', methods=['DELETE'])
+    def delete_template(template_id: str):
+        """删除模板"""
+        success, error = template_manager.delete_template(template_id)
+        if not success:
+            return jsonify({'error': error}), 400
+        return jsonify({'message': '模板已删除'})
+
+    @app.route('/api/templates/<template_id>/set_default', methods=['POST'])
+    def set_default_template(template_id: str):
+        """设置默认模板"""
+        success = template_manager.set_default_template(template_id)
+        if not success:
+            return jsonify({'error': '设置失败'}), 400
+        return jsonify({'message': '已设为默认模板'})
+
+    @app.route('/api/templates/extract', methods=['POST'])
+    def extract_template():
+        """从简历提取模板"""
+        try:
+            if 'resume' not in request.files:
+                return jsonify({'error': '未上传简历文件'}), 400
+
+            resume_file = request.files['resume']
+            if resume_file.filename == '':
+                return jsonify({'error': '未选择简历文件'}), 400
+
+            ext = Path(resume_file.filename).suffix.lower()
+            if ext not in ['.docx']:
+                return jsonify({'error': '仅支持 .docx 格式的简历'}), 400
+
+            name = request.form.get('name', '')
+
+            file_content = resume_file.read()
+            template_id, error = template_manager.extract_template_from_resume(
+                file_content, resume_file.filename, name
+            )
+
+            if error and not template_id:
+                return jsonify({'error': error}), 400
+
+            return jsonify({
+                'template_id': template_id,
+                'message': error if error else '模板提取成功'
+            })
+
+        except Exception as e:
+            logger.error(f"提取模板失败: {e}", exc_info=True)
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/templates/<template_id>/preview', methods=['GET'])
+    def get_template_preview(template_id: str):
+        """获取模板预览图"""
+        import os
+
+        template = template_manager.get_template(template_id)
+        if not template:
+            return jsonify({'error': '模板不存在'}), 404
+
+        preview_path = template.get('preview_image', '')
+        if preview_path:
+            # 转换为绝对路径
+            if not os.path.isabs(preview_path):
+                preview_path = os.path.join(str(config.BASE_DIR), preview_path)
+
+            # 标准化路径
+            preview_path = os.path.normpath(preview_path)
+
+            if os.path.exists(preview_path):
+                return send_file(preview_path, mimetype='image/png')
+
+        return jsonify({'error': '预览图不存在'}), 404
+
+    @app.route('/api/templates/<template_id>/download', methods=['GET'])
+    def download_template(template_id: str):
+        """下载模板文件"""
+        template = template_manager.get_template(template_id)
+        if not template:
+            return jsonify({'error': '模板不存在'}), 404
+
+        file_content = template_manager.get_template_file(template_id)
+        if not file_content:
+            return jsonify({'error': '模板文件不存在'}), 404
+
+        return send_file(
+            io.BytesIO(file_content),
+            mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            as_attachment=True,
+            download_name=f"{template['name']}.docx"
+        )
+
+    @app.route('/api/templates/<template_id>/preview/html', methods=['GET'])
+    def get_template_html_preview(template_id: str):
+        """获取模板的 HTML 预览（使用示例数据渲染）"""
+        import mammoth
+
+        template = template_manager.get_template(template_id)
+        if not template:
+            return jsonify({'error': '模板不存在', 'success': False}), 404
+
+        file_path = template.get('file_path', '')
+        if not file_path:
+            return jsonify({'error': '模板文件路径不存在', 'success': False}), 404
+
+        try:
+            # 1. 获取示例数据
+            sample_data = get_sample_resume_data()
+
+            # 2. 使用模板处理器渲染
+            try:
+                word_bytes = template_processor.render(template_id, sample_data)
+            except Exception as render_error:
+                logger.warning(f"模板渲染失败，使用原始文件: {render_error}")
+                # 降级：直接读取原始文件
+                with open(file_path, 'rb') as f:
+                    word_bytes = f.read()
+
+            # 3. 转换为 HTML
+            result = mammoth.convert_to_html(io.BytesIO(word_bytes))
+            html = result.value
+
+            # 4. 返回带样式的 HTML
+            styled_html = f"""
+            <style>
+                body {{ font-family: 'Microsoft YaHei', Arial, sans-serif; padding: 20px; line-height: 1.6; color: #333; }}
+                h1, h2, h3 {{ color: #2c5282; margin-top: 16px; margin-bottom: 8px; }}
+                h1 {{ font-size: 24px; border-bottom: 2px solid #2c5282; padding-bottom: 8px; }}
+                h2 {{ font-size: 18px; }}
+                p {{ margin: 8px 0; }}
+                table {{ border-collapse: collapse; width: 100%; margin: 12px 0; }}
+                td, th {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+                ul, ol {{ margin: 8px 0; padding-left: 24px; }}
+                li {{ margin: 4px 0; }}
+                strong {{ color: #1a365d; }}
+            </style>
+            {html}
+            """
+            return jsonify({'html': styled_html, 'success': True})
+
+        except FileNotFoundError:
+            return jsonify({'error': '模板文件未找到', 'success': False}), 404
+        except Exception as e:
+            logger.error(f"生成 HTML 预览失败: {e}", exc_info=True)
+            return jsonify({'error': str(e), 'success': False}), 500
+
+    @app.route('/api/templates/<template_id>/compatibility', methods=['POST'])
+    def check_template_compatibility(template_id: str):
+        """检查模板兼容性"""
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({'error': '未提供简历数据'}), 400
+
+            resume_data = data.get('resume_data', {})
+            is_compatible, missing_sections = template_manager.check_compatibility(
+                template_id, resume_data
+            )
+
+            return jsonify({
+                'is_compatible': is_compatible,
+                'missing_sections': missing_sections
+            })
+
+        except Exception as e:
+            logger.error(f"检查兼容性失败: {e}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/templates/recommend', methods=['POST'])
+    def recommend_template():
+        """根据 JD 推荐模板"""
+        try:
+            data = request.get_json() or {}
+            jd_content = data.get('jd_content', '')
+            industry = data.get('industry', '')
+            position_level = data.get('position_level', '')
+
+            recommendations = template_manager.recommend_template(
+                jd_content=jd_content,
+                industry=industry,
+                position_level=position_level
+            )
+
+            return jsonify({
+                'recommendations': recommendations[:5]  # 返回前5个推荐
+            })
+
+        except Exception as e:
+            logger.error(f"模板推荐失败: {e}")
+            return jsonify({'error': str(e)}), 500
 
     return app
 

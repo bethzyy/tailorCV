@@ -880,6 +880,402 @@
             border-radius: 3px;
         }
 
+        /* 模板选择器样式 */
+        .template-selector {
+            background: #f8f9ff;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+
+        /* 折叠状态 - 只显示头部 */
+        .template-selector.collapsed .template-selector-body {
+            display: none;
+        }
+
+        .template-selector-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 15px;
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.2s;
+        }
+
+        .template-selector-header:hover {
+            background: #eef1ff;
+        }
+
+        .template-selector-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .template-current-info {
+            font-size: 13px;
+            color: #666;
+            font-weight: normal;
+        }
+
+        .template-current-info .template-name-current {
+            color: #667eea;
+            font-weight: 500;
+        }
+
+        .template-expand-icon {
+            font-size: 12px;
+            color: #999;
+            transition: transform 0.2s;
+        }
+
+        .template-selector.collapsed .template-expand-icon {
+            transform: rotate(0deg);
+        }
+
+        .template-selector:not(.collapsed) .template-expand-icon {
+            transform: rotate(180deg);
+        }
+
+        .template-selector-body {
+            padding: 0 15px 15px 15px;
+            border-top: 1px solid #e0e5f0;
+        }
+
+        .template-selector-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .template-action-btn {
+            padding: 5px 10px;
+            font-size: 12px;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .template-action-btn:hover {
+            background: #f0f0f0;
+        }
+
+        .template-filter-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .template-filter-tab {
+            padding: 4px 12px;
+            font-size: 12px;
+            border: none;
+            background: #e0e0e0;
+            border-radius: 15px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .template-filter-tab.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .template-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 12px;
+            max-height: 220px;
+            overflow-y: auto;
+            padding-right: 5px;
+            padding-top: 10px;
+        }
+
+        .template-expand-icon {
+            font-size: 10px;
+            color: #999;
+            transition: transform 0.2s;
+        }
+
+        .template-selector.collapsed .template-expand-icon {
+            transform: rotate(0deg);
+        }
+
+        .template-selector:not(.collapsed) .template-expand-icon {
+            transform: rotate(180deg);
+        }
+
+        .template-card {
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: white;
+            position: relative;
+        }
+
+        .template-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+        }
+
+        .template-card.selected {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+
+        .template-card.selected::after {
+            content: '✓';
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: #667eea;
+            color: white;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+        }
+
+        .template-card-actions {
+            position: absolute;
+            bottom: 5px;
+            right: 5px;
+            display: flex;
+            gap: 4px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .template-card:hover .template-card-actions {
+            opacity: 1;
+        }
+
+        .template-action-icon {
+            width: 22px;
+            height: 22px;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.9);
+            border: 1px solid #ddd;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            cursor: pointer;
+        }
+
+        .template-action-icon:hover {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .template-preview {
+            width: 100%;
+            height: 80px;
+            background: #f5f5f5;
+            border-radius: 5px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .template-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .template-preview-placeholder {
+            font-size: 28px;
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .template-name {
+            font-size: 12px;
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .template-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 3px;
+        }
+
+        .template-tag {
+            font-size: 10px;
+            padding: 1px 5px;
+            background: #e8ecf3;
+            color: #666;
+            border-radius: 8px;
+        }
+
+        .template-default-badge {
+            position: absolute;
+            top: 5px;
+            left: 5px;
+            background: #4caf50;
+            color: white;
+            font-size: 9px;
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+
+        .template-source-badge {
+            position: absolute;
+            bottom: 5px;
+            right: 5px;
+            font-size: 9px;
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+
+        .template-source-badge.builtin {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .template-source-badge.uploaded {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+
+        .template-source-badge.extracted {
+            background: #e8f5e9;
+            color: #388e3c;
+        }
+
+        .template-empty {
+            text-align: center;
+            padding: 20px;
+            color: #999;
+            font-size: 13px;
+        }
+
+        .template-mode-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .template-mode-option {
+            flex: 1;
+            padding: 8px;
+            text-align: center;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+
+        .template-mode-option:hover {
+            background: #f5f5f5;
+        }
+
+        .template-mode-option.active {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+
+        .template-mode-option input {
+            margin-right: 5px;
+        }
+
+        /* 模态框样式 */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .modal-title {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: #999;
+        }
+
+        .modal-body {
+            margin-bottom: 15px;
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .modal-btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .modal-btn-cancel {
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+        }
+
+        .modal-btn-confirm {
+            background: #667eea;
+            color: white;
+            border: none;
+        }
+
         /* 响应式 */
         @media (max-width: 600px) {
             header {
@@ -1101,6 +1497,154 @@
                                 <textarea id="g_evaluation" placeholder="简要描述优势和职业目标..."></textarea>
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 模板选择器 -->
+            <div class="template-selector collapsed" id="templateSelector">
+                <div class="template-selector-header" onclick="toggleTemplateSelector()">
+                    <span class="template-selector-title">
+                        📋 模板样式
+                        <span class="template-current-info" id="templateCurrentInfo">
+                            当前: <span class="template-name-current">自动（使用原简历样式）</span>
+                        </span>
+                    </span>
+                    <span class="template-expand-icon">▼</span>
+                </div>
+
+                <div class="template-selector-body">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; margin-bottom: 12px;">
+                        <div class="template-selector-actions">
+                            <button class="template-action-btn" onclick="event.stopPropagation(); showUploadModal()">📤 上传</button>
+                            <button class="template-action-btn" onclick="event.stopPropagation(); showExtractModal()">📥 提取</button>
+                        </div>
+                    </div>
+
+                    <div class="template-mode-selector">
+                        <label class="template-mode-option active" data-mode="auto" onclick="event.stopPropagation()">
+                            <input type="radio" name="templateMode" value="auto" checked>
+                            自动选择（使用原简历样式）
+                        </label>
+                        <label class="template-mode-option" data-mode="selected" onclick="event.stopPropagation()">
+                            <input type="radio" name="templateMode" value="selected">
+                            使用选定模板
+                        </label>
+                    </div>
+
+                    <div class="template-filter-tabs">
+                        <button class="template-filter-tab active" data-filter="all" onclick="event.stopPropagation()">全部</button>
+                        <button class="template-filter-tab" data-filter="builtin" onclick="event.stopPropagation()">内置</button>
+                        <button class="template-filter-tab" data-filter="uploaded" onclick="event.stopPropagation()">我的</button>
+                    </div>
+
+                    <div class="template-grid" id="templateGrid">
+                        <div class="template-empty">加载中...</div>
+                    </div>
+                </div>
+
+                <input type="hidden" name="template_id" id="selectedTemplateId" value="">
+            </div>
+
+            <!-- 上传模板模态框 -->
+            <div class="modal-overlay" id="uploadModal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <span class="modal-title">📤 上传新模板</span>
+                        <button class="modal-close" onclick="hideUploadModal()">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label>选择 .docx 文件</label>
+                            <input type="file" id="uploadTemplateFile" accept=".docx">
+                        </div>
+                        <div class="form-group">
+                            <label>模板名称</label>
+                            <input type="text" id="uploadTemplateName" placeholder="为模板起个名字">
+                        </div>
+                        <div class="form-group">
+                            <label>描述（可选）</label>
+                            <textarea id="uploadTemplateDesc" placeholder="简要描述模板特点"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>标签（可选，逗号分隔）</label>
+                            <input type="text" id="uploadTemplateTags" placeholder="如：简约, 科技, 专业">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="modal-btn modal-btn-cancel" onclick="hideUploadModal()">取消</button>
+                        <button class="modal-btn modal-btn-confirm" onclick="uploadTemplate()">上传</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 提取模板模态框 -->
+            <div class="modal-overlay" id="extractModal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <span class="modal-title">📥 从简历提取模板</span>
+                        <button class="modal-close" onclick="hideExtractModal()">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label>选择 .docx 简历文件</label>
+                            <input type="file" id="extractTemplateFile" accept=".docx">
+                        </div>
+                        <div class="form-group">
+                            <label>模板名称（可选）</label>
+                            <input type="text" id="extractTemplateName" placeholder="默认使用文件名">
+                        </div>
+                        <p style="font-size: 12px; color: #666; margin-top: 10px;">
+                            提示：系统会自动识别简历的章节结构，生成可复用的模板。
+                        </p>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="modal-btn modal-btn-cancel" onclick="hideExtractModal()">取消</button>
+                        <button class="modal-btn modal-btn-confirm" onclick="extractTemplate()">提取</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 模板预览模态框 -->
+            <div class="modal-overlay" id="templatePreviewModal">
+                <div class="modal-content" style="max-width: 800px;">
+                    <div class="modal-header">
+                        <span class="modal-title" id="previewTemplateName">模板预览</span>
+                        <button class="modal-close" onclick="hideTemplatePreview()">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="previewTemplateContainer" style="width: 100%; min-height: 400px; border-radius: 8px; margin-bottom: 15px; background: #fff; overflow: hidden; border: 1px solid #e2e8f0;">
+                            <!-- HTML 预览 iframe -->
+                            <iframe id="previewTemplateFrame"
+                                    style="width: 100%; height: 500px; border: none; display: none;">
+                            </iframe>
+                            <!-- 加载中提示 -->
+                            <div id="previewLoading" style="text-align: center; padding: 60px; color: #666;">
+                                <div style="font-size: 24px; margin-bottom: 10px;">⏳</div>
+                                <span>正在加载预览...</span>
+                            </div>
+                            <!-- 降级占位符 -->
+                            <div class="preview-placeholder" style="display: none; flex-direction: column; align-items: center; justify-content: center; height: 400px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                                <span class="preview-placeholder-letter" style="font-size: 72px; font-weight: bold; opacity: 0.9;">A</span>
+                                <span class="preview-placeholder-name" style="font-size: 18px; margin-top: 10px;">模板名称</span>
+                            </div>
+                        </div>
+                        <div style="margin-bottom: 10px;">
+                            <strong style="color: #666;">描述：</strong>
+                            <span id="previewTemplateDesc">-</span>
+                        </div>
+                        <div style="margin-bottom: 10px;">
+                            <strong style="color: #666;">标签：</strong>
+                            <span id="previewTemplateTags"></span>
+                        </div>
+                        <div style="display: flex; gap: 20px; color: #888; font-size: 13px;">
+                            <span>来源: <span id="previewTemplateSource">-</span></span>
+                            <span>使用次数: <span id="previewTemplateUseCount">0</span></span>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="modal-btn modal-btn-cancel" onclick="hideTemplatePreview()">关闭</button>
+                        <button class="modal-btn modal-btn-confirm" onclick="selectFromPreview()">使用此模板</button>
                     </div>
                 </div>
             </div>
@@ -1330,6 +1874,366 @@
         // 引导表单输入时自动保存（使用事件委托）
         document.getElementById('guidedPanel').addEventListener('input', saveUserData);
         document.getElementById('guidedPanel').addEventListener('change', saveUserData);
+
+        // ==================== 模板管理功能 ====================
+        let templates = [];
+        let selectedTemplateId = '';
+        let templateMode = 'auto';  // auto/selected
+        let selectedTemplateName = '';
+
+        // 折叠/展开模板选择器
+        function toggleTemplateSelector() {
+            const selector = document.getElementById('templateSelector');
+            selector.classList.toggle('collapsed');
+        }
+
+        // 更新当前模板显示
+        function updateTemplateCurrentInfo() {
+            const infoEl = document.getElementById('templateCurrentInfo');
+            if (templateMode === 'auto') {
+                infoEl.innerHTML = '当前: <span class="template-name-current">自动（使用原简历样式）</span>';
+            } else if (selectedTemplateName) {
+                infoEl.innerHTML = '当前: <span class="template-name-current">' + selectedTemplateName + '</span>';
+            } else {
+                infoEl.innerHTML = '当前: <span class="template-name-current">请选择模板</span>';
+            }
+        }
+
+        // 加载模板列表
+        async function loadTemplates() {
+            try {
+                const response = await fetch('/api/templates');
+                const data = await response.json();
+                templates = data.templates || [];
+                renderTemplateGrid();
+                // 初始化当前显示
+                updateTemplateCurrentInfo();
+            } catch (error) {
+                console.error('加载模板失败:', error);
+                document.getElementById('templateGrid').innerHTML =
+                    '<div class="template-empty">加载失败，请刷新重试</div>';
+            }
+        }
+
+        // 渲染模板网格
+        function renderTemplateGrid(filter = 'all') {
+            const grid = document.getElementById('templateGrid');
+
+            let filteredTemplates = templates;
+            if (filter !== 'all') {
+                filteredTemplates = templates.filter(t => t.source === filter);
+            }
+
+            if (filteredTemplates.length === 0) {
+                grid.innerHTML = '<div class="template-empty">暂无模板</div>';
+                return;
+            }
+
+            grid.innerHTML = filteredTemplates.map(t => `
+                <div class="template-card ${selectedTemplateId === t.template_id ? 'selected' : ''}"
+                     onclick="selectTemplate('${t.template_id}')"
+                     data-id="${t.template_id}">
+                    ${t.is_default ? '<span class="template-default-badge">默认</span>' : ''}
+                    <span class="template-source-badge ${t.source}">${getSourceLabel(t.source)}</span>
+                    <div class="template-preview" onclick="event.stopPropagation(); showTemplatePreview('${t.template_id}')">
+                        ${t.preview_image ?
+                            `<img src="/api/templates/${t.template_id}/preview" alt="${t.name}">` :
+                            `<span class="template-preview-placeholder">${t.name.charAt(0)}</span>`
+                        }
+                    </div>
+                    <div class="template-name">${t.name}</div>
+                    <div class="template-tags">
+                        ${(t.tags || []).slice(0, 2).map(tag => `<span class="template-tag">${tag}</span>`).join('')}
+                    </div>
+                    <div class="template-card-actions">
+                        <span class="template-action-icon" onclick="event.stopPropagation(); showTemplatePreview('${t.template_id}')" title="预览">👁</span>
+                        ${t.source !== 'builtin' ? `<span class="template-action-icon" onclick="event.stopPropagation(); deleteTemplate('${t.template_id}')" title="删除">🗑</span>` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 显示模板预览
+        function showTemplatePreview(templateId) {
+            const template = templates.find(t => t.template_id === templateId);
+            if (!template) return;
+
+            const modal = document.getElementById('templatePreviewModal');
+            document.getElementById('previewTemplateName').textContent = template.name;
+            document.getElementById('previewTemplateDesc').textContent = template.description || '暂无描述';
+            document.getElementById('previewTemplateTags').innerHTML = (template.tags || []).map(t => `<span class="template-tag">${t}</span>`).join('');
+            document.getElementById('previewTemplateSource').textContent = getSourceLabel(template.source);
+            document.getElementById('previewTemplateUseCount').textContent = template.use_count || 0;
+
+            const previewContainer = document.getElementById('previewTemplateContainer');
+            const iframe = document.getElementById('previewTemplateFrame');
+            const loading = document.getElementById('previewLoading');
+            const placeholder = previewContainer.querySelector('.preview-placeholder');
+
+            // 显示加载中
+            iframe.style.display = 'none';
+            placeholder.style.display = 'none';
+            loading.style.display = 'block';
+
+            // 获取 HTML 预览
+            fetch(`/api/templates/${templateId}/preview/html`)
+                .then(res => res.json())
+                .then(data => {
+                    loading.style.display = 'none';
+                    if (data.success) {
+                        iframe.srcdoc = data.html;
+                        iframe.style.display = 'block';
+                    } else {
+                        // 降级到占位符
+                        iframe.style.display = 'none';
+                        if (placeholder) {
+                            placeholder.style.display = 'flex';
+                            placeholder.querySelector('.preview-placeholder-letter').textContent = template.name.charAt(0);
+                            placeholder.querySelector('.preview-placeholder-name').textContent = template.name;
+                        }
+                    }
+                })
+                .catch(err => {
+                    loading.style.display = 'none';
+                    iframe.style.display = 'none';
+                    if (placeholder) {
+                        placeholder.style.display = 'flex';
+                        placeholder.querySelector('.preview-placeholder-letter').textContent = template.name.charAt(0);
+                        placeholder.querySelector('.preview-placeholder-name').textContent = template.name;
+                    }
+                });
+
+            // 保存当前预览的模板ID
+            modal.dataset.templateId = templateId;
+            modal.classList.add('show');
+        }
+
+        function hideTemplatePreview() {
+            document.getElementById('templatePreviewModal').classList.remove('show');
+        }
+
+        // 从预览模态框选择模板
+        function selectFromPreview() {
+            const modal = document.getElementById('templatePreviewModal');
+            const templateId = modal.dataset.templateId;
+            if (templateId) {
+                selectTemplate(templateId);
+            }
+            hideTemplatePreview();
+        }
+
+        // 删除模板
+        async function deleteTemplate(templateId) {
+            if (!confirm('确定要删除这个模板吗？')) return;
+
+            try {
+                const response = await fetch(`/api/templates/${templateId}`, {
+                    method: 'DELETE'
+                });
+                const result = await response.json();
+
+                if (response.ok) {
+                    loadTemplates();
+                } else {
+                    alert('删除失败: ' + result.error);
+                }
+            } catch (error) {
+                console.error('删除失败:', error);
+                alert('删除失败: ' + error.message);
+            }
+        }
+
+        function getSourceLabel(source) {
+            const labels = {
+                'builtin': '内置',
+                'uploaded': '上传',
+                'extracted': '提取'
+            };
+            return labels[source] || source;
+        }
+
+        // 选择模板
+        function selectTemplate(templateId) {
+            if (templateMode !== 'selected') {
+                // 自动切换到选定模式
+                setTemplateMode('selected');
+            }
+
+            selectedTemplateId = templateId;
+            document.getElementById('selectedTemplateId').value = templateId;
+
+            // 获取模板名称
+            const template = templates.find(t => t.template_id === templateId);
+            if (template) {
+                selectedTemplateName = template.name;
+            }
+
+            // 更新卡片样式
+            document.querySelectorAll('.template-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+            const selectedCard = document.querySelector(`.template-card[data-id="${templateId}"]`);
+            if (selectedCard) {
+                selectedCard.classList.add('selected');
+            }
+
+            // 更新当前显示
+            updateTemplateCurrentInfo();
+
+            // 选择后自动折叠
+            document.getElementById('templateSelector').classList.add('collapsed');
+        }
+
+        // 设置模板模式
+        function setTemplateMode(mode) {
+            templateMode = mode;
+            document.querySelectorAll('.template-mode-option').forEach(opt => {
+                opt.classList.remove('active');
+                if (opt.dataset.mode === mode) {
+                    opt.classList.add('active');
+                    opt.querySelector('input').checked = true;
+                }
+            });
+
+            // 如果切换到自动模式，清除选中
+            if (mode === 'auto') {
+                selectedTemplateId = '';
+                selectedTemplateName = '';
+                document.getElementById('selectedTemplateId').value = '';
+                document.querySelectorAll('.template-card').forEach(card => {
+                    card.classList.remove('selected');
+                });
+            }
+
+            // 更新当前显示
+            updateTemplateCurrentInfo();
+        }
+
+        // 模板筛选标签点击
+        document.querySelectorAll('.template-filter-tab').forEach(tab => {
+            tab.addEventListener('click', (e) => {
+                e.stopPropagation();
+                document.querySelectorAll('.template-filter-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                renderTemplateGrid(tab.dataset.filter);
+            });
+        });
+
+        // 模板模式切换
+        document.querySelectorAll('.template-mode-option').forEach(opt => {
+            opt.addEventListener('click', (e) => {
+                e.stopPropagation();
+                setTemplateMode(opt.dataset.mode);
+            });
+        });
+
+        // 显示上传模态框
+        function showUploadModal() {
+            document.getElementById('uploadModal').classList.add('show');
+        }
+
+        function hideUploadModal() {
+            document.getElementById('uploadModal').classList.remove('show');
+            // 清空表单
+            document.getElementById('uploadTemplateFile').value = '';
+            document.getElementById('uploadTemplateName').value = '';
+            document.getElementById('uploadTemplateDesc').value = '';
+            document.getElementById('uploadTemplateTags').value = '';
+        }
+
+        // 上传模板
+        async function uploadTemplate() {
+            const fileInput = document.getElementById('uploadTemplateFile');
+            if (!fileInput.files.length) {
+                alert('请选择文件');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('template', fileInput.files[0]);
+            formData.append('name', document.getElementById('uploadTemplateName').value);
+            formData.append('description', document.getElementById('uploadTemplateDesc').value);
+            formData.append('tags', document.getElementById('uploadTemplateTags').value);
+
+            try {
+                const response = await fetch('/api/templates', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+
+                if (response.ok) {
+                    alert(result.message || '上传成功');
+                    hideUploadModal();
+                    loadTemplates();
+                } else {
+                    alert('上传失败: ' + result.error);
+                }
+            } catch (error) {
+                console.error('上传失败:', error);
+                alert('上传失败: ' + error.message);
+            }
+        }
+
+        // 显示提取模态框
+        function showExtractModal() {
+            document.getElementById('extractModal').classList.add('show');
+        }
+
+        function hideExtractModal() {
+            document.getElementById('extractModal').classList.remove('show');
+            document.getElementById('extractTemplateFile').value = '';
+            document.getElementById('extractTemplateName').value = '';
+        }
+
+        // 提取模板
+        async function extractTemplate() {
+            const fileInput = document.getElementById('extractTemplateFile');
+            if (!fileInput.files.length) {
+                alert('请选择简历文件');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('resume', fileInput.files[0]);
+            formData.append('name', document.getElementById('extractTemplateName').value);
+
+            try {
+                const response = await fetch('/api/templates/extract', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+
+                if (response.ok) {
+                    alert(result.message || '提取成功');
+                    hideExtractModal();
+                    loadTemplates();
+                } else {
+                    alert('提取失败: ' + result.error);
+                }
+            } catch (error) {
+                console.error('提取失败:', error);
+                alert('提取失败: ' + error.message);
+            }
+        }
+
+        // 设为默认模板
+        async function setDefaultTemplate(templateId) {
+            try {
+                const response = await fetch(`/api/templates/${templateId}/set_default`, {
+                    method: 'POST'
+                });
+                if (response.ok) {
+                    loadTemplates();
+                }
+            } catch (error) {
+                console.error('设置默认失败:', error);
+            }
+        }
+
+        // 页面加载时加载模板
+        loadTemplates();
 
         // ==================== 原有功能 ====================
 
@@ -1654,6 +2558,12 @@
                     formData.append('jd_text', jdText);
                     formData.append('style', 'original');
                     formData.append('no_cache', 'true');  // 强制不使用缓存，每次重新处理
+
+                    // 添加模板参数
+                    formData.append('template_mode', templateMode);
+                    if (templateMode === 'selected' && selectedTemplateId) {
+                        formData.append('template_id', selectedTemplateId);
+                    }
 
                     response = await fetch('/api/tailor/file', {
                         method: 'POST',

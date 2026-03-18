@@ -198,6 +198,10 @@ class TemplateProcessor:
         """
         使用模板渲染简历
 
+        支持两种调用方式：
+        1. 仅提供 template_id：自动查找模板文件
+        2. 已有 preprocessed 模板：使用原有逻辑
+
         Args:
             template_id: 模板ID
             context: 渲染上下文（AI 生成的数据）
@@ -209,35 +213,31 @@ class TemplateProcessor:
         if not HAS_DOCXTPL:
             raise ImportError("未安装 docxtpl")
 
+        # 首先检查 preprocessed 目录
         template_path = self.template_dir / f"{template_id}.docx"
 
-        if not template_path.exists():
-            raise FileNotFoundError(f"模板不存在: {template_id}")
+        if template_path.exists():
+            # 使用原有逻辑
+            try:
+                doc = DocxTemplate(str(template_path))
+                render_context = self._build_context(context)
+                doc.render(render_context)
+                bio = io.BytesIO()
+                doc.save(bio)
+                bio.seek(0)
 
-        try:
-            # 1. 加载模板
-            doc = DocxTemplate(str(template_path))
+                self.stats['rendered'] += 1
+                logger.info(f"模板渲染成功: {template_id}")
 
-            # 2. 构建渲染上下文
-            render_context = self._build_context(context)
+                return bio.read()
 
-            # 3. 渲染
-            doc.render(render_context)
+            except Exception as e:
+                self.stats['failed'] += 1
+                logger.error(f"模板渲染失败: {e}", exc_info=True)
+                raise
 
-            # 4. 保存到字节流
-            bio = io.BytesIO()
-            doc.save(bio)
-            bio.seek(0)
-
-            self.stats['rendered'] += 1
-            logger.info(f"模板渲染成功: {template_id}")
-
-            return bio.read()
-
-        except Exception as e:
-            self.stats['failed'] += 1
-            logger.error(f"模板渲染失败: {e}", exc_info=True)
-            raise
+        # 尝试使用 render_by_id 查找其他位置的模板
+        return self.render_by_id(template_id, context, style_metadata)
 
     def render_with_fallback(self, doc: 'Document', context: Dict[str, Any],
                             style_metadata: StyleMetadata,
@@ -440,7 +440,114 @@ class TemplateProcessor:
         })
         return stats
 
-    def cleanup_old_templates(self, max_age_days: int = 7):
+    def render_by_id(self, template_id: str, context: Dict[str, Any],
+                     style_metadata: Optional[StyleMetadata] = None) -> bytes:
+        """
+        根据模板ID渲染简历
+
+        支持两种模板来源：
+        1. templates/preprocessed/ 目录（从原简历提取的模板）
+        2. templates/builtin/ 目录（内置模板）
+
+        Args:
+            template_id: 模板ID
+            context: 渲染上下文（AI 生成的数据）
+            style_metadata: 样式元数据（备用）
+
+        Returns:
+            bytes: 渲染后的 Word 文档字节流
+        """
+        if not HAS_DOCXTPL:
+            raise ImportError("未安装 docxtpl")
+
+        # 尝试多个可能的模板路径
+        possible_paths = [
+            self.template_dir / f"{template_id}.docx",  # preprocessed 目录
+            config.BASE_DIR / 'templates' / 'builtin' / f"{template_id}.docx",  # builtin 目录
+            config.BASE_DIR / 'templates' / 'uploaded' / f"{template_id}.docx",  # uploaded 目录
+            config.BASE_DIR / 'templates' / 'extracted' / f"{template_id}.docx",  # extracted 目录
+        ]
+
+        template_path = None
+        for path in possible_paths:
+            if path.exists():
+                template_path = path
+                break
+
+        if not template_path:
+            raise FileNotFoundError(f"模板不存在: {template_id}")
+
+        try:
+            # 1. 加载模板
+            doc = DocxTemplate(str(template_path))
+
+            # 2. 构建渲染上下文
+            render_context = self._build_context(context)
+
+            # 3. 渲染
+            doc.render(render_context)
+
+            # 4. 保存到字节流
+            bio = io.BytesIO()
+            doc.save(bio)
+            bio.seek(0)
+
+            self.stats['rendered'] += 1
+            logger.info(f"模板渲染成功 (by_id): {template_id}")
+
+            return bio.read()
+
+        except Exception as e:
+            self.stats['failed'] += 1
+            logger.error(f"模板渲染失败: {e}", exc_info=True)
+            raise
+
+    def check_template_compatibility(self, template_id: str,
+                                     context: Dict[str, Any]) -> Tuple[bool, List[str]]:
+        """
+        检查模板与数据的兼容性
+
+        Args:
+            template_id: 模板ID
+            context: 渲染上下文
+
+        Returns:
+            Tuple[bool, List[str]]: (是否兼容, 缺失字段列表)
+        """
+        # 获取模板所需变量
+        from .template_manager import template_manager
+        template = template_manager.get_template(template_id)
+        if not template:
+            return False, ["模板不存在"]
+
+        required_vars = set(template.get('variables', []))
+
+        # 从上下文中提取已有变量
+        available_vars = set()
+        context_flat = self._flatten_context(context)
+        available_vars.update(context_flat.keys())
+
+        # 检查缺失的关键变量
+        critical_vars = {'basic_info', 'work_experience', 'education'}
+        missing_critical = critical_vars & required_vars - available_vars
+
+        return len(missing_critical) == 0, list(required_vars - available_vars)
+
+    def _flatten_context(self, context: Dict[str, Any], prefix: str = '') -> Dict[str, Any]:
+        """扁平化上下文，用于变量检查"""
+        result = {}
+        for key, value in context.items():
+            full_key = f"{prefix}_{key}" if prefix else key
+            if isinstance(value, dict):
+                result.update(self._flatten_context(value, full_key))
+            elif isinstance(value, list):
+                result[full_key] = value
+                if value and isinstance(value[0], dict):
+                    for i, item in enumerate(value):
+                        result.update(self._flatten_context(item, f"{full_key}_{i}"))
+            else:
+                result[full_key] = value
+        return result
         """
         清理旧模板文件
 

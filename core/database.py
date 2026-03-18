@@ -119,6 +119,26 @@ class Database:
                 )
             ''')
 
+            # 模板表
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS templates (
+                    template_id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    file_path TEXT NOT NULL,
+                    content_hash TEXT,
+                    structure_confidence REAL,
+                    sections TEXT,
+                    variables TEXT,
+                    description TEXT,
+                    tags TEXT,
+                    preview_image TEXT,
+                    use_count INTEGER DEFAULT 0,
+                    is_default INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
             # 创建索引
             cursor.execute('''
                 CREATE INDEX IF NOT EXISTS idx_history_created_at
@@ -135,6 +155,14 @@ class Database:
             cursor.execute('''
                 CREATE INDEX IF NOT EXISTS idx_user_config_key
                 ON user_config(config_key)
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_templates_source
+                ON templates(source)
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_templates_is_default
+                ON templates(is_default)
             ''')
 
             logger.info(f"数据库初始化完成: {self.db_path}")
@@ -440,6 +468,145 @@ class Database:
             logger.info(f"清理过期数据: {deleted_count} 条")
 
         return deleted_count
+
+    # ==================== 模板管理 ====================
+
+    def save_template(self, template_data: Dict[str, Any]) -> bool:
+        """
+        保存模板
+
+        Args:
+            template_data: 模板数据字典，包含 template_id, name, source, file_path 等字段
+
+        Returns:
+            bool: 是否保存成功
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT OR REPLACE INTO templates (
+                    template_id, name, source, file_path, content_hash,
+                    structure_confidence, sections, variables, description,
+                    tags, preview_image, use_count, is_default
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                template_data.get('template_id'),
+                template_data.get('name'),
+                template_data.get('source'),
+                template_data.get('file_path'),
+                template_data.get('content_hash'),
+                template_data.get('structure_confidence'),
+                json.dumps(template_data.get('sections', []), ensure_ascii=False),
+                json.dumps(template_data.get('variables', []), ensure_ascii=False),
+                template_data.get('description', ''),
+                json.dumps(template_data.get('tags', []), ensure_ascii=False),
+                template_data.get('preview_image'),
+                template_data.get('use_count', 0),
+                1 if template_data.get('is_default') else 0
+            ))
+            return cursor.rowcount > 0
+
+    def get_template(self, template_id: str) -> Optional[Dict[str, Any]]:
+        """获取指定模板"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM templates WHERE template_id = ?', (template_id,))
+            row = cursor.fetchone()
+            if row:
+                return self._row_to_template(row)
+            return None
+
+    def get_templates(self, source: str = None, include_builtin: bool = True) -> List[Dict[str, Any]]:
+        """
+        获取模板列表
+
+        Args:
+            source: 模板来源过滤 (builtin/uploaded/extracted)
+            include_builtin: 是否包含内置模板
+
+        Returns:
+            List[Dict]: 模板列表
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            if source:
+                cursor.execute(
+                    'SELECT * FROM templates WHERE source = ? ORDER BY is_default DESC, use_count DESC, created_at DESC',
+                    (source,)
+                )
+            elif not include_builtin:
+                cursor.execute(
+                    "SELECT * FROM templates WHERE source != 'builtin' ORDER BY is_default DESC, use_count DESC, created_at DESC"
+                )
+            else:
+                cursor.execute(
+                    'SELECT * FROM templates ORDER BY is_default DESC, use_count DESC, created_at DESC'
+                )
+            return [self._row_to_template(row) for row in cursor.fetchall()]
+
+    def get_default_template(self) -> Optional[Dict[str, Any]]:
+        """获取默认模板"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM templates WHERE is_default = 1 LIMIT 1')
+            row = cursor.fetchone()
+            if row:
+                return self._row_to_template(row)
+            return None
+
+    def set_default_template(self, template_id: str) -> bool:
+        """设置默认模板"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            # 先清除所有默认
+            cursor.execute('UPDATE templates SET is_default = 0')
+            # 设置新的默认
+            cursor.execute('UPDATE templates SET is_default = 1 WHERE template_id = ?', (template_id,))
+            return cursor.rowcount > 0
+
+    def increment_template_use_count(self, template_id: str) -> bool:
+        """增加模板使用次数"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                'UPDATE templates SET use_count = use_count + 1 WHERE template_id = ?',
+                (template_id,)
+            )
+            return cursor.rowcount > 0
+
+    def delete_template(self, template_id: str) -> bool:
+        """删除模板"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            # 不允许删除内置模板
+            cursor.execute(
+                "DELETE FROM templates WHERE template_id = ? AND source != 'builtin'",
+                (template_id,)
+            )
+            return cursor.rowcount > 0
+
+    def get_template_by_hash(self, content_hash: str) -> Optional[Dict[str, Any]]:
+        """根据内容哈希获取模板（用于去重）"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM templates WHERE content_hash = ?', (content_hash,))
+            row = cursor.fetchone()
+            if row:
+                return self._row_to_template(row)
+            return None
+
+    def _row_to_template(self, row) -> Dict[str, Any]:
+        """将数据库行转换为模板字典"""
+        result = dict(row)
+        # 解析JSON字段
+        if result.get('sections'):
+            result['sections'] = json.loads(result['sections'])
+        if result.get('variables'):
+            result['variables'] = json.loads(result['variables'])
+        if result.get('tags'):
+            result['tags'] = json.loads(result['tags'])
+        result['is_default'] = bool(result.get('is_default'))
+        return result
 
     def get_stats(self) -> Dict[str, Any]:
         """获取数据库统计信息"""

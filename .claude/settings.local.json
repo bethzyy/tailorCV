@@ -21,7 +21,11 @@
       "Bash(netstat:*)",
       "Bash(taskkill:*)",
       "Bash(pip show:*)",
-      "Bash(rg:*)"
+      "Bash(rg:*)",
+      "Bash(timeout:*)",
+      "Bash(sqlite3:*)",
+      "mcp__zai-mcp-server__analyze_image",
+      "Bash(__NEW_LINE_de4ab81130befbd4__ echo:*)"
     ]
   }
 }
