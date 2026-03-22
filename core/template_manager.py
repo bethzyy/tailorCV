@@ -6,6 +6,7 @@
 """
 
 import os
+import io
 import json
 import hashlib
 import logging
@@ -133,6 +134,9 @@ class TemplateManager:
 
     def _init_builtin_templates(self):
         """初始化内置模板到数据库"""
+        import io as io_module
+        import re as re_module
+
         for template_info in self.BUILTIN_TEMPLATES:
             template_id = template_info['id']
             file_path = self.builtin_dir / f"{template_id}.docx"
@@ -147,11 +151,55 @@ class TemplateManager:
                 logger.warning(f"内置模板文件不存在: {file_path}")
                 continue
 
+            # 读取文件内容
+            with open(file_path, 'rb') as f:
+                file_content = f.read()
+
             # 计算内容哈希
-            content_hash = self._calculate_file_hash(file_path)
+            content_hash = hashlib.md5(file_content).hexdigest()
 
             # 检测模板结构
             sections, confidence = self._detect_template_structure(file_path)
+
+            # 检查模板是否已有 Jinja2 标签
+            has_jinja = self._check_existing_jinja_tags(file_content)
+            template_variables = []
+
+            if has_jinja:
+                # 模板已有 Jinja2 标签，直接提取变量并复制到 preprocessed 目录
+                logger.info(f"内置模板已有 Jinja2 标签，跳过预处理: {template_id}")
+                template_variables = self._get_template_variables(file_path)
+
+                # 复制到 preprocessed 目录（使用 template_id 作为文件名）
+                preprocessed_path = self.base_dir / 'preprocessed' / f"{template_id}.docx"
+                shutil.copy(file_path, preprocessed_path)
+                logger.info(f"复制内置模板到 preprocessed 目录: {template_id}")
+            else:
+                # 模板没有 Jinja2 标签，需要预处理
+                try:
+                    from .template_processor import TemplateProcessor
+                    template_processor = TemplateProcessor()
+
+                    doc = Document(io_module.BytesIO(file_content))
+                    preprocess_result = template_processor.preprocess(
+                        doc,
+                        original_filename=f"{template_id}.docx",
+                        original_content=file_content
+                    )
+
+                    if preprocess_result.success:
+                        template_variables = list(preprocess_result.metadata.variables) if preprocess_result.metadata.variables else []
+                        logger.info(f"内置模板预处理成功: {template_id}, 变量数: {len(template_variables)}")
+
+                        # 复制预处理后的模板到 template_id 命名的文件
+                        preprocessed_path = self.base_dir / 'preprocessed' / f"{template_id}.docx"
+                        shutil.copy(preprocess_result.template_path, preprocessed_path)
+                    else:
+                        logger.warning(f"内置模板预处理失败: {preprocess_result.error_message}")
+                        template_variables = self._get_template_variables(file_path)
+                except Exception as e:
+                    logger.warning(f"内置模板预处理异常: {e}")
+                    template_variables = self._get_template_variables(file_path)
 
             # 保存到数据库
             db.save_template({
@@ -162,7 +210,7 @@ class TemplateManager:
                 'content_hash': content_hash,
                 'structure_confidence': confidence,
                 'sections': sections,
-                'variables': self._get_template_variables(file_path),
+                'variables': template_variables,
                 'description': template_info['description'],
                 'tags': template_info['tags'],
                 'preview_image': str(self.previews_dir / f"{template_id}.png"),
@@ -251,10 +299,34 @@ class TemplateManager:
             if not name:
                 name = Path(filename).stem
 
-            # 保存文件
-            file_path = self.uploaded_dir / f"{template_id}.docx"
-            with open(file_path, 'wb') as f:
-                f.write(file_content)
+            # 使用 TemplateProcessor 预处理，生成带 Jinja2 标记的模板
+            from .template_processor import TemplateProcessor
+            template_processor = TemplateProcessor()
+
+            # 预处理文档，插入 Jinja2 标记
+            preprocess_result = template_processor.preprocess(
+                doc,
+                original_filename=filename,
+                original_content=file_content
+            )
+
+            if preprocess_result.success:
+                # 使用预处理后的模板（已保存到 templates/preprocessed/ 目录）
+                preprocessed_path = Path(preprocess_result.template_path)
+                # 复制到 uploaded 目录
+                file_path = self.uploaded_dir / f"{template_id}.docx"
+                shutil.copy(preprocessed_path, file_path)
+                logger.info(f"上传模板预处理成功，已插入 Jinja2 标记: {template_id}")
+
+                # 更新变量列表（从预处理结果获取）
+                template_variables = list(preprocess_result.metadata.variables) if preprocess_result.metadata.variables else []
+            else:
+                # 降级：保存原始文件，但记录警告
+                logger.warning(f"上传模板预处理失败: {preprocess_result.error_message}，使用原始文件")
+                file_path = self.uploaded_dir / f"{template_id}.docx"
+                with open(file_path, 'wb') as f:
+                    f.write(file_content)
+                template_variables = self._get_template_variables_from_doc(doc)
 
             # 保存到数据库
             db.save_template({
@@ -265,7 +337,7 @@ class TemplateManager:
                 'content_hash': content_hash,
                 'structure_confidence': confidence,
                 'sections': sections,
-                'variables': self._get_template_variables_from_doc(doc),
+                'variables': template_variables,
                 'description': description,
                 'tags': tags or [],
                 'preview_image': '',
@@ -327,10 +399,34 @@ class TemplateManager:
             if not name:
                 name = f"从 {Path(filename).stem} 提取"
 
-            # 保存文件
-            file_path = self.extracted_dir / f"{template_id}.docx"
-            with open(file_path, 'wb') as f:
-                f.write(file_content)
+            # 使用 TemplateProcessor 预处理，生成带 Jinja2 标记的模板
+            from .template_processor import TemplateProcessor
+            template_processor = TemplateProcessor()
+
+            # 预处理文档，插入 Jinja2 标记
+            preprocess_result = template_processor.preprocess(
+                doc,
+                original_filename=filename,
+                original_content=file_content
+            )
+
+            if preprocess_result.success:
+                # 使用预处理后的模板（已保存到 templates/preprocessed/ 目录）
+                preprocessed_path = Path(preprocess_result.template_path)
+                # 复制到 extracted 目录
+                file_path = self.extracted_dir / f"{template_id}.docx"
+                shutil.copy(preprocessed_path, file_path)
+                logger.info(f"模板预处理成功，已插入 Jinja2 标记: {template_id}")
+
+                # 更新变量列表（从预处理结果获取）
+                template_variables = list(preprocess_result.metadata.variables) if preprocess_result.metadata.variables else []
+            else:
+                # 降级：保存原始文件，但记录警告
+                logger.warning(f"模板预处理失败: {preprocess_result.error_message}，使用原始文件")
+                file_path = self.extracted_dir / f"{template_id}.docx"
+                with open(file_path, 'wb') as f:
+                    f.write(file_content)
+                template_variables = self._get_template_variables_from_doc(doc)
 
             # 保存到数据库
             db.save_template({
@@ -341,7 +437,7 @@ class TemplateManager:
                 'content_hash': content_hash,
                 'structure_confidence': confidence,
                 'sections': sections,
-                'variables': self._get_template_variables_from_doc(doc),
+                'variables': template_variables,
                 'description': f"从简历 {filename} 自动提取",
                 'tags': ['自动提取'],
                 'preview_image': '',
@@ -645,6 +741,44 @@ class TemplateManager:
         # 过滤常见的 Jinja2 关键字
         keywords = {'if', 'else', 'endif', 'for', 'endfor', 'in', 'not', 'and', 'or'}
         return sorted(list(variables - keywords))
+
+    def _check_existing_jinja_tags(self, file_content: bytes) -> bool:
+        """
+        检查文件是否已包含 Jinja2 标签
+
+        Args:
+            file_content: 文件内容（字节）
+
+        Returns:
+            bool: 是否已包含 Jinja2 标签
+        """
+        import zipfile
+        import re
+
+        try:
+            # 解压 docx 并读取 document.xml
+            with zipfile.ZipFile(io.BytesIO(file_content)) as zf:
+                try:
+                    doc_xml = zf.read('word/document.xml').decode('utf-8')
+                except KeyError:
+                    return False
+
+            # 检查是否有 Jinja2 变量或控制标签
+            # 使用更宽松的模式，匹配 {{ }} 和 {% %}
+            jinja_patterns = [
+                r'\{\{.*?\}\}',  # 变量 {{ ... }}
+                r'\{%.*?%\}',    # 控制标签 {% ... %}
+            ]
+
+            for pattern in jinja_patterns:
+                if re.search(pattern, doc_xml, re.DOTALL):
+                    return True
+
+            return False
+
+        except Exception as e:
+            logger.warning(f"检查 Jinja2 标签失败: {e}")
+            return False
 
     def get_stats(self) -> Dict[str, Any]:
         """获取模板统计信息"""

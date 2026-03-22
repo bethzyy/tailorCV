@@ -124,7 +124,7 @@ class Config:
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB 最大文件大小
 
     # ==================== 端口配置 ====================
-    SIMPLE_APP_PORT = int(os.getenv('SIMPLE_APP_PORT', 5001))
+    SIMPLE_APP_PORT = int(os.getenv('SIMPLE_APP_PORT', 6001))
     MULTI_APP_PORT = int(os.getenv('MULTI_APP_PORT', 5002))
     HUB_APP_PORT = int(os.getenv('HUB_APP_PORT', 5000))
 

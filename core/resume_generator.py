@@ -304,8 +304,20 @@ class ResumeGenerator:
             if position:
                 p.add_run(f'  |  {position}')
 
-            # 工作内容
-            content = exp.get('tailored', exp.get('content', ''))
+            # 工作内容 - 优先使用 tailored，支持多格式降级
+            content = exp.get('tailored', '')
+
+            # 降级：如果 tailored 为空但有 tailored_bullets
+            if not content and 'tailored_bullets' in exp:
+                bullets = exp.get('tailored_bullets', [])
+                if isinstance(bullets, list):
+                    contents = [b.get('content', '') if isinstance(b, dict) else b for b in bullets]
+                    content = '\n'.join(filter(None, contents))
+
+            # 最终降级：使用原始 content
+            if not content:
+                content = exp.get('content', '')
+
             if content:
                 # 按行分割并添加
                 lines = content.split('\n')
@@ -341,8 +353,17 @@ class ResumeGenerator:
             if role:
                 p.add_run(f'  |  {role}')
 
-            # 项目内容
-            content = proj.get('tailored', proj.get('content', ''))
+            # 项目内容 - 优先使用 tailored，支持多格式降级
+            content = proj.get('tailored', '')
+
+            # 降级：如果 tailored 为空但有 tailored_description
+            if not content and 'tailored_description' in proj:
+                content = proj['tailored_description']
+
+            # 最终降级：使用原始 content
+            if not content:
+                content = proj.get('content', '')
+
             if content:
                 lines = content.split('\n')
                 for line in lines:

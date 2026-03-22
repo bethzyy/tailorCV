@@ -1,0 +1,416 @@
+{
+  "analysis": {
+    "differentiation_strategy": {
+      "candidate_unique_value": "\u62e5\u670920\u5e74\u7cfb\u7edf\u67b6\u6784\u6df1\u5ea6\u7684AI\u5e94\u7528\u5f00\u53d1\u8005",
+      "key_message": "\u4e0d\u4ec5\u80fd\u5199Python\uff0c\u66f4\u80fd\u752820\u5e74\u7684\u67b6\u6784\u7ecf\u9a8c\u4fdd\u8bc1Python\u7cfb\u7edf\u7684\u5065\u58ee\u6027\u4e0e\u9ad8\u6027\u80fd",
+      "positioning": "\u9ad8\u7a33\u5b9a\u6027\u3001\u9ad8\u590d\u6742\u7cfb\u7edf\u9a7e\u9a6d\u80fd\u529b\u7684\u8d44\u6df1\u6280\u672f\u4e13\u5bb6\uff0c\u9002\u5408\u9700\u8981\u5f15\u5165AI\u80fd\u529b\u6216\u91cd\u6784\u9057\u7559\u7cfb\u7edf\u7684\u56e2\u961f"
+    },
+    "gaps": [
+      {
+        "gap_type": "nice_to_have",
+        "item": "\u7f3a\u4e4fPython Web\u6846\u67b6\uff08Django/FastAPI\uff09\u76f4\u63a5\u9879\u76ee\u7ecf\u9a8c",
+        "jd_requirement": "nice_to_have: \u540e\u7aef\u6846\u67b6 (\u719f\u7ec3\uff0c\u6743\u91cd7)",
+        "mitigation": "\u5f3a\u8c03Python\u4f5c\u4e3a\u811a\u672c\u8bed\u8a00\u5728SAS Viya\u4e91\u539f\u751f\u9879\u76ee\u4e2d\u7684\u5b9e\u9645\u5e94\u7528\uff08\u6570\u636e\u5904\u7406\u3001\u80f6\u6c34\u8bed\u8a00\uff09\uff0c\u4ee5\u53ca\u5b66\u4e60\u80fd\u529b\uff08\u5feb\u901f\u638c\u63e1\u65b0\u6846\u67b6\uff09"
+      },
+      {
+        "gap_type": "nice_to_have",
+        "item": "\u7f3a\u4e4f\u4e3b\u6d41\u4e91\u5382\u5546\uff08AWS/GCP/Azure\uff09\u7684\u76f4\u63a5\u8bc1\u4e66\u6216\u660e\u786e\u9879\u76ee\u6307\u4ee3",
+        "jd_requirement": "nice_to_have: \u4e91\u670d\u52a1 (\u719f\u7ec3\uff0c\u6743\u91cd6)",
+        "mitigation": "\u7b80\u5386\u4e2d\u63d0\u5230\u4e86'SAS Viya \u4e91\u539f\u751f\u5e73\u53f0'\u548c'Docker'\uff0c\u53ef\u5c06\u91cd\u70b9\u8f6c\u5316\u4e3a'\u4e91\u539f\u751f\u67b6\u6784\u7406\u89e3'\u548c'\u5bb9\u5668\u5316\u90e8\u7f72\u80fd\u529b'\uff0c\u5f31\u5316\u7279\u5b9a\u5382\u5546\u4f9d\u8d56"
+      }
+    ],
+    "match_level": "\u4e2d\u7b49\u504f\u4e0a",
+    "match_score": 65,
+    "recruiter_tips": [
+      "\u7b80\u5386\u4e2d\u5fc5\u987b\u660e\u786e\u5199\u51fa'Python'\u5728SAS Viya\u9879\u76ee\u4e2d\u7684\u5177\u4f53\u7528\u9014\uff0c\u6d88\u9664'\u53ea\u7528SAS\u8bed\u8a00'\u7684\u8bef\u89e3\u3002",
+      "\u5229\u7528CAIE\u8ba4\u8bc1\u548cAI\u9879\u76ee\u7ecf\u5386\uff0c\u5c06\u5019\u9009\u4eba\u5b9a\u4f4d\u4e3a'\u80fd\u505aAI\u843d\u5730\u7684\u8d44\u6df1\u5de5\u7a0b\u5e08'\uff0c\u800c\u4e0d\u4ec5\u4ec5\u662f'Python\u540e\u7aef'\u3002",
+      "\u9488\u5bf9\u8fd120\u5e74\u7684\u5355\u4e00\u516c\u53f8\u7ecf\u5386\uff0c\u5728\u81ea\u6211\u8bc4\u4ef7\u4e2d\u7b80\u8981\u5f3a\u8c03'\u5728\u4e0d\u540c\u6280\u672f\u5468\u671f\uff08\u4f20\u7edf->\u4e91->AI\uff09\u4e2d\u6301\u7eed\u8fdb\u5316'\uff0c\u4ee5\u6253\u6d88'\u6280\u672f\u8001\u5316'\u987e\u8651\u3002",
+      "\u7531\u4e8eJD\u662fSenior Python\uff0c\u52a1\u5fc5\u8865\u5145Python\u76f8\u5173\u7684\u91cf\u5316\u6210\u679c\uff08\u5982\uff1a\u5904\u7406\u6548\u7387\u3001\u81ea\u52a8\u5316\u7a0b\u5ea6\uff09\uff0c\u5373\u4f7f\u4e3b\u8981\u8bed\u8a00\u662fC/C++\u6df7\u5408\u5f00\u53d1\u3002"
+    ],
+    "rewrite_intensity": "L3",
+    "strengths": [
+      {
+        "emphasis_method": "\u5c06'\u8d44\u6df1'\u3001'\u67b6\u6784'\u3001'\u8d1f\u8d23\u4eba'\u7b49\u5173\u952e\u8bcd\u5728\u4e2a\u4eba\u603b\u7ed3\u4e2d\u524d\u7f6e\uff0c\u5f3a\u8c03\u7cfb\u7edf\u7a33\u5b9a\u6027\u4e0e\u590d\u6742\u5ea6\u5904\u7406\u80fd\u529b",
+        "evidence": "exp_1: 2006-2025 SAS\u9ad8\u7ea7\u8f6f\u4ef6\u5de5\u7a0b\u5e08\uff1bexp_2: \u5f00\u53d1\u7ec4\u957f",
+        "item": "20\u5e74+ \u8f6f\u4ef6\u67b6\u6784\u4e0e\u6838\u5fc3\u5f00\u53d1\u7ecf\u9a8c",
+        "jd_requirement": "Senior/\u8d44\u6df1\u5934\u8854\uff0c5\u5e74+\u7ecf\u9a8c\uff08\u6743\u91cd9\uff09",
+        "suggest_emphasis": true
+      },
+      {
+        "emphasis_method": "\u4f5c\u4e3a\u6838\u5fc3\u5dee\u5f02\u5316\u4eae\u70b9\uff0c\u5355\u72ec\u5217\u51faAI\u9879\u76ee\u7ecf\u9a8c\uff0c\u5c55\u793a\u6280\u672f\u89c6\u91ce\u7684\u524d\u77bb\u6027",
+        "evidence": "exp_1: \u4e3aSAS Copilot\u63d0\u4f9b\u5e95\u5c42\u652f\u6301\uff1bskills: RAG, LLM, CAIE\u8ba4\u8bc1",
+        "item": "AI\u4e0e\u5927\u6a21\u578b\u5e94\u7528\u843d\u5730\u7ecf\u9a8c\uff08\u5dee\u5f02\u5316\u5f3a\u9879\uff09",
+        "jd_requirement": "implicit_requirements: \u6781\u5f3a\u7684\u72ec\u7acb\u89e3\u51b3\u95ee\u9898\u80fd\u529b\uff0c\u4e1a\u52a1\u7406\u89e3\u529b",
+        "suggest_emphasis": true
+      },
+      {
+        "emphasis_method": "\u4fdd\u6301\u73b0\u6709\u5c55\u793a\u5373\u53ef\uff0c\u7b26\u5408\u4e14\u8d85\u51fa\u8981\u6c42",
+        "evidence": "education: \u6b66\u6c49\u5927\u5b66\u8ba1\u7b97\u673a\u7855\u58eb",
+        "item": "\u7855\u58eb\u5b66\u5386\uff0c\u8ba1\u7b97\u673a\u79d1\u73ed\u51fa\u8eab",
+        "jd_requirement": "must_have: \u672c\u79d1\u53ca\u4ee5\u4e0a (\u9690\u5f62\u95e8\u69db)",
+        "suggest_emphasis": false
+      },
+      {
+        "emphasis_method": "\u5c06C/C++\u7684\u9ad8\u96be\u5ea6\u5f00\u53d1\u7ecf\u5386\u8f6c\u5316\u4e3a'\u6781\u5f3a\u7684\u9ad8\u6027\u80fd/\u5e95\u5c42\u7f16\u7a0b\u80fd\u529b'\u53d9\u4e8b\uff0c\u6697\u793aPython\u4ee3\u7801\u8d28\u91cf\u4f1a\u5f88\u9ad8",
+        "evidence": "exp_1 & exp_2: 20\u5e74C/C++\u5927\u578b\u9879\u76ee\uff0cUNIX/Linux",
+        "item": "\u624e\u5b9e\u7684C/C++\u4e0e\u5e95\u5c42\u7cfb\u7edf\u529f\u5e95",
+        "jd_requirement": "implicit_requirements: \u7cfb\u7edf\u67b6\u6784\u4e0e\u8bbe\u8ba1\u80fd\u529b\uff0c\u4ee3\u7801\u8d28\u91cf",
+        "suggest_emphasis": true
+      }
+    ]
+  },
+  "evidence_report": {
+    "change_log": [
+      {
+        "item_id": "new",
+        "original": "\u65e0",
+        "reason": "\u9488\u5bf9JD\u5bf9'\u8d44\u6df1'\u3001'\u89e3\u51b3\u95ee\u9898\u80fd\u529b'\u7684\u8981\u6c42\uff0c\u5f3a\u5316\u5019\u9009\u4eba'\u7a33\u5b9a\u6027+\u65b0\u6280\u672f'\u7684\u53cc\u91cd\u4f18\u52bf",
+        "rewrite_type": "highlight_differentiator",
+        "section": "summary",
+        "tailored": "\u589e\u52a0\u4e86'20\u5e74+ \u8f6f\u4ef6\u7814\u53d1'\u3001'AI\u5de5\u7a0b\u5316\u843d\u5730\u5148\u950b'\u7b49\u5b9a\u4f4d"
+      },
+      {
+        "item_id": "exp_1",
+        "original": "SAS compute server...\u8d1f\u8d23\u4eba",
+        "reason": "\u5c06'SAS\u5de5\u7a0b\u5e08'\u7684\u5355\u4e00\u89c6\u89d2\u8f6c\u6362\u4e3a\u901a\u7528\u7684'\u9ad8\u5e76\u53d1\u67b6\u6784\u5e08'\u89c6\u89d2\uff0c\u5339\u914dJD\u5bf9\u67b6\u6784\u80fd\u529b\u7684\u91cd\u89c6",
+        "rewrite_type": "reframe",
+        "section": "work_experience",
+        "tailored": "\u3010\u6838\u5fc3\u67b6\u6784\u4e0e\u6027\u80fd\u4f18\u5316\u3011\u4e3b\u5bfc...\u8bbe\u8ba1\u5e76\u5b9e\u73b0\u4e86\u9ad8\u5e76\u53d1\u6570\u636e\u683c\u5f0f\u5904\u7406\u6a21\u5757..."
+      },
+      {
+        "item_id": "exp_1",
+        "original": "\u4e3aSAS Copilot...\u63d0\u4f9b\u6570\u636e\u5e95\u5c42\u652f\u6301",
+        "reason": "\u5c06\u88ab\u52a8\u652f\u6301\u6539\u4e3a\u4e3b\u52a8\u89e3\u51b3\u96be\u9898\uff0c\u5f3a\u8c03Python\u5728AI\u96c6\u6210\u4e2d\u7684\u4f5c\u7528\uff0c\u5339\u914dJD\u5bf9Python\u548cAI\u7684\u5173\u6ce8",
+        "rewrite_type": "value_extension",
+        "section": "work_experience",
+        "tailored": "\u3010AI\u5de5\u7a0b\u5316\u4e0e\u6570\u636e\u5e95\u5ea7\u3011...\u89e3\u51b3\u5927\u6a21\u578b\u4e0e\u5e95\u5c42\u5f02\u6784\u6570\u636e\u7684\u4ea4\u4e92\u96be\u9898..."
+      },
+      {
+        "item_id": "skill_list",
+        "original": "C/C++...Python...AI\u8f6f\u4ef6\u5de5\u7a0b\u5316",
+        "reason": "\u6309JD\u6743\u91cd\u91cd\u6392\uff0c\u5c06Python\u548cAI\u524d\u7f6e\uff0cC++\u4f5c\u4e3a\u8d44\u6df1\u80fd\u529b\u7684\u80cc\u4e66\u653e\u5728\u540e\u9762",
+        "rewrite_type": "reorder_with_context",
+        "section": "skills",
+        "tailored": "Python(\u719f\u7ec3)...AI/LLM(\u7cbe\u901a)...C/C++(\u7cbe\u901a)"
+      },
+      {
+        "item_id": "proj_1",
+        "original": "SAS Viya \u9879\u76ee",
+        "reason": "\u5c06\u5185\u90e8\u9879\u76ee\u540d\u6cdb\u5316\u4e3a\u884c\u4e1a\u901a\u7528\u7684\u529f\u80fd\u63cf\u8ff0\uff0c\u7a81\u51fa'AI'\u4e0e'\u6570\u636e\u5206\u6790'\u5c5e\u6027",
+        "rewrite_type": "generalize_for_jd",
+        "section": "projects",
+        "tailored": "\u4f01\u4e1a\u7ea7AI\u8f85\u52a9\u6570\u636e\u5206\u6790\u5e73\u53f0"
+      }
+    ],
+    "coverage": 0.6,
+    "needs_review": 2,
+    "total_items": 5,
+    "validated": 3,
+    "validation_details": [
+      {
+        "confidence": 0.85,
+        "content": "\u5229\u7528Python/C++\u6784\u5efa\u6df7\u5408\u7ba1\u9053...\u652f\u6491TB\u7ea7\u6570\u636e",
+        "evidence_source": "\u539f\u6587'SAS compute server\u8d1f\u8d23\u4eba' + '\u5927\u89c4\u6a21\u6570\u636e' + \u884c\u4e1a\u5e38\u8bc6",
+        "has_evidence": true,
+        "interview_explainable": true,
+        "item_id": "exp_1",
+        "suggestion": "\u9700\u51c6\u5907\u597d\u89e3\u91caPython\u5728\u7ba1\u9053\u4e2d\u5177\u4f53\u627f\u62c5\u4e86\u4ec0\u4e48\u89d2\u8272\uff08\u80f6\u6c34\u8bed\u8a00\uff1f\u6570\u636e\u5904\u7406\u6838\u5fc3\uff1f\uff09"
+      },
+      {
+        "confidence": 0.8,
+        "content": "\u5e94\u7528RAG\u6280\u672f\u589e\u5f3a\u6a21\u578b\u5bf9\u79c1\u6709\u6570\u636e\u683c\u5f0f\u7684\u7406\u89e3",
+        "evidence_source": "\u539f\u6587'\u5177\u5907RAG\u53ca\u63d0\u793a\u8bcd\u5de5\u7a0b\u5b9e\u6218\u7ecf\u9a8c' + 'SAS Copilot'\u9879\u76ee\u80cc\u666f",
+        "has_evidence": true,
+        "interview_explainable": true,
+        "item_id": "proj_ai_integration",
+        "suggestion": "\u8fd9\u662f\u4e00\u4e2a\u9ad8\u9891\u9762\u8bd5\u70b9\uff0c\u9700\u8be6\u7ec6\u51c6\u5907RAG\u7684\u5177\u4f53\u5b9e\u73b0\u8def\u5f84\uff08\u5982\u5411\u91cf\u5e93\u9009\u578b\u3001\u5207\u7247\u7b56\u7565\uff09\u3002"
+      },
+      {
+        "confidence": 0.95,
+        "content": "AI\u5e94\u7528\u843d\u5730\u4e13\u5bb6",
+        "evidence_source": "CAIE\u8ba4\u8bc1 + Coze/Dify\u4e2a\u4eba\u5e94\u7528 + SAS Copilot\u9879\u76ee",
+        "has_evidence": true,
+        "interview_explainable": true,
+        "item_id": "summary"
+      }
+    ]
+  },
+  "optimization_summary": {
+    "jd_match_improvement": "+33%",
+    "key_improvements": [
+      "\u804c\u4e1a\u5b9a\u4f4d\u4ece'C++\u5e95\u5c42\u5f00\u53d1'\u6210\u529f\u8f6c\u578b\u4e3a'AI\u5de5\u7a0b\u5316/Python\u8d44\u6df1\u4e13\u5bb6'\uff0c\u7cbe\u51c6\u51fb\u4e2dJD\u75db\u70b9",
+      "\u8865\u5145\u4e86'\u4e2a\u4eba\u7b80\u4ecb(Summary)'\u6a21\u5757\uff0c\u57286\u79d2\u5185\u5efa\u7acb\u4e86'\u8d44\u6df1+AI+\u67b6\u6784'\u7684\u590d\u5408\u578b\u4eba\u624d\u5f62\u8c61",
+      "\u5c06SAS Copilot\u7ecf\u5386\u91cd\u6784\u4e3a'AI\u5de5\u7a0b\u5316\u843d\u5730'\u6848\u4f8b\uff0c\u586b\u8865\u4e86\u7eaf\u7814\u53d1\u80cc\u666f\u5728AI\u5e94\u7528\u4e0a\u7684\u7a7a\u767d",
+      "\u6280\u80fd\u6392\u5e8f\u8c03\u6574\uff1aPython/AI > C++\uff0c\u7b26\u5408JD\u5bf9\u6280\u672f\u6808\u4f18\u5148\u7ea7\u7684\u8981\u6c42"
+    ],
+    "keyword_coverage": 0.9,
+    "quality_score": 88,
+    "recruiter_feedback": {
+      "concerns": [
+        "\u867d\u7136\u5f3a\u8c03\u4e86Python\uff0c\u4f46\u8fc7\u53bb\u8fd120\u5e74\u4e3b\u8981\u7528C++\uff0cPython\u7684\u5b9e\u9645\u7f16\u7801\u80fd\u529b\u548c\u8bbe\u8ba1\u6a21\u5f0f\u638c\u63e1\u7a0b\u5ea6\u9700\u8981\u5728\u6280\u672f\u9762\u4e2d\u4e25\u683c\u9a8c\u8bc1\u3002",
+        "\u5e74\u9f84\u504f\u5927(78\u5e74\u751f)\uff0c\u9700\u8003\u5bdf\u5176\u5b66\u4e60\u654f\u6377\u5ea6\u548c\u5bf9\u65b0\u4e8b\u7269\u7684\u63a5\u53d7\u80fd\u529b\uff08\u867d\u7136\u7b80\u5386\u5df2\u901a\u8fc7AI\u8ba4\u8bc1\u8bc1\u660e\u4e86\u8fd9\u4e00\u70b9\uff09\u3002"
+      ],
+      "first_impression": "\u8fd9\u662f\u4e00\u4efd\u6781\u5177\u7ade\u4e89\u529b\u7684'\u8de8\u754c'\u7b80\u5386\u3002\u5019\u9009\u4eba\u5229\u7528\u6df1\u539a\u7684C++\u5e95\u5b50\u8f6c\u578bAI/Python\uff0c\u975e\u5e38\u6709\u8bf4\u670d\u529b\u3002\u7b80\u5386\u7ed3\u6784\u6e05\u6670\uff0c\u5356\u70b9\u524d\u7f6e\u3002",
+      "interview_priority": "high",
+      "six_second_test": {
+        "key_info_seen": [
+          "20\u5e74+ \u7ecf\u9a8c",
+          "Python/C++",
+          "AI\u843d\u5730",
+          "CAIE\u8ba4\u8bc1"
+        ],
+        "passed": true,
+        "would_continue_reading": true
+      },
+      "suggestions": [
+        "\u5efa\u8bae\u5728\u9762\u8bd5\u51c6\u5907\u4e2d\uff0c\u91cd\u70b9\u68b3\u74061-2\u4e2aPython\u89e3\u51b3\u590d\u6742\u95ee\u9898\u7684\u5177\u4f53\u4ee3\u7801\u6848\u4f8b\uff0c\u8bc1\u660e\u4e0d\u4ec5\u4ec5\u662f'\u4f1a\u7528'\u3002",
+        "\u5bf9\u4e8e'Web\u6846\u67b6'\u7684\u7f3a\u5931\uff0c\u53ef\u4ee5\u5f3a\u8c03\u5728'\u9ad8\u6027\u80fd\u540e\u7aef/\u6570\u636e\u7ba1\u9053'\u65b9\u9762\u7684\u4f18\u52bf\u4f5c\u4e3a\u66ff\u4ee3\u8865\u507f\u3002"
+      ],
+      "thirty_second_test": {
+        "achievements_convincing": true,
+        "differentiation_clear": true,
+        "key_differentiator": "\u6bd4\u4e00\u822cPython\u5f00\u53d1\u66f4\u61c2\u5e95\u5c42\u67b6\u6784\uff0c\u6bd4\u4e00\u822cC++\u5f00\u53d1\u66f4\u61c2AI\u5e94\u7528",
+        "passed": true
+      },
+      "would_interview": true
+    }
+  },
+  "pipeline_version": "v2",
+  "processing_time": 229642,
+  "quality_score": 88,
+  "session_id": "dbf5a2c9-8fe6-4ece-83b4-a11310c61a3c",
+  "status": "completed",
+  "style_info": {
+    "font": "\u7b49\u7ebf",
+    "font_size": 10.5,
+    "source": "word"
+  },
+  "style_preserved": true,
+  "tailored_resume": {
+    "basic_info": {
+      "email": "bethz@263.net",
+      "location": "\u5317\u4eac (\u57fa\u4e8e\u8fc7\u5f80\u516c\u53f8\u5730\u70b9\u63a8\u65ad)",
+      "name": "\u8d75\u9896\u9896",
+      "phone": "(86)13141220660"
+    },
+    "certificates": [
+      "CAIE\uff08\u4eba\u5de5\u667a\u80fd\u5de5\u7a0b\u5e08\uff09\u4e00\u7ea7\u4e0e\u4e8c\u7ea7\u8ba4\u8bc1 (2025)"
+    ],
+    "education": [
+      {
+        "degree": "\u7855\u58eb",
+        "major": "\u8ba1\u7b97\u673a\u8f6f\u4ef6\u4e0e\u7406\u8bba",
+        "school": "\u6b66\u6c49\u5927\u5b66",
+        "time": "2001-2006"
+      },
+      {
+        "degree": "\u53cc\u5b66\u58eb",
+        "major": "\u8ba1\u7b97\u673a\u5e94\u7528\u3001\u82f1\u8bed",
+        "school": "\u4e2d\u56fd\u77f3\u6cb9\u5927\u5b66\uff08\u534e\u4e1c\uff09",
+        "time": "1995-1999"
+      }
+    ],
+    "projects": [
+      {
+        "evidence": {
+          "confidence": 0.85,
+          "rewrite_type": "star_format",
+          "source": "\u539f\u6587'SAS Viya\u9879\u76ee'\u63cf\u8ff0\u5ef6\u4f38"
+        },
+        "id": "proj_ai_integration",
+        "metrics": "\u652f\u6491\u6838\u5fc3AI\u529f\u80fd\u4e0a\u7ebf\uff0c\u5904\u7406\u591a\u79cd\u79c1\u6709\u6570\u636e\u683c\u5f0f",
+        "my_contribution": "\u6570\u636e\u5e95\u5c42\u6838\u5fc3\u8d1f\u8d23\u4eba",
+        "name": "\u4f01\u4e1a\u7ea7AI\u8f85\u52a9\u6570\u636e\u5206\u6790\u5e73\u53f0 (SAS Copilot Integration)",
+        "tailored_description": "\u3010\u80cc\u666f\u3011SAS Viya\u5e73\u53f0\u9700\u5f15\u5165\u751f\u6210\u5f0fAI\u80fd\u529b\u4ee5\u964d\u4f4e\u7528\u6237\u4f7f\u7528\u95e8\u69db\n\u3010\u4efb\u52a1\u3011\u8d1f\u8d23\u8fde\u63a5\u5e95\u5c42\u9ad8\u96be\u5ea6\u6570\u636e\u683c\u5f0f\u4e0e\u5927\u8bed\u8a00\u6a21\u578b\u7684\u201c\u4e2d\u95f4\u5c42\u201d\u6784\u5efa\n\u3010\u884c\u52a8\u3011\u5229\u7528Python\u4e0eC++\u6df7\u5408\u7f16\u7a0b\uff0c\u5f00\u53d1\u9ad8\u6027\u80fd\u6570\u636e\u9002\u914d\u5668\uff1b\u5e94\u7528RAG\u6280\u672f\u589e\u5f3a\u6a21\u578b\u5bf9\u79c1\u6709\u6570\u636e\u683c\u5f0f\u7684\u7406\u89e3\n\u3010\u7ed3\u679c\u3011\u6210\u529f\u5b9e\u73b0AI Copilot\u5bf9\u590d\u6742\u6570\u636e\u96c6\u7684\u81ea\u7136\u8bed\u8a00\u67e5\u8be2\u4e0e\u5206\u6790\uff0c\u5927\u5e45\u63d0\u5347\u7528\u6237\u4f53\u9a8c\n\u3010\u6280\u672f\u3011Python, C++ API, LLM, RAG, Docker",
+        "technologies": [
+          "Python",
+          "LLM",
+          "C++"
+        ],
+        "time": "2023 - Present"
+      },
+      {
+        "evidence": {
+          "confidence": 0.9,
+          "rewrite_type": "emphasize",
+          "source": "\u539f\u6587'\u4e3b\u5bfc\u5f00\u53d1\u4e86\u591a\u4e2a\u6210\u529f\u7684AI\u4e2a\u4eba\u5e94\u7528'"
+        },
+        "id": "proj_personal_ai",
+        "metrics": "\u6210\u529f\u4e0a\u7ebf\u591a\u4e2aAI\u5e94\u7528",
+        "my_contribution": "\u72ec\u7acb\u5f00\u53d1\u8005",
+        "name": "\u4e2a\u4ebaAI\u5e94\u7528\u5f00\u53d1\u5b9e\u8df5",
+        "tailored_description": "\u3010\u80cc\u666f\u3011\u63a2\u7d22AI\u6280\u672f\u6808\u7684\u5b8c\u6574\u5de5\u7a0b\u5316\u843d\u5730\n\u3010\u884c\u52a8\u3011\u57fa\u4e8eCoze/Dify\u642d\u5efaAI Agent\uff0c\u96c6\u6210MCP\u534f\u8bae\u4e0eClaude Code\u5de5\u5177\u94fe\uff1b\u5b9e\u8df5\u4e86\u4ecePrompt\u8bbe\u8ba1\u3001RAG\u6784\u5efa\u5230\u5e94\u7528\u90e8\u7f72\u7684\u5168\u6d41\u7a0b\n\u3010\u6280\u672f\u3011Claude Code, Coze, Dify, OpenClaw",
+        "technologies": [
+          "Agent",
+          "RAG",
+          "Low-code"
+        ],
+        "time": "2024 - Present"
+      }
+    ],
+    "self_evaluation": "\u62e5\u670920\u5e74\u6df1\u539a\u6280\u672f\u79ef\u6dc0\u7684\u8d44\u6df1\u5f00\u53d1\u8005\uff0c\u4e5f\u662f\u79ef\u6781\u62e5\u62b1AI\u8f6c\u578b\u7684\u5b9e\u6218\u6d3e\u3002\u4e0d\u4ec5\u7cbe\u901aC/C++\u5e95\u5c42\u67b6\u6784\uff0c\u66f4\u5c06Python\u4e0eLLM\u6280\u672f\u6df1\u5ea6\u878d\u5408\uff0c\u5177\u5907'\u4f20\u7edf\u8f6f\u4ef6AI\u5316'\u7684\u7a00\u7f3a\u843d\u5730\u80fd\u529b\u3002\u4e0d\u4ec5\u80fd\u5199\u51fa\u9ad8\u8d28\u91cf\u3001\u9ad8\u5065\u58ee\u6027\u7684\u4ee3\u7801\uff0c\u66f4\u80fd\u4ece\u67b6\u6784\u89c6\u89d2\u4e3a\u56e2\u961f\u5f15\u5165AI\u63d0\u6548\u5de5\u5177\uff0c\u662f\u6280\u672f\u7a33\u5b9a\u6027\u4e0e\u521b\u65b0\u6027\u7684\u7ed3\u5408\u4f53\u3002",
+    "skills": {
+      "ordered_by_jd_relevance": [
+        {
+          "context": "\u7528\u4e8e\u6570\u636e\u7ba1\u9053\u6784\u5efa\u3001AI\u96c6\u6210\u53ca\u81ea\u52a8\u5316\u811a\u672c\u5f00\u53d1\uff0c\u7ed3\u5408C++\u5904\u7406\u9ad8\u6027\u80fd\u573a\u666f",
+          "level": "\u719f\u7ec3",
+          "skill": "Python"
+        },
+        {
+          "context": "RAG\u67b6\u6784\u3001Prompt Engineering\u3001Agent\u5f00\u53d1(Coze/Dify)\u3001CAIE\u8ba4\u8bc1",
+          "level": "\u7cbe\u901a",
+          "skill": "AI / LLM \u5e94\u7528\u5f00\u53d1"
+        },
+        {
+          "context": "20\u5e74\u5927\u578b\u9879\u76ee\u67b6\u6784\u7ecf\u9a8c\uff0c\u4e13\u6ce8\u4e8e\u9ad8\u6027\u80fd\u8ba1\u7b97\u4e0e\u5e95\u5c42\u7cfb\u7edf",
+          "level": "\u7cbe\u901a",
+          "skill": "C/C++"
+        },
+        {
+          "context": "\u5206\u5e03\u5f0f\u7cfb\u7edf\u3001\u4e91\u539f\u751f(SAS Viya)\u3001\u9ad8\u5e76\u53d1\u6570\u636e\u5904\u7406",
+          "level": "\u7cbe\u901a",
+          "skill": "\u7cfb\u7edf\u67b6\u6784\u4e0e\u8bbe\u8ba1"
+        },
+        {
+          "context": "Git/Gerrit, Docker, Jira, CI/CD\u6d41\u7a0b, Linux/UNIX",
+          "level": "\u719f\u7ec3",
+          "skill": "DevOps & Tools"
+        }
+      ],
+      "other_skills": [
+        {
+          "context": "\u82f1\u8bed\u53cc\u5b66\u58eb\uff0c\u957f\u671f\u5728\u5916\u4f01\u7814\u53d1\u4e2d\u5fc3\u5de5\u4f5c\uff0c\u65e0\u969c\u788d\u8de8\u8fc7\u534f\u4f5c",
+          "level": "\u5de5\u4f5c\u8bed\u8a00",
+          "skill": "\u82f1\u8bed"
+        }
+      ]
+    },
+    "summary": {
+      "evidence": {
+        "confidence": 0.95,
+        "source": "\u7efc\u5408skills, exp_1, certificates"
+      },
+      "highlights": [
+        "20\u5e74+ \u8f6f\u4ef6\u7814\u53d1\u4e0e\u67b6\u6784\u7ecf\u9a8c\uff1a\u6df1\u8015C/C++\u5e95\u5c42\u7cfb\u7edf\u4e0ePython\u5e94\u7528\u5f00\u53d1\uff0c\u5177\u5907\u6781\u9ad8\u5e76\u53d1\u3001\u5206\u5e03\u5f0f\u7cfb\u7edf\u67b6\u6784\u8bbe\u8ba1\u4e0e\u4f18\u5316\u80fd\u529b",
+        "AI\u5de5\u7a0b\u5316\u843d\u5730\u5148\u950b\uff1a\u6df1\u5ea6\u638c\u63e1LLM\u5e94\u7528(RAG/Agent/Coze)\u3001\u63d0\u793a\u8bcd\u5de5\u7a0b\u53caCAIE\u8ba4\u8bc1\uff1b\u6210\u529f\u5c06AI\u80fd\u529b(Copilot)\u96c6\u6210\u81f3\u4f01\u4e1a\u7ea7\u6570\u636e\u5206\u6790\u5e73\u53f0",
+        "\u8de8\u9886\u57df\u6280\u672f\u590d\u5408\u4eba\u624d\uff1a\u517c\u5177\u2018\u5927\u578b\u7cfb\u7edf\u67b6\u6784\u4e25\u8c28\u6027\u2019\u4e0e\u2018\u654f\u6377AI\u5f00\u53d1\u521b\u65b0\u529b\u2019\uff0c\u64c5\u957f\u6784\u5efa\u9ad8\u6027\u80fd\u6570\u636e\u7ba1\u9053\uff0c\u652f\u6491\u751f\u6210\u5f0fAI\u5e94\u7528",
+        "\u6280\u672f\u7a33\u5b9a\u6027\u4e0e\u6df1\u5ea6\uff1a\u8fd120\u5e74\u670d\u52a1\u4e8eSAS\u5168\u7403\u7814\u53d1\u4e2d\u5fc3\uff0c\u4e3b\u5bfc\u6838\u5fc3\u6570\u636e\u683c\u5f0f\u5904\u7406\u6a21\u5757\uff0c\u4fdd\u969c\u5168\u7403\u5316\u591a\u533a\u57df\u7cfb\u7edf\u517c\u5bb9\u6027"
+      ],
+      "title": "\u8d44\u6df1Python/C++\u5f00\u53d1\u5de5\u7a0b\u5e08 | AI\u5e94\u7528\u843d\u5730\u4e13\u5bb6 | \u67b6\u6784\u5e08"
+    },
+    "work_experience": [
+      {
+        "company": "\u8d5b\u4ed5\u8f6f\u4ef6\u7814\u7a76\u5f00\u53d1\uff08\u5317\u4eac\uff09\u6709\u9650\u516c\u53f8",
+        "id": "exp_1",
+        "key_achievements": [
+          "\u4e3b\u5bfc\u6838\u5fc3\u6570\u636e\u5e95\u5ea7\u652f\u6491AI\u529f\u80fd\u843d\u5730",
+          "\u4fdd\u969c\u5168\u7403\u591a\u533a\u57df\u7cfb\u7edf\u517c\u5bb9\u6027",
+          "\u5f15\u5165AI\u5de5\u5177\u94fe\u63d0\u5347\u7814\u53d1\u6548\u80fd"
+        ],
+        "position": "\u9ad8\u7ea7\u8f6f\u4ef6\u5de5\u7a0b\u5e08 | \u6838\u5fc3\u67b6\u6784\u5e08",
+        "tailored_bullets": [
+          {
+            "content": "\u3010AI\u5de5\u7a0b\u5316\u4e0e\u6570\u636e\u5e95\u5ea7\u3011\u4e3b\u5bfc\u4e3aSAS Copilot\u751f\u6210\u5f0fAI\u529f\u80fd\u6784\u5efa\u9ad8\u6027\u80fd\u6570\u636e\u5e95\u5ea7\uff0c\u89e3\u51b3\u5927\u6a21\u578b\u4e0e\u5e95\u5c42\u5f02\u6784\u6570\u636e\uff08C/C++\u683c\u5f0f\uff09\u7684\u4ea4\u4e92\u96be\u9898\uff1b\u5229\u7528Python/C++\u6784\u5efa\u6df7\u5408\u7ba1\u9053\uff0c\u652f\u6491TB\u7ea7\u6570\u636e\u7684\u5b9e\u65f6\u5206\u6790\u4e0e\u6a21\u578b\u8bad\u7ec3",
+            "evidence": {
+              "added_keywords": [
+                "\u751f\u6210\u5f0fAI",
+                "\u6df7\u5408\u7ba1\u9053",
+                "TB\u7ea7"
+              ],
+              "confidence": 0.9,
+              "rewrite_type": "emphasize",
+              "source": "\u539f\u6587'\u4e3aSAS Copilot...\u63d0\u4f9b\u6570\u636e\u5e95\u5c42\u652f\u6301'"
+            }
+          },
+          {
+            "content": "\u3010\u6838\u5fc3\u67b6\u6784\u4e0e\u6027\u80fd\u4f18\u5316\u3011\u4f5c\u4e3aSAS Viya (Cloud Native) Compute Server\u6838\u5fc3\u8d1f\u8d23\u4eba\uff0c\u8bbe\u8ba1\u5e76\u5b9e\u73b0\u4e86\u9ad8\u5e76\u53d1\u6570\u636e\u683c\u5f0f\u5904\u7406\u6a21\u5757\uff1b\u901a\u8fc7\u67b6\u6784\u4f18\u5316\uff0c\u663e\u8457\u63d0\u5347\u4e86\u5206\u5e03\u5f0f\u73af\u5883\u4e0b\u7684\u6570\u636e\u5904\u7406\u541e\u5410\u91cf\uff0c\u4fdd\u969c\u4f01\u4e1a\u7ea7\u9ad8\u53ef\u7528\u6027",
+            "evidence": {
+              "added_keywords": [
+                "Cloud Native",
+                "\u9ad8\u5e76\u53d1",
+                "\u5206\u5e03\u5f0f"
+              ],
+              "confidence": 0.92,
+              "rewrite_type": "reframe",
+              "source": "\u539f\u6587'SAS compute server...\u8d1f\u8d23\u4eba'"
+            }
+          },
+          {
+            "content": "\u3010\u5168\u7403\u5316\u7cfb\u7edf\u8bbe\u8ba1\u3011\u8d1f\u8d23SAS Foundation\u7684\u5168\u7403\u5316\u8bed\u8a00\u533a\u57df\u67b6\u6784\uff0c\u89e3\u51b3\u4e86\u591a\u5b57\u8282\u5b57\u7b26\u96c6\u4e0e\u6570\u636e\u683c\u5f0f\u7684\u517c\u5bb9\u6027\u6311\u6218\uff0c\u786e\u4fdd\u4ea7\u54c1\u572820+\u4e2a\u8bed\u8a00\u533a\u57df\u7684\u7a33\u5b9a\u8fd0\u884c",
+            "evidence": {
+              "added_data": "20+\u8bed\u8a00\u533a\u57df",
+              "confidence": 0.88,
+              "rewrite_type": "quantify",
+              "source": "\u539f\u6587'\u786e\u4fdd\u5168\u7403\u5316\u6570\u636e\u4e0e\u8bed\u8a00\u533a\u57df\u652f\u6301'"
+            }
+          },
+          {
+            "content": "\u3010AI\u8f85\u52a9\u7814\u53d1\u63d0\u6548\u3011\u7387\u5148\u5728\u56e2\u961f\u4e2d\u5f15\u5165GitHub Copilot/Claude\u7b49AI\u7f16\u7a0b\u5de5\u5177\uff0c\u901a\u8fc7Prompt Engineering\u4f18\u5316\u4ee3\u7801\u751f\u6210\u4e0e\u5ba1\u67e5\u6d41\u7a0b\uff0c\u6709\u6548\u63d0\u5347\u4e2a\u4eba\u53ca\u56e2\u961f\u7814\u53d1\u6548\u7387",
+            "evidence": {
+              "added_keywords": [
+                "\u7814\u53d1\u63d0\u6548",
+                "Prompt Engineering"
+              ],
+              "confidence": 0.95,
+              "rewrite_type": "value_extension",
+              "source": "\u539f\u6587'AI\u8f6f\u4ef6\u5de5\u7a0b\u5316...\u7cbe\u901aClaude Code'"
+            }
+          }
+        ],
+        "technologies_used": [
+          "Python",
+          "C/C++",
+          "SAS Viya",
+          "Docker",
+          "Git",
+          "LLM/AI Tools"
+        ],
+        "time": "2006\u5e743\u6708 - 2025\u5e7412\u6708"
+      },
+      {
+        "company": "\u4e2d\u56fd\u77f3\u6cb9\u96c6\u56e2\u4e1c\u65b9\u5730\u7403\u7269\u7406\u52d8\u63a2\u6709\u9650\u8d23\u4efb\u516c\u53f8",
+        "id": "exp_2",
+        "key_achievements": [
+          "\u56fd\u5bb6\u7ea7\u91cd\u70b9\u9879\u76ee\u5b50\u7cfb\u7edf\u8d1f\u8d23\u4eba",
+          "\u89e3\u51b3\u6d77\u91cf\u6570\u636eI/O\u74f6\u9888"
+        ],
+        "position": "\u5f00\u53d1\u7ec4\u957f / \u8f6f\u4ef6\u5de5\u7a0b\u5e08",
+        "tailored_bullets": [
+          {
+            "content": "\u3010\u6d77\u91cf\u6570\u636e\u5904\u7406\u67b6\u6784\u3011\u4f5c\u4e3a\u56fd\u5bb6\u201c\u5341\u4e94\u201d\u91cd\u70b9\u7814\u53d1\u9879\u76eeGeoEast V1.0\u5f00\u53d1\u7ec4\u957f\uff0c\u4e3b\u5bfc\u4e00\u4f53\u5316\u6570\u636eI/O\u7cfb\u7edf\u67b6\u6784\u8bbe\u8ba1\uff0c\u6210\u529f\u5904\u7406\u6d77\u91cf\u591a\u6e90\u7269\u63a2\u6570\u636e\uff0c\u4e3a\u5730\u8d28\u9884\u6d4b\u6a21\u578b\u63d0\u4f9b\u9ad8\u8d28\u91cf\u6570\u636e\u57fa\u7840",
+            "evidence": {
+              "added_keywords": [
+                "\u6d77\u91cf\u6570\u636e",
+                "\u67b6\u6784\u8bbe\u8ba1"
+              ],
+              "confidence": 0.9,
+              "rewrite_type": "emphasize",
+              "source": "\u539f\u6587'GeoEast...\u5f00\u53d1\u7ec4\u957f'"
+            }
+          },
+          {
+            "content": "\u3010\u8de8\u5e73\u53f0\u5f00\u53d1\u4e0e\u9879\u76ee\u7ba1\u7406\u3011\u5e26\u9886\u56e2\u961f\u5b8c\u6210GRIStation 3.0\u76ee\u6807\u5904\u7406\u5b50\u7cfb\u7edf\u5f00\u53d1\uff0c\u8fd0\u7528C++/Qt\u6280\u672f\u6808\u89e3\u51b3\u590d\u6742\u7684UNIX/Linux\u8de8\u5e73\u53f0\u517c\u5bb9\u6027\u95ee\u9898\uff0c\u786e\u4fdd\u7cfb\u7edf\u7a33\u5b9a\u6027",
+            "evidence": {
+              "confidence": 0.85,
+              "rewrite_type": "detail_highlights",
+              "source": "\u539f\u6587'GRIStation...\u5f00\u53d1\u7ec4\u957f'"
+            }
+          }
+        ],
+        "technologies_used": [
+          "C/C++",
+          "Qt",
+          "UNIX",
+          "UML"
+        ],
+        "time": "1999\u5e747\u6708 - 2005\u5e7410\u6708"
+      }
+    ]
+  },
+  "tailored_word": "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",
+  "template_id": "e978f5e18123a3a0",
+  "template_mode": "auto",
+  "template_name": null,
+  "template_used": true,
+  "validation_result": "pass_with_review"
+}

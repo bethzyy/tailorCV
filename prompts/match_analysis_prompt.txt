@@ -52,6 +52,30 @@
   "match_level": "良好",
   "rewrite_intensity": "L2",
 
+  "jd_requirements_checklist": [
+    {{
+      "requirement": "本科及以上学历，计算机相关专业",
+      "type": "must_have",
+      "category": "education",
+      "matched": true,
+      "evidence": "简历显示：XX大学 计算机科学 本科"
+    }},
+    {{
+      "requirement": "3年以上Python开发经验",
+      "type": "must_have",
+      "category": "experience",
+      "matched": true,
+      "evidence": "简历显示：2020-2023 XX公司 Python开发"
+    }},
+    {{
+      "requirement": "熟悉机器学习算法",
+      "type": "nice_to_have",
+      "category": "skill",
+      "matched": false,
+      "evidence": ""
+    }}
+  ],
+
   "strengths": [
     {{
       "item": "3年Python开发经验",

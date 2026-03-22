@@ -92,17 +92,24 @@ def check_server_health(port, timeout=15):
 
 
 def cleanup_processes():
-    """退出时清理所有子进程"""
+    """退出时清理所有子进程（增强版）"""
     for tool_id, proc in server_processes.items():
         if proc and proc.poll() is None:
             logger.info(f"Stopping {tool_id} server (PID: {proc.pid})")
             try:
                 if sys.platform == 'win32':
-                    proc.terminate()
+                    # Windows 下使用 taskkill 强制终止进程树
+                    import subprocess as sp
+                    sp.run(['taskkill', '/F', '/T', '/PID', str(proc.pid)],
+                           capture_output=True, timeout=10)
                 else:
                     proc.terminate()
-                proc.wait(timeout=5)
-            except:
+                    proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                logger.warning(f"Process {tool_id} did not exit gracefully, force killing")
+                proc.kill()
+            except Exception as e:
+                logger.error(f"Error stopping {tool_id}: {e}")
                 proc.kill()
 
 

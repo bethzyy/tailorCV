@@ -210,32 +210,38 @@ class TemplateProcessor:
         Returns:
             bytes: 渲染后的 Word 文档字节流
         """
+        logger.info(f"🔍 render() - template_id: {template_id}")
+
         if not HAS_DOCXTPL:
             raise ImportError("未安装 docxtpl")
 
         # 首先检查 preprocessed 目录
         template_path = self.template_dir / f"{template_id}.docx"
+        logger.info(f"📁 检查预处理模板: {template_path}, 存在: {template_path.exists()}")
 
         if template_path.exists():
             # 使用原有逻辑
             try:
+                logger.info(f"✅ 使用预处理模板渲染")
                 doc = DocxTemplate(str(template_path))
                 render_context = self._build_context(context)
+                logger.info(f"📝 构建渲染上下文完成，变量数: {len(render_context)}")
                 doc.render(render_context)
                 bio = io.BytesIO()
                 doc.save(bio)
                 bio.seek(0)
 
                 self.stats['rendered'] += 1
-                logger.info(f"模板渲染成功: {template_id}")
+                logger.info(f"✅ 模板渲染成功: {template_id}")
 
                 return bio.read()
 
             except Exception as e:
                 self.stats['failed'] += 1
-                logger.error(f"模板渲染失败: {e}", exc_info=True)
+                logger.error(f"❌ 模板渲染失败: {e}", exc_info=True)
                 raise
 
+        logger.info(f"⚠️ 预处理模板不存在，尝试 render_by_id 查找其他位置")
         # 尝试使用 render_by_id 查找其他位置的模板
         return self.render_by_id(template_id, context, style_metadata)
 
@@ -457,49 +463,92 @@ class TemplateProcessor:
         Returns:
             bytes: 渲染后的 Word 文档字节流
         """
+        logger.info(f"🔍 render_by_id() - template_id: {template_id}")
+
         if not HAS_DOCXTPL:
             raise ImportError("未安装 docxtpl")
 
-        # 尝试多个可能的模板路径
+        # 1. 首先检查预处理后的模板
+        preprocessed_path = self.template_dir / f"{template_id}.docx"
+        logger.info(f"📁 检查预处理模板: {preprocessed_path}, 存在: {preprocessed_path.exists()}")
+
+        if preprocessed_path.exists():
+            try:
+                logger.info(f"✅ 使用预处理模板渲染")
+                doc = DocxTemplate(str(preprocessed_path))
+                render_context = self._build_context(context)
+                doc.render(render_context)
+                bio = io.BytesIO()
+                doc.save(bio)
+                bio.seek(0)
+
+                self.stats['rendered'] += 1
+                logger.info(f"✅ 使用预处理模板渲染成功: {template_id}")
+
+                return bio.read()
+            except Exception as e:
+                logger.warning(f"❌ 预处理模板渲染失败: {e}，尝试动态预处理")
+
+        # 2. 查找原始模板
         possible_paths = [
-            self.template_dir / f"{template_id}.docx",  # preprocessed 目录
             config.BASE_DIR / 'templates' / 'builtin' / f"{template_id}.docx",  # builtin 目录
             config.BASE_DIR / 'templates' / 'uploaded' / f"{template_id}.docx",  # uploaded 目录
             config.BASE_DIR / 'templates' / 'extracted' / f"{template_id}.docx",  # extracted 目录
         ]
 
+        logger.info(f"🔍 查找原始模板...")
         template_path = None
         for path in possible_paths:
+            logger.info(f"   检查: {path}, 存在: {path.exists()}")
             if path.exists():
                 template_path = path
                 break
 
         if not template_path:
+            logger.error(f"❌ 模板不存在: {template_id}")
             raise FileNotFoundError(f"模板不存在: {template_id}")
 
+        logger.info(f"✅ 找到原始模板: {template_path}")
+
+        # 3. 尝试动态预处理
         try:
-            # 1. 加载模板
+            logger.info(f"🔧 尝试动态预处理: {template_path}")
+            with open(template_path, 'rb') as f:
+                file_content = f.read()
+            doc = Document(io.BytesIO(file_content))
+            preprocess_result = self.preprocess(
+                doc,
+                original_filename=f"{template_id}.docx",
+                original_content=file_content
+            )
+
+            if preprocess_result.success:
+                # 使用预处理后的模板渲染
+                logger.info(f"✅ 动态预处理成功: {template_id}, 新 template_id: {preprocess_result.template_id}")
+                return self.render(preprocess_result.template_id, context, style_metadata)
+            else:
+                logger.warning(f"❌ 动态预处理失败: {preprocess_result.error_message}")
+        except Exception as e:
+            logger.warning(f"❌ 动态预处理异常: {e}")
+
+        # 4. 降级：直接使用原始模板（可能无法正确替换变量）
+        try:
+            logger.warning(f"⚠️ 降级：直接使用原始模板渲染（可能无法正确替换变量）: {template_id}")
             doc = DocxTemplate(str(template_path))
-
-            # 2. 构建渲染上下文
             render_context = self._build_context(context)
-
-            # 3. 渲染
             doc.render(render_context)
-
-            # 4. 保存到字节流
             bio = io.BytesIO()
             doc.save(bio)
             bio.seek(0)
 
             self.stats['rendered'] += 1
-            logger.info(f"模板渲染成功 (by_id): {template_id}")
+            logger.info(f"✅ 原始模板渲染完成: {template_id}")
 
             return bio.read()
 
         except Exception as e:
             self.stats['failed'] += 1
-            logger.error(f"模板渲染失败: {e}", exc_info=True)
+            logger.error(f"❌ 模板渲染失败: {e}", exc_info=True)
             raise
 
     def check_template_compatibility(self, template_id: str,

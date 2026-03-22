@@ -16,7 +16,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Tuple
 
-from flask import Flask, request, jsonify, render_template, send_file
+from flask import Flask, request, jsonify, render_template, send_file, make_response
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
@@ -57,6 +57,12 @@ def create_app() -> Flask:
     app.config['SECRET_KEY'] = config.SECRET_KEY
     app.config['MAX_CONTENT_LENGTH'] = config.MAX_CONTENT_LENGTH
     CORS(app)
+
+    # 全局异常处理器 - 防止未捕获的异常导致进程崩溃
+    @app.errorhandler(Exception)
+    def handle_exception(e):
+        logger.error(f"❌ 未捕获的全局异常: {e}", exc_info=True)
+        return jsonify({'error': str(e), 'success': False}), 500
 
     # 初始化组件
     provider = ZhipuProvider()
@@ -132,6 +138,65 @@ def create_app() -> Flask:
     def allowed_file(filename: str) -> bool:
         allowed_extensions = {'.pdf', '.docx', '.doc', '.txt', '.md'}
         return Path(filename).suffix.lower() in allowed_extensions
+
+    def convert_tailored_format(resume: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        转换 AI 返回的嵌套格式为扁平格式（双重保障）
+
+        AI 可能返回:
+        - work_experience[].tailored_bullets: [{content: "...", evidence: {...}}]
+        - projects[].tailored_description: "..."
+
+        代码期望:
+        - work_experience[].tailored: "..."
+        - projects[].tailored: "..."
+        """
+        if not resume:
+            return resume
+
+        logger.info(f"📝 格式转换: 开始处理 tailored_resume")
+
+        # 处理 work_experience: tailored_bullets -> tailored
+        work_exp = resume.get('work_experience', [])
+        if isinstance(work_exp, list):
+            for exp in work_exp:
+                if isinstance(exp, dict) and 'tailored_bullets' in exp and 'tailored' not in exp:
+                    bullets = exp.get('tailored_bullets', [])
+                    if isinstance(bullets, list) and bullets:
+                        contents = []
+                        for b in bullets:
+                            if isinstance(b, dict):
+                                contents.append(b.get('content', ''))
+                            elif isinstance(b, str):
+                                contents.append(b)
+                        merged = '\n'.join(filter(None, contents))
+                        if merged:
+                            exp['tailored'] = merged
+                            logger.info(f"📊 格式转换: work_experience {len(bullets)} bullets -> tailored ({len(merged)} 字符)")
+
+        # 处理 projects: tailored_description -> tailored
+        projects = resume.get('projects', [])
+        if isinstance(projects, list):
+            for proj in projects:
+                if isinstance(proj, dict) and 'tailored_description' in proj and 'tailored' not in proj:
+                    desc = proj.get('tailored_description', '')
+                    if desc:
+                        proj['tailored'] = desc
+                        logger.info(f"📊 格式转换: projects tailored_description -> tailored ({len(desc)} 字符)")
+
+        # 处理 education: tailored_highlights -> tailored
+        education = resume.get('education', [])
+        if isinstance(education, list):
+            for edu in education:
+                if isinstance(edu, dict) and 'tailored_highlights' in edu and 'tailored' not in edu:
+                    highlights = edu.get('tailored_highlights', [])
+                    if isinstance(highlights, list) and highlights:
+                        merged = '\n'.join(filter(None, highlights))
+                        if merged:
+                            edu['tailored'] = merged
+                            logger.info(f"📊 格式转换: education {len(highlights)} highlights -> tailored ({len(merged)} 字符)")
+
+        return resume
 
     def get_sample_resume_data() -> Dict[str, Any]:
         """获取示例简历数据用于模板预览"""
@@ -209,6 +274,13 @@ def create_app() -> Flask:
                 resume_text, jd_content,
                 progress_callback=progress_callback
             )
+
+            # 检查是否有错误
+            if isinstance(result.tailored_resume, dict) and 'error' in result.tailored_resume:
+                error_msg = result.tailored_resume['error']
+                logger.error(f"五阶段流程失败: {error_msg}")
+                raise RuntimeError(error_msg)
+
             return {
                 'tailored_resume': result.tailored_resume,
                 'evidence_report': result.evidence_report,
@@ -238,7 +310,12 @@ def create_app() -> Flask:
 
     @app.route('/')
     def index():
-        return render_template('index.html')
+        # 添加防缓存头，确保浏览器始终加载最新的 HTML 文件
+        response = make_response(render_template('index.html'))
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
 
     @app.route('/favicon.ico')
     def favicon():
@@ -276,6 +353,9 @@ def create_app() -> Flask:
     def tailor_file():
         try:
             start_time = time.time()
+
+            # 记录请求参数
+            logger.info(f"📝 收到定制请求 - template_mode: {request.form.get('template_mode')}, template_id: {request.form.get('template_id')}")
 
             if 'resume' not in request.files:
                 return jsonify({'error': '未上传简历文件'}), 400
@@ -345,6 +425,10 @@ def create_app() -> Flask:
             # 使用统一的定制流程（带进度回调）
             pipeline_result = run_tailor_pipeline(parsed_resume.raw_text, jd_content, session_id)
             tailored_resume = pipeline_result['tailored_resume']
+
+            # 格式转换：将 AI 返回的嵌套格式转为扁平格式（双重保障）
+            tailored_resume = convert_tailored_format(tailored_resume)
+
             analysis_data = pipeline_result['analysis']
             is_v2 = pipeline_result['is_v2']
 
@@ -365,36 +449,50 @@ def create_app() -> Flask:
             task_status[session_id]['message'] = '正在生成文档...'
 
             style = request.form.get('style', 'original')
-            template_id = request.form.get('template_id', '')
-            template_mode = request.form.get('template_mode', 'auto')  # auto/selected/original
+            # 参数兼容性：支持多种命名方式
+            template_id = request.form.get('template_id', '') or request.form.get('templateId', '')
+            template_mode = request.form.get('template_mode', '') or request.form.get('templateMode', 'auto')  # auto/selected/original
             style_preserved = False
             used_template_id = None
 
-            # 根据模板模式选择渲染方式
+            # 根据模板模式选择渲染方式 - 增强日志用于诊断
+            logger.info(f"🔍 模板参数详情:")
+            logger.info(f"   template_mode = '{template_mode}'")
+            logger.info(f"   template_id = '{template_id}'")
+            logger.info(f"   条件判断: selected={template_mode == 'selected' and bool(template_id)}")
+            logger.info(f"🔍 原始表单数据: {list(request.form.keys())}")
+            logger.info(f"🔍 AI生成数据 keys: {list(tailored_resume.keys())}")
+
             if template_mode == 'selected' and template_id:
-                # 用户指定模板
+                # 用户指定模板 - 强制使用选定模板，不降级
                 selected_template = template_manager.get_template(template_id)
-                if selected_template:
-                    try:
-                        word_bytes = template_processor.render(
-                            template_id, tailored_resume, parsed_resume.style_metadata
-                        )
-                        used_template_id = template_id
-                        style_preserved = True
-                        template_manager.increment_use_count(template_id)
-                        logger.info(f"使用选定模板: {selected_template['name']} ({template_id})")
-                    except Exception as e:
-                        logger.warning(f"选定模板渲染失败: {e}")
-                        word_bytes = generator.generate_bytes(
-                            tailored_resume,
-                            style_metadata=parsed_resume.style_metadata
-                        )
-                else:
-                    logger.warning(f"选定模板不存在: {template_id}")
-                    word_bytes = generator.generate_bytes(
-                        tailored_resume,
-                        style_metadata=parsed_resume.style_metadata
+                logger.info(f"获取模板信息: {selected_template.get('name') if selected_template else 'None'}")
+                if not selected_template:
+                    # 模板不存在，返回错误
+                    task_status[session_id]['status'] = 'failed'
+                    task_status[session_id]['message'] = f'选定的模板不存在: {template_id}'
+                    return jsonify({
+                        'error': f'选定的模板不存在: {template_id}',
+                        'error_code': 'TEMPLATE_NOT_FOUND'
+                    }), 400
+
+                try:
+                    logger.info(f"开始渲染模板: {template_id}, 文件路径: {selected_template.get('file_path')}")
+                    word_bytes = template_processor.render(
+                        template_id, tailored_resume, parsed_resume.style_metadata
                     )
+                    used_template_id = template_id
+                    style_preserved = True
+                    template_manager.increment_use_count(template_id)
+                    logger.info(f"✅ 模板渲染成功: {selected_template['name']} ({template_id})")
+                except Exception as e:
+                    logger.error(f"❌ 选定模板渲染失败: {e}", exc_info=True)
+                    task_status[session_id]['status'] = 'failed'
+                    task_status[session_id]['message'] = f'模板渲染失败: {str(e)}'
+                    return jsonify({
+                        'error': f'模板渲染失败: {str(e)}',
+                        'error_code': 'TEMPLATE_RENDER_FAILED'
+                    }), 500
             elif template_mode == 'original' or (template_mode == 'auto' and template_result and template_result.success and original_doc):
                 # 使用原简历样式
                 try:
@@ -450,6 +548,17 @@ def create_app() -> Flask:
             else:
                 coverage = evidence_report.coverage if hasattr(evidence_report, 'coverage') else 0
 
+            # 获取模板名称（用于前端显示）
+            template_name = None
+            if used_template_id:
+                tmpl = template_manager.get_template(used_template_id)
+                if tmpl:
+                    template_name = tmpl.get('name')
+
+            # 获取候选人姓名和职位名称（用于文件名生成）
+            candidate_name = parsed_resume.basic_info.get('name', '')
+            job_title, company = parse_jd_info(jd_content)
+
             result = {
                 'session_id': session_id,
                 'status': 'completed',
@@ -460,14 +569,23 @@ def create_app() -> Flask:
                 'validation_result': 'pass' if coverage >= 0.9 else 'pass_with_review',
                 'style_preserved': style_preserved,
                 'template_id': used_template_id,
+                'template_used': used_template_id is not None,
+                'template_name': template_name,
+                'template_mode': template_mode,
                 'style_info': {
                     'font': parsed_resume.style_metadata.primary_font,
                     'font_size': parsed_resume.style_metadata.body_font_size,
                     'source': parsed_resume.style_metadata.source
                 },
                 'analysis': analysis_data,
-                'pipeline_version': 'v2' if is_v2 else 'v1'
+                'pipeline_version': 'v2' if is_v2 else 'v1',
+                'candidate_name': candidate_name,
+                'job_title': job_title
             }
+
+            # 添加匹配度日志
+            logger.info(f"📊 匹配度数据: score={analysis_data.get('match_score')}, level={analysis_data.get('match_level')}")
+            logger.info(f"📊 完整 analysis: {analysis_data}")
 
             # V2 版本添加额外信息
             if is_v2:
@@ -477,7 +595,6 @@ def create_app() -> Flask:
             cache_manager.set(parsed_resume.raw_text, jd_content, result)
             save_tailored_file(word_bytes, session_id)
 
-            job_title, company = parse_jd_info(jd_content)
             has_experience = bool(parsed_resume.work_experience)
             db.save_history(session_id, {
                 'candidate_name': parsed_resume.basic_info.get('name', ''),
@@ -501,9 +618,17 @@ def create_app() -> Flask:
         except Exception as e:
             logger.error(f"文件定制失败: {e}", exc_info=True)
             error_str = str(e)
-            if "resume_analysis" in error_str or "{" in error_str:
+            # 更详细的错误分类
+            if "429" in error_str or "rate" in error_str.lower() or "限制" in error_str or "并发" in error_str:
+                return jsonify({'error': 'API调用频率超限，请等待1-2分钟后重试'}), 429
+            elif "resume_analysis" in error_str or "{" in error_str:
                 return jsonify({'error': 'AI响应解析失败，请重试'}), 500
-            return jsonify({'error': str(e)}), 500
+            elif "timeout" in error_str.lower():
+                return jsonify({'error': 'AI处理超时，请稍后重试'}), 504
+            elif "connection" in error_str.lower():
+                return jsonify({'error': 'AI服务连接失败，请检查网络'}), 503
+            logger.error(f"文件定制详细错误类型: {type(e).__name__}, 消息: {error_str}")
+            return jsonify({'error': f'处理失败: {str(e)}'}), 500
 
     @app.route('/api/tailor/text', methods=['POST'])
     def tailor_text():
@@ -517,6 +642,8 @@ def create_app() -> Flask:
 
             resume_text = data.get('resume_text', '')
             jd_content = data.get('jd_text', '')
+            template_mode = data.get('template_mode', 'auto')
+            template_id = data.get('template_id', '')
 
             if not resume_text:
                 return jsonify({'error': '未提供简历内容'}), 400
@@ -546,6 +673,10 @@ def create_app() -> Flask:
             # 使用统一的定制流程（带进度回调）
             pipeline_result = run_tailor_pipeline(resume_text, jd_content, session_id)
             tailored_resume = pipeline_result['tailored_resume']
+
+            # 格式转换：将 AI 返回的嵌套格式转为扁平格式（双重保障）
+            tailored_resume = convert_tailored_format(tailored_resume)
+
             analysis_data = pipeline_result['analysis']
             is_v2 = pipeline_result['is_v2']
 
@@ -565,7 +696,58 @@ def create_app() -> Flask:
             task_status[session_id]['progress'] = 98
             task_status[session_id]['message'] = '正在生成文档...'
 
-            word_bytes = generator.generate_bytes(tailored_resume)
+            # 根据模板模式选择渲染方式
+            logger.info(f"引导模式 - 模板模式: {template_mode}, template_id: {template_id}")
+            used_template_id = None
+            style_preserved = False
+
+            if template_mode == 'selected' and template_id:
+                # 用户指定模板 - 强制使用选定模板，不降级
+                selected_template = template_manager.get_template(template_id)
+                if not selected_template:
+                    # 模板不存在，返回错误
+                    task_status[session_id]['status'] = 'failed'
+                    task_status[session_id]['message'] = f'选定的模板不存在: {template_id}'
+                    return jsonify({
+                        'error': f'选定的模板不存在: {template_id}',
+                        'error_code': 'TEMPLATE_NOT_FOUND'
+                    }), 400
+
+                try:
+                    word_bytes = template_processor.render(
+                        template_id, tailored_resume, None
+                    )
+                    used_template_id = template_id
+                    style_preserved = True
+                    template_manager.increment_use_count(template_id)
+                    logger.info(f"引导模式使用指定模板: {selected_template.get('name')}")
+                except Exception as e:
+                    logger.error(f"模板渲染失败: {e}", exc_info=True)
+                    task_status[session_id]['status'] = 'failed'
+                    task_status[session_id]['message'] = f'模板渲染失败: {str(e)}'
+                    return jsonify({
+                        'error': f'模板渲染失败: {str(e)}',
+                        'error_code': 'TEMPLATE_RENDER_FAILED'
+                    }), 500
+            else:
+                # auto 模式或 original 模式：使用默认模板或生成器
+                default_template = template_manager.get_default_template()
+                if default_template:
+                    try:
+                        word_bytes = template_processor.render(
+                            default_template['template_id'],
+                            tailored_resume,
+                            None
+                        )
+                        used_template_id = default_template['template_id']
+                        style_preserved = True
+                        template_manager.increment_use_count(default_template['template_id'])
+                        logger.info(f"引导模式使用默认模板: {default_template['name']}")
+                    except Exception as e:
+                        logger.warning(f"默认模板渲染失败: {e}")
+                        word_bytes = generator.generate_bytes(tailored_resume)
+                else:
+                    word_bytes = generator.generate_bytes(tailored_resume)
 
             task_status[session_id]['progress'] = 100
             task_status[session_id]['status'] = 'completed'
@@ -578,6 +760,13 @@ def create_app() -> Flask:
             else:
                 coverage = evidence_report.coverage if hasattr(evidence_report, 'coverage') else 0
 
+            # 获取模板名称
+            template_name = None
+            if used_template_id:
+                tmpl = template_manager.get_template(used_template_id)
+                if tmpl:
+                    template_name = tmpl.get('name')
+
             result = {
                 'session_id': session_id,
                 'status': 'completed',
@@ -586,9 +775,18 @@ def create_app() -> Flask:
                 'tailored_word': base64.b64encode(word_bytes).decode('utf-8'),
                 'evidence_report': evidence_report if isinstance(evidence_report, dict) else evidence_report.to_dict(),
                 'validation_result': 'pass' if coverage >= 0.9 else 'pass_with_review',
+                'style_preserved': style_preserved,
+                'template_id': used_template_id,
+                'template_used': used_template_id is not None,
+                'template_name': template_name,
+                'template_mode': template_mode,
                 'analysis': analysis_data,
                 'pipeline_version': 'v2' if is_v2 else 'v1'
             }
+
+            # 添加匹配度日志
+            logger.info(f"📊 匹配度数据: score={analysis_data.get('match_score')}, level={analysis_data.get('match_level')}")
+            logger.info(f"📊 完整 analysis: {analysis_data}")
 
             # V2 版本添加额外信息
             if is_v2:
@@ -630,9 +828,17 @@ def create_app() -> Flask:
         except Exception as e:
             logger.error(f"文本定制失败: {e}", exc_info=True)
             error_str = str(e)
-            if "resume_analysis" in error_str or "{" in error_str:
+            # 更详细的错误分类
+            if "429" in error_str or "rate" in error_str.lower() or "限制" in error_str or "并发" in error_str:
+                return jsonify({'error': 'API调用频率超限，请等待1-2分钟后重试'}), 429
+            elif "resume_analysis" in error_str or "{" in error_str:
                 return jsonify({'error': 'AI响应解析失败，请重试'}), 500
-            return jsonify({'error': str(e)}), 500
+            elif "timeout" in error_str.lower():
+                return jsonify({'error': 'AI处理超时，请稍后重试'}), 504
+            elif "connection" in error_str.lower():
+                return jsonify({'error': 'AI服务连接失败，请检查网络'}), 503
+            logger.error(f"文本定制详细错误类型: {type(e).__name__}, 消息: {error_str}")
+            return jsonify({'error': f'处理失败: {str(e)}'}), 500
 
     @app.route('/api/tailor/form', methods=['POST'])
     def tailor_form():
@@ -668,6 +874,10 @@ def create_app() -> Flask:
             # 使用统一的定制流程（带进度回调）
             pipeline_result = run_tailor_pipeline(resume_text, jd_content, session_id)
             tailored_resume = pipeline_result['tailored_resume']
+
+            # 格式转换：将 AI 返回的嵌套格式转为扁平格式（双重保障）
+            tailored_resume = convert_tailored_format(tailored_resume)
+
             analysis_data = pipeline_result['analysis']
             is_v2 = pipeline_result['is_v2']
 
@@ -711,6 +921,10 @@ def create_app() -> Flask:
                 'analysis': analysis_data,
                 'pipeline_version': 'v2' if is_v2 else 'v1'
             }
+
+            # 添加匹配度日志
+            logger.info(f"📊 匹配度数据: score={analysis_data.get('match_score')}, level={analysis_data.get('match_level')}")
+            logger.info(f"📊 完整 analysis: {analysis_data}")
 
             # V2 版本添加额外信息
             if is_v2:
@@ -929,30 +1143,49 @@ def create_app() -> Flask:
         """获取模板的 HTML 预览（使用示例数据渲染）"""
         import mammoth
 
+        logger.info(f"🔍 预览请求 - template_id: {template_id}")
+
         template = template_manager.get_template(template_id)
+        logger.info(f"📂 模板信息: name={template.get('name') if template else 'N/A'}, "
+                   f"source={template.get('source') if template else 'N/A'}, "
+                   f"file_path={template.get('file_path') if template else 'N/A'}")
+
         if not template:
+            logger.error(f"❌ 模板不存在: {template_id}")
             return jsonify({'error': '模板不存在', 'success': False}), 404
 
         file_path = template.get('file_path', '')
         if not file_path:
+            logger.error(f"❌ 模板文件路径不存在: {template_id}")
             return jsonify({'error': '模板文件路径不存在', 'success': False}), 404
 
         try:
             # 1. 获取示例数据
             sample_data = get_sample_resume_data()
+            logger.info(f"📝 示例数据准备完成")
 
             # 2. 使用模板处理器渲染
             try:
+                logger.info(f"🎨 尝试渲染模板: {template_id}")
                 word_bytes = template_processor.render(template_id, sample_data)
+                logger.info(f"✅ 模板渲染成功，字节数: {len(word_bytes)}")
             except Exception as render_error:
-                logger.warning(f"模板渲染失败，使用原始文件: {render_error}")
+                logger.warning(f"❌ 模板渲染失败: {render_error}，降级到原始文件")
                 # 降级：直接读取原始文件
                 with open(file_path, 'rb') as f:
                     word_bytes = f.read()
+                logger.info(f"📄 使用原始文件，字节数: {len(word_bytes)}")
 
-            # 3. 转换为 HTML
-            result = mammoth.convert_to_html(io.BytesIO(word_bytes))
-            html = result.value
+            # 3. 转换为 HTML（带错误处理）
+            try:
+                result = mammoth.convert_to_html(io.BytesIO(word_bytes))
+                html = result.value
+                if result.messages:
+                    logger.warning(f"mammoth 转换警告: {result.messages}")
+            except Exception as mammoth_error:
+                logger.error(f"❌ mammoth 转换失败: {mammoth_error}", exc_info=True)
+                # 降级：返回简单的纯文本预览
+                html = f"<div style='padding:20px;color:#666;'><h3>预览生成失败</h3><p>错误信息: {str(mammoth_error)}</p><p>模板 ID: {template_id}</p><p>建议：请尝试下载模板后使用 Word 查看。</p></div>"
 
             # 4. 返回带样式的 HTML
             styled_html = f"""
@@ -977,6 +1210,51 @@ def create_app() -> Flask:
         except Exception as e:
             logger.error(f"生成 HTML 预览失败: {e}", exc_info=True)
             return jsonify({'error': str(e), 'success': False}), 500
+
+    @app.route('/api/preview/tailored', methods=['POST'])
+    def preview_tailored_resume():
+        """将定制后的简历（base64 docx）转换为 HTML 预览"""
+        logger.info("🔄 /api/preview/tailored endpoint called")
+        import mammoth
+
+        data = request.get_json()
+        if not data or 'tailored_word' not in data:
+            return jsonify({'error': '未提供简历数据', 'success': False}), 400
+
+        try:
+            word_bytes = base64.b64decode(data['tailored_word'])
+
+            result = mammoth.convert_to_html(io.BytesIO(word_bytes))
+            html = result.value
+
+            if result.messages:
+                logger.warning(f"mammoth 转换警告: {result.messages}")
+
+            # 返回带样式的 HTML
+            styled_html = f"""
+            <style>
+                body {{ font-family: 'Microsoft YaHei', Arial, sans-serif; padding: 20px; line-height: 1.6; color: #333; }}
+                h1, h2, h3 {{ color: #2c5282; margin-top: 16px; margin-bottom: 8px; }}
+                h1 {{ font-size: 24px; border-bottom: 2px solid #2c5282; padding-bottom: 8px; }}
+                h2 {{ font-size: 18px; }}
+                p {{ margin: 8px 0; }}
+                table {{ border-collapse: collapse; width: 100%; margin: 12px 0; }}
+                td, th {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+                ul, ol {{ margin: 8px 0; padding-left: 24px; }}
+                li {{ margin: 4px 0; }}
+                strong {{ color: #1a365d; }}
+            </style>
+            {html}
+            """
+
+            return jsonify({'html': styled_html, 'success': True})
+
+        except Exception as e:
+            logger.error(f"预览转换失败: {e}", exc_info=True)
+            return jsonify({
+                'error': f'预览生成失败: {str(e)}',
+                'success': False
+            }), 500
 
     @app.route('/api/templates/<template_id>/compatibility', methods=['POST'])
     def check_template_compatibility(template_id: str):

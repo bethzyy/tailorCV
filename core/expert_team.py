@@ -24,6 +24,7 @@ from pathlib import Path
 from dataclasses import dataclass, field
 
 from .config import config
+from .match_scorer import MatchScorer, MatchScoreResult
 
 if TYPE_CHECKING:
     from .model_manager import ModelManager
@@ -113,6 +114,9 @@ class MatchAnalysisResult(StageResult):
     content_to_weaken: List[str] = field(default_factory=list)
     recruiter_tips: List[str] = field(default_factory=list)
     differentiation_strategy: Dict[str, Any] = field(default_factory=dict)
+    # 新增：分数计算详情
+    score_breakdown: Dict[str, int] = field(default_factory=dict)
+    requirements_analysis: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -800,11 +804,21 @@ class ExpertTeamV2:
 
     def _extract_json(self, text: str) -> Optional[str]:
         """从文本中提取 JSON"""
+        if not text:
+            logger.warning("📝 _extract_json: 输入文本为空")
+            return None
+
         # 尝试匹配 ```json ... ``` 格式
         json_pattern = r'```json\s*([\s\S]*?)\s*```'
         match = re.search(json_pattern, text)
         if match:
-            return match.group(1)
+            json_str = match.group(1)
+            try:
+                json.loads(json_str)
+                logger.info("📝 _extract_json: 使用 ```json 模式成功提取")
+                return json_str
+            except json.JSONDecodeError as e:
+                logger.warning(f"📝 _extract_json: ```json 模式提取内容不是有效JSON: {e}")
 
         # 尝试使用栈匹配提取平衡JSON
         stack = []
@@ -818,8 +832,16 @@ class ExpertTeamV2:
                 if stack:
                     stack.pop()
                     if not stack and start_idx is not None:
-                        return text[start_idx:i+1]
+                        json_str = text[start_idx:i+1]
+                        try:
+                            json.loads(json_str)
+                            logger.info("📝 _extract_json: 使用栈匹配模式成功提取")
+                            return json_str
+                        except json.JSONDecodeError as e:
+                            logger.warning(f"📝 _extract_json: 栈匹配提取内容不是有效JSON: {e}")
+                            continue
 
+        logger.warning(f"📝 _extract_json: 所有模式都失败，响应前200字符: {text[:200]}")
         return None
 
     def _safe_get_dict(self, data: dict, key: str, default=None) -> dict:
@@ -835,6 +857,78 @@ class ExpertTeamV2:
             default = []
         value = data.get(key, default)
         return value if isinstance(value, list) else default
+
+    def _convert_tailored_format(self, resume: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        转换 AI 返回的嵌套格式为扁平格式
+
+        AI 可能返回:
+        - work_experience[].tailored_bullets: [{content: "...", evidence: {...}}]
+        - projects[].tailored_description: "..."
+
+        代码期望:
+        - work_experience[].tailored: "..."
+        - projects[].tailored: "..."
+        """
+        if not resume:
+            return resume
+
+        # 处理 work_experience: tailored_bullets -> tailored
+        work_exp = resume.get('work_experience', [])
+        if isinstance(work_exp, list):
+            for exp in work_exp:
+                if isinstance(exp, dict) and 'tailored_bullets' in exp and 'tailored' not in exp:
+                    bullets = exp.get('tailored_bullets', [])
+                    if isinstance(bullets, list) and bullets:
+                        contents = []
+                        for b in bullets:
+                            if isinstance(b, dict):
+                                contents.append(b.get('content', ''))
+                            elif isinstance(b, str):
+                                contents.append(b)
+                        merged = '\n'.join(filter(None, contents))
+                        if merged:
+                            exp['tailored'] = merged
+                            logger.info(f"📊 格式转换: work_experience {len(bullets)} bullets -> tailored ({len(merged)} 字符)")
+
+        # 处理 projects: tailored_description -> tailored
+        projects = resume.get('projects', [])
+        if isinstance(projects, list):
+            for proj in projects:
+                if isinstance(proj, dict) and 'tailored_description' in proj and 'tailored' not in proj:
+                    desc = proj.get('tailored_description', '')
+                    if desc:
+                        proj['tailored'] = desc
+                        logger.info(f"📊 格式转换: projects tailored_description -> tailored ({len(desc)} 字符)")
+
+        # 处理 education: tailored_highlights -> tailored
+        education = resume.get('education', [])
+        if isinstance(education, list):
+            for edu in education:
+                if isinstance(edu, dict) and 'tailored_highlights' in edu and 'tailored' not in edu:
+                    highlights = edu.get('tailored_highlights', [])
+                    if isinstance(highlights, list) and highlights:
+                        merged = '\n'.join(filter(None, highlights))
+                        if merged:
+                            edu['tailored'] = merged
+                            logger.info(f"📊 格式转换: education {len(highlights)} highlights -> tailored ({len(merged)} 字符)")
+
+        return resume
+
+    def _create_fallback_tailored_resume(self, parsed_resume: ParseResumeResult) -> Dict[str, Any]:
+        """创建降级定制简历（当AI改写失败时使用）"""
+        logger.info("📝 启用降级方案：使用原始简历数据")
+        return {
+            'basic_info': parsed_resume.basic_info or {},
+            'summary': parsed_resume.summary or {},
+            'education': parsed_resume.education or [],
+            'work_experience': parsed_resume.work_experience or [],
+            'projects': parsed_resume.projects or [],
+            'skills': parsed_resume.skills or {},
+            'awards': parsed_resume.awards or [],
+            'certificates': parsed_resume.certificates or [],
+            'self_evaluation': parsed_resume.self_evaluation or ''
+        }
 
     # ==================== 各阶段实现 ====================
 
@@ -970,8 +1064,35 @@ class ExpertTeamV2:
             json_str = self._extract_json(response)
             if json_str:
                 data = json.loads(json_str)
-                result.match_score = data.get('match_score', 50)
-                result.match_level = data.get('match_level', '未知')
+
+                # 使用分数计算器计算匹配分数
+                jd_checklist = data.get('jd_requirements_checklist', [])
+                if jd_checklist:
+                    scorer = MatchScorer()
+                    resume_dict = {
+                        'basic_info': parsed_resume.basic_info,
+                        'education': parsed_resume.education,
+                        'work_experience': parsed_resume.work_experience,
+                        'projects': parsed_resume.projects,
+                        'skills': parsed_resume.skills,
+                    }
+                    ai_analysis = {
+                        'strengths': data.get('strengths', []),
+                        'gaps': data.get('gaps', []),
+                    }
+                    score_result = scorer.calculate_score(jd_checklist, resume_dict, ai_analysis)
+                    result.match_score = score_result.score
+                    result.match_level = score_result.level
+                    result.score_breakdown = score_result.breakdown
+                    result.requirements_analysis = score_result.to_dict()
+                    logger.info(f"分数计算器结果: score={score_result.score}, level={score_result.level}")
+                    logger.info(f"分数明细: {score_result.breakdown}")
+                else:
+                    # 降级：使用 AI 返回的分数
+                    result.match_score = data.get('match_score', 50)
+                    result.match_level = data.get('match_level', '未知')
+                    logger.info(f"使用AI原始分数: score={result.match_score}")
+
                 result.rewrite_intensity = data.get('rewrite_intensity', 'L1')
                 result.strengths = self._safe_get_list(data, 'strengths')
                 result.gaps = self._safe_get_list(data, 'gaps')
@@ -1055,19 +1176,49 @@ class ExpertTeamV2:
 
         try:
             json_str = self._extract_json(response)
+            logger.info(f"📝 阶段3 JSON提取: {'成功' if json_str else '失败'}")
             if json_str:
                 data = json.loads(json_str)
+                logger.info(f"📝 阶段3 data keys: {list(data.keys())}")
                 result.tailored_resume = self._safe_get_dict(data, 'tailored_resume')
+                logger.info(f"📝 阶段3 tailored_resume keys: {list(result.tailored_resume.keys()) if result.tailored_resume else '空'}")
+                # 格式转换：将 AI 返回的嵌套格式转为扁平格式
+                result.tailored_resume = self._convert_tailored_format(result.tailored_resume)
                 result.change_log = self._safe_get_list(data, 'change_log')
                 result.keyword_coverage = self._safe_get_dict(data, 'keyword_coverage')
                 result.success = True
             else:
                 result.success = False
                 result.error = "无法从响应中提取JSON"
+                logger.warning(f"📝 阶段3 原始响应前500字符: {response[:500] if response else '空'}")
+
+                # 降级：使用解析后的简历数据创建基础结果
+                result.tailored_resume = self._create_fallback_tailored_resume(parsed_resume)
+                result.tailored_resume = self._convert_tailored_format(result.tailored_resume)
+                result.change_log = [{
+                    "section": "fallback",
+                    "original": "AI改写失败",
+                    "tailored": "使用原始简历数据",
+                    "reason": "JSON提取失败，启用降级方案",
+                    "rewrite_type": "fallback"
+                }]
+                logger.info("📝 阶段3 启用降级方案：使用原始简历数据")
         except Exception as e:
             logger.error(f"内容改写失败: {e}")
             result.success = False
             result.error = str(e)
+
+            # 降级：使用解析后的简历数据创建基础结果
+            result.tailored_resume = self._create_fallback_tailored_resume(parsed_resume)
+            result.tailored_resume = self._convert_tailored_format(result.tailored_resume)
+            result.change_log = [{
+                "section": "fallback",
+                "original": "AI改写异常",
+                "tailored": "使用原始简历数据",
+                "reason": f"异常: {str(e)}",
+                "rewrite_type": "fallback"
+            }]
+            logger.info("📝 阶段3 启用降级方案（异常）：使用原始简历数据")
 
         logger.info(f"阶段3完成: success={result.success}")
         return result
@@ -1319,7 +1470,10 @@ class ExpertTeamV2:
                 'strengths': result.match_result.strengths,
                 'gaps': result.match_result.gaps,
                 'recruiter_tips': result.match_result.recruiter_tips,
-                'differentiation_strategy': result.match_result.differentiation_strategy
+                'differentiation_strategy': result.match_result.differentiation_strategy,
+                # 新增：分数计算明细
+                'score_breakdown': result.match_result.score_breakdown,
+                'requirements_analysis': result.match_result.requirements_analysis
             }
 
             logger.info(f"五阶段定制完成: tokens={result.total_tokens}, quality_score={result.quality_result.overall_score}")

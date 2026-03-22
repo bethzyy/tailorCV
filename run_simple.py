@@ -40,4 +40,6 @@ if __name__ == '__main__':
     print(f"  模型: 智谱AI (GLM-5)")
     print(f"{'='*50}\n")
 
+    # use_reloader=False: 禁用自动重载，避免长时间AI请求被文件变化中断导致 ERR_CONNECTION_RESET
+    # 注意：修改代码后需手动重启，或使用 restart.bat 脚本
     app.run(host='0.0.0.0', port=port, debug=True, use_reloader=False)
