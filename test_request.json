@@ -1,5 +1,0 @@
-{
-  "resume": "张三\n电话: 13800138000\n邮箱: zhangsan@example.com\n\n工作经历:\n2020-2023 ABC公司 软件工程师\n- 负责后端API开发\n- 参与系统架构设计\n- 优化数据库查询性能\n\n项目经历:\n电商系统\n- 使用Python Django开发\n- 实现了用户认证模块\n\n技能:\nPython, Django, MySQL, Redis",
-  "jd": "高级Python开发工程师\n\n职位要求:\n- 5年以上Python开发经验\n- 熟悉Django/Flask框架\n- 有高并发系统设计经验\n- 良好的沟通能力",
-  "template_id": "classic_professional"
-}

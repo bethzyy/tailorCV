@@ -59,7 +59,14 @@ def create_app() -> Flask:
                 template_folder='../web/templates/simple',
                 static_folder='../web/static')
 
-    app.config['SECRET_KEY'] = config.SECRET_KEY
+    # SECRET_KEY 安全处理：为空时自动生成随机 key
+    secret_key = config.SECRET_KEY
+    if not secret_key:
+        import secrets
+        secret_key = secrets.token_hex(32)
+        print("[WARNING] SECRET_KEY 未设置，已自动生成临时密钥（重启后 session 失效）")
+        print("  生产环境请设置环境变量 SECRET_KEY")
+    app.config['SECRET_KEY'] = secret_key
     app.config['MAX_CONTENT_LENGTH'] = config.MAX_CONTENT_LENGTH
     CORS(app)
 
@@ -72,11 +79,10 @@ def create_app() -> Flask:
             response.headers['Expires'] = '0'
         return response
 
-    # 限流初始化
+    # 限流初始化（不设全局默认限流，仅在敏感端点单独限流）
     limiter = Limiter(
         app=app,
         key_func=get_remote_address,
-        default_limits=[config.RATE_LIMIT_ANON],
         storage_uri='memory://'
     )
 
@@ -1448,21 +1454,27 @@ def create_app() -> Flask:
             return jsonify({'error': '模板文件路径不存在', 'success': False}), 404
 
         try:
-            # 1. 获取示例数据
-            sample_data = get_sample_resume_data()
-            logger.info(f"📝 示例数据准备完成")
+            # 判断模板来源：提取/上传的模板直接展示原始内容，内置模板用示例数据渲染
+            source = template.get('source', '')
+            is_builtin = source == 'builtin'
 
-            # 2. 使用模板处理器渲染
-            try:
-                logger.info(f"🎨 尝试渲染模板: {template_id}")
-                word_bytes = template_processor.render(template_id, sample_data)
-                logger.info(f"✅ 模板渲染成功，字节数: {len(word_bytes)}")
-            except Exception as render_error:
-                logger.warning(f"❌ 模板渲染失败: {render_error}，降级到原始文件")
-                # 降级：直接读取原始文件
+            if is_builtin:
+                # 内置模板：用示例数据渲染，展示模板效果
+                sample_data = get_sample_resume_data()
+                logger.info(f"📝 内置模板，使用示例数据渲染")
+                try:
+                    logger.info(f"🎨 尝试渲染模板: {template_id}")
+                    word_bytes = template_processor.render(template_id, sample_data)
+                    logger.info(f"✅ 模板渲染成功，字节数: {len(word_bytes)}")
+                except Exception as render_error:
+                    logger.warning(f"❌ 模板渲染失败: {render_error}，降级到原始文件")
+                    with open(file_path, 'rb') as f:
+                        word_bytes = f.read()
+            else:
+                # 提取/上传模板：直接展示原始 docx 内容
+                logger.info(f"📄 提取/上传模板，直接展示原始内容: {file_path}")
                 with open(file_path, 'rb') as f:
                     word_bytes = f.read()
-                logger.info(f"📄 使用原始文件，字节数: {len(word_bytes)}")
 
             # 3. 转换为 HTML（带错误处理）
             try:
