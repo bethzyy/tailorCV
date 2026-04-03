@@ -1,6 +1,8 @@
 # Web Framework
 Flask>=2.3.0
 Flask-CORS>=4.0.0
+Flask-Login>=0.6.3
+Flask-Limiter>=3.5.0
 
 # PDF Processing
 pdfplumber>=0.10.0
@@ -24,6 +26,8 @@ fuzzywuzzy>=0.18.0
 # Utilities
 python-dotenv>=1.0.0
 requests>=2.31.0
+wechatpayv3>=1.2.0  # 微信支付SDK (可选，生产环境需要)
+alipay-sdk-python>=3.0.0  # 支付宝当面付SDK
 
 # Database
 # SQLite is built-in Python

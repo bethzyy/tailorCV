@@ -123,8 +123,61 @@ class Config:
     SECRET_KEY = os.getenv('SECRET_KEY', 'tailorcv-secret-key-change-in-production')
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB 最大文件大小
 
+    # ==================== 认证配置 ====================
+    # 邮箱验证码
+    EMAIL_SMTP_HOST = os.getenv('EMAIL_SMTP_HOST', 'smtp.qq.com')  # QQ邮箱SMTP
+    EMAIL_SMTP_PORT = int(os.getenv('EMAIL_SMTP_PORT', 465))
+    EMAIL_SMTP_USER = os.getenv('EMAIL_SMTP_USER', '')  # 发件邮箱
+    EMAIL_SMTP_PASSWORD = os.getenv('EMAIL_SMTP_PASSWORD', '')  # SMTP授权码（不是邮箱密码）
+    EMAIL_FROM_NAME = os.getenv('EMAIL_FROM_NAME', 'tailorCV 智能简历')
+    CODE_EXPIRE_SECONDS = int(os.getenv('CODE_EXPIRE_SECONDS', 300))  # 验证码5分钟过期
+
+    # 登录有效期选项（秒）
+    LOGIN_DURATION_OPTIONS = {
+        'session': {'label': '本次有效', 'seconds': 0},        # 浏览器关闭即失效
+        '7d': {'label': '7天内免登录', 'seconds': 7 * 86400},
+        '30d': {'label': '30天内免登录', 'seconds': 30 * 86400},
+        'forever': {'label': '永久登录', 'seconds': 365 * 86400},  # 1年cookie
+    }
+
+    # ==================== 支付配置 ====================
+    # 默认支付方式（优先使用）
+    DEFAULT_PAYMENT_PROVIDER = os.getenv('DEFAULT_PAYMENT_PROVIDER', 'alipay')
+
+    # 支付宝当面付
+    ALIPAY_APP_ID = os.getenv('ALIPAY_APP_ID', '')
+    ALIPAY_PRIVATE_KEY_PATH = os.getenv('ALIPAY_PRIVATE_KEY_PATH', '')
+    ALIPAY_PUBLIC_KEY_PATH = os.getenv('ALIPAY_PUBLIC_KEY_PATH', '')
+    ALIPAY_NOTIFY_URL = os.getenv('ALIPAY_NOTIFY_URL', '')
+    ALIPAY_SANDBOX = os.getenv('ALIPAY_SANDBOX', 'true').lower() == 'true'
+
+    # 微信支付
+    WECHAT_APP_ID = os.getenv('WECHAT_APP_ID', '')
+    WECHAT_MCH_ID = os.getenv('WECHAT_MCH_ID', '')
+    WECHAT_API_KEY_V3 = os.getenv('WECHAT_API_KEY_V3', '')
+    WECHAT_CERT_PATH = os.getenv('WECHAT_CERT_PATH', '')
+    WECHAT_KEY_PATH = os.getenv('WECHAT_KEY_PATH', '')
+    WECHAT_NOTIFY_URL = os.getenv('WECHAT_NOTIFY_URL', '')
+    WECHAT_SANDBOX = os.getenv('WECHAT_SANDBOX', 'true').lower() == 'true'
+
+    # ==================== 套餐配置 ====================
+    PLANS = {
+        'free': {'name': '免费体验', 'price': 0, 'quota': 1, 'daily_limit': 1},
+        'pack5': {'name': '按次包', 'price': 9.9, 'quota': 5, 'daily_limit': 5},
+        'monthly': {'name': '月卡', 'price': 29.9, 'quota': -1, 'daily_limit': 10},  # -1 = 无限
+        'quarterly': {'name': '季卡', 'price': 59.9, 'quota': -1, 'daily_limit': 20},
+    }
+
+    # ==================== 开发者配置 ====================
+    # 开发者邮箱列表（不受配额限制，用于开发测试）
+    DEV_EMAILS = [e.strip() for e in os.getenv('DEV_EMAILS', '').split(',') if e.strip()]
+
+    # ==================== 限流配置 ====================
+    RATE_LIMIT_DEFAULT = os.getenv('RATE_LIMIT_DEFAULT', '30 per hour')
+    RATE_LIMIT_ANON = os.getenv('RATE_LIMIT_ANON', '10 per hour')
+
     # ==================== 端口配置 ====================
-    SIMPLE_APP_PORT = int(os.getenv('SIMPLE_APP_PORT', 6001))
+    SIMPLE_APP_PORT = int(os.getenv('SIMPLE_APP_PORT', 6003))
     MULTI_APP_PORT = int(os.getenv('MULTI_APP_PORT', 5002))
     HUB_APP_PORT = int(os.getenv('HUB_APP_PORT', 5000))
 

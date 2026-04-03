@@ -569,10 +569,51 @@
         }
 
         .progress-text {
-            text-align: center;
-            margin-top: 8px;
             color: #666;
             font-size: 14px;
+            flex: 1;
+        }
+
+        .progress-info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 8px;
+            padding: 0 10px;
+        }
+
+        .progress-time {
+            color: #888;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .tips-carousel {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            margin-top: 16px;
+            padding: 12px 16px;
+            background: linear-gradient(135deg, #f0f4ff 0%, #fef3e8 100%);
+            border-radius: 10px;
+            border: 1px solid #e8ecf4;
+        }
+
+        .tips-icon {
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .tips-content {
+            color: #555;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .tips-title {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 4px;
         }
 
         /* 结果显示 */
@@ -1362,15 +1403,38 @@
                 <p>单模型快速生成 <span class="model-badge">智谱AI GLM-5</span></p>
             </div>
             <div class="nav-links">
-                <a href="http://localhost:5000" class="nav-link">
-                    <span>🏠</span>
-                    <span>返回首页</span>
-                </a>
-                <button class="shutdown-btn" onclick="shutdownServer()">🔌 关闭服务</button>
+                <!-- 用户状态（登录后显示） -->
+                <span id="userQuotaBadge" style="display:none; padding:6px 14px; background:rgba(255,255,255,0.2); border-radius:20px; color:white; font-size:13px;">
+                    剩余 <strong id="quotaDisplay">0</strong> 次
+                </span>
+                <button id="userCenterBtn" style="display:none;" class="nav-link" onclick="showUserCenter()">👤 我的</button>
+                <!-- 登录按钮（未登录时显示） -->
+                <button id="loginBtn" class="nav-link" onclick="showLoginModal()">📧 登录</button>
             </div>
         </header>
 
-        <div class="main-card">
+        <div class="main-card" id="mainCard" style="position:relative;">
+            <!-- 未登录引导遮罩 -->
+            <div id="loginGuide" style="position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.92); z-index:100; border-radius:16px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;">
+                <div style="font-size:64px; margin-bottom:20px;">✨</div>
+                <h2 style="color:#333; margin-bottom:10px; font-size:24px;">tailorCV 智能简历定制</h2>
+                <p style="color:#666; font-size:15px; max-width:360px; line-height:1.8; margin-bottom:30px;">
+                    AI 深度分析职位需求，基于你真实简历生成定制化简历<br>
+                    零编造，每一条修改都有据可查
+                </p>
+                <div style="display:flex; gap:12px; flex-wrap:wrap; justify-content:center;">
+                    <button onclick="showLoginModal()"
+                        style="padding:14px 40px; background:linear-gradient(135deg,#667eea,#764ba2); color:white; border:none; border-radius:12px; font-size:17px; cursor:pointer; box-shadow:0 4px 15px rgba(102,126,234,0.4);">
+                        📧 邮箱登录 / 注册
+                    </button>
+                    <button onclick="closeLoginGuide()"
+                        style="padding:14px 28px; background:#f0f0f0; color:#666; border:none; border-radius:12px; font-size:15px; cursor:pointer;">
+                        先看看
+                    </button>
+                </div>
+                <p style="color:#bbb; font-size:12px; margin-top:20px;">新用户免费体验 1 次</p>
+            </div>
+
             <!-- 进度指示器 -->
             <div class="progress-indicator">
                 <div class="progress-step active" id="step1">
@@ -1649,7 +1713,7 @@
             </div>
 
             <!-- 模板预览模态框 -->
-            <div class="modal-overlay" id="templatePreviewModal">
+            <div class="modal-overlay" id="templatePreviewModal" style="display:none;">
                 <div class="modal-content" style="max-width: 800px;">
                     <div class="modal-header">
                         <span class="modal-title" id="previewTemplateName">模板预览</span>
@@ -1730,7 +1794,15 @@
                 <div class="progress-bar">
                     <div class="progress-fill" id="progressFill"></div>
                 </div>
-                <div class="progress-text" id="progressText">正在处理...</div>
+                <div class="progress-info-row">
+                    <div class="progress-text" id="progressText">正在处理...</div>
+                    <div class="progress-time" id="estimatedTime">预计剩余 --:--</div>
+                </div>
+                <!-- 教育性内容轮播 -->
+                <div class="tips-carousel" id="tipsCarousel">
+                    <div class="tips-icon">💡</div>
+                    <div class="tips-content" id="tipsContent">正在为你定制专属简历，请稍候...</div>
+                </div>
             </div>
 
             <!-- 结果显示 -->
@@ -1838,7 +1910,190 @@
         </footer>
     </div>
 
+    <!-- ==================== 登录弹窗 ==================== -->
+    <div id="loginModal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width:400px;">
+            <button class="modal-close" onclick="closeLoginModal()">&times;</button>
+            <h3 style="margin-bottom:20px; text-align:center;">📧 邮箱登录</h3>
+            <div id="loginStep1">
+                <div style="margin-bottom:16px;">
+                    <input type="email" id="loginEmail" placeholder="请输入邮箱地址"
+                        style="width:100%; padding:12px 16px; border:1px solid #ddd; border-radius:10px; font-size:16px; outline:none;">
+                </div>
+                <div style="margin-bottom:16px;">
+                    <label style="font-size:13px; color:#666; display:block; margin-bottom:6px;">登录有效期</label>
+                    <div style="display:flex; gap:8px;">
+                        <label style="flex:1; cursor:pointer;">
+                            <input type="radio" name="loginDuration" value="session" checked style="margin-right:4px;">
+                            <span style="font-size:13px;">本次有效</span>
+                        </label>
+                        <label style="flex:1; cursor:pointer;">
+                            <input type="radio" name="loginDuration" value="7d" style="margin-right:4px;">
+                            <span style="font-size:13px;">7天</span>
+                        </label>
+                        <label style="flex:1; cursor:pointer;">
+                            <input type="radio" name="loginDuration" value="30d" style="margin-right:4px;">
+                            <span style="font-size:13px;">30天</span>
+                        </label>
+                        <label style="flex:1; cursor:pointer;">
+                            <input type="radio" name="loginDuration" value="forever" style="margin-right:4px;">
+                            <span style="font-size:13px;">永久</span>
+                        </label>
+                    </div>
+                </div>
+                <button id="sendCodeBtn" onclick="handleSendCode()"
+                    style="width:100%; padding:12px; background:linear-gradient(135deg,#667eea,#764ba2); color:white; border:none; border-radius:10px; font-size:16px; cursor:pointer;">
+                    获取验证码
+                </button>
+            </div>
+            <div id="loginStep2" style="display:none;">
+                <p style="text-align:center; color:#666; margin-bottom:16px;">验证码已发送至 <strong id="maskedEmail"></strong></p>
+                <div style="margin-bottom:16px;">
+                    <input type="text" id="loginCode" placeholder="请输入6位验证码" maxlength="6"
+                        style="width:100%; padding:12px 16px; border:1px solid #ddd; border-radius:10px; font-size:20px; text-align:center; letter-spacing:8px; outline:none;"
+                        oninput="this.value=this.value.replace(/\D/g,'')">
+                </div>
+                <button onclick="handleLogin()"
+                    style="width:100%; padding:12px; background:linear-gradient(135deg,#667eea,#764ba2); color:white; border:none; border-radius:10px; font-size:16px; cursor:pointer;">
+                    登录 / 注册
+                </button>
+                <p style="text-align:center; margin-top:12px;">
+                    <a href="javascript:void(0)" onclick="resetLogin()" style="color:#667eea; font-size:13px;">重新发送</a>
+                </p>
+            </div>
+            <p style="text-align:center; color:#999; font-size:12px; margin-top:20px;">
+                登录即表示同意 <a href="#" style="color:#667eea;">用户协议</a> 和 <a href="#" style="color:#667eea;">隐私政策</a>
+            </p>
+        </div>
+    </div>
+
+    <!-- ==================== 支付弹窗 ==================== -->
+    <div id="paymentModal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width:480px;">
+            <button class="modal-close" onclick="closePaymentModal()">&times;</button>
+            <h3 style="margin-bottom:20px; text-align:center;">💎 购买套餐</h3>
+            <div id="planList" style="display:flex; flex-direction:column; gap:12px;">
+                <!-- 套餐卡片由JS动态生成 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 支付二维码弹窗 ==================== -->
+    <div id="qrcodeModal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width:400px; text-align:center;">
+            <button class="modal-close" onclick="closeQrcodeModal()">&times;</button>
+            <h3 style="margin-bottom:10px;" id="qrcodeTitle">扫码支付</h3>
+            <p style="color:#e74c3c; font-size:24px; font-weight:bold; margin-bottom:16px;" id="qrcodeAmount"></p>
+            <!-- 支付方式切换 -->
+            <div id="providerTabs" style="display:flex; gap:0; margin-bottom:16px; border:1px solid #eee; border-radius:8px; overflow:hidden;">
+            </div>
+            <!-- 二维码区域 -->
+            <div id="qrcodeContainer" style="display:inline-block; padding:16px; border:2px solid #eee; border-radius:12px; min-width:200px; min-height:200px;">
+                <img id="qrcodeImage" style="display:block; margin:0 auto; width:200px; height:200px;" alt="支付二维码" />
+                <p style="color:#666; font-size:13px; margin-top:8px;">请使用<span id="qrcodeProviderName">支付宝</span>扫码支付</p>
+                <p style="color:#666; font-size:13px;">订单号: <span id="qrcodeOrderNo"></span></p>
+            </div>
+            <div id="sandboxPayBtn" style="display:none; margin-top:16px;">
+                <button onclick="handleSimulatePayment()" style="padding:10px 24px; background:#27ae60; color:white; border:none; border-radius:8px; cursor:pointer; font-size:14px;">
+                    [沙箱] 模拟支付成功
+                </button>
+            </div>
+            <p style="color:#999; font-size:12px; margin-top:12px;" id="paymentStatusText">等待支付...</p>
+        </div>
+    </div>
+
+    <!-- ==================== 用户中心弹窗 ==================== -->
+    <div id="userCenterModal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width:500px;">
+            <button class="modal-close" onclick="closeUserCenter()">&times;</button>
+            <h3 style="margin-bottom:20px;">👤 个人中心</h3>
+            <div id="userCenterContent">
+                <div style="padding:16px; background:#f8f9fa; border-radius:10px; margin-bottom:16px;">
+                    <p style="margin-bottom:8px;">📧 <span id="ucEmail"></span></p>
+                    <p style="margin-bottom:8px;">📦 当前套餐: <strong id="ucPlanName">免费体验</strong></p>
+                    <p style="margin-bottom:8px;">📊 剩余次数: <strong id="ucQuota">0</strong></p>
+                    <p id="ucExpiresRow" style="display:none;">📅 到期时间: <span id="ucExpires"></span></p>
+                </div>
+                <div style="display:flex; gap:10px; margin-bottom:16px;">
+                    <button onclick="closeUserCenter(); showPaymentModal();"
+                        style="flex:1; padding:10px; background:linear-gradient(135deg,#667eea,#764ba2); color:white; border:none; border-radius:8px; cursor:pointer;">
+                        💎 购买套餐
+                    </button>
+                    <button onclick="handleLogout()"
+                        style="flex:1; padding:10px; background:#f0f0f0; color:#333; border:none; border-radius:8px; cursor:pointer;">
+                        退出登录
+                    </button>
+                </div>
+                <h4 style="margin-bottom:10px;">📋 使用记录</h4>
+                <div id="ucHistoryList" style="max-height:200px; overflow-y:auto;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 配额不足弹窗 ==================== -->
+    <div id="quotaExhaustedModal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width:380px; text-align:center;">
+            <button class="modal-close" onclick="closeQuotaModal()">&times;</button>
+            <div style="font-size:48px; margin-bottom:16px;">😅</div>
+            <h3 style="margin-bottom:10px;">配额已用完</h3>
+            <p style="color:#666; margin-bottom:20px;" id="quotaExhaustedMsg">免费体验次数已用完，购买套餐继续使用</p>
+            <button onclick="closeQuotaModal(); showPaymentModal();"
+                style="padding:12px 32px; background:linear-gradient(135deg,#667eea,#764ba2); color:white; border:none; border-radius:10px; font-size:16px; cursor:pointer;">
+                💎 购买套餐
+            </button>
+        </div>
+    </div>
+
+    <!-- 弹窗通用样式 -->
+    <style>
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); z-index: 9999;
+            display: none; align-items: center; justify-content: center;
+            animation: fadeIn 0.2s;
+        }
+        .modal-content {
+            background: white; border-radius: 16px; padding: 30px;
+            position: relative; width: 90%; max-height: 90vh; overflow-y: auto;
+            animation: slideUp 0.3s;
+        }
+        .modal-close {
+            position: absolute; top: 12px; right: 16px;
+            background: none; border: none; font-size: 24px;
+            cursor: pointer; color: #999;
+        }
+        .modal-close:hover { color: #333; }
+        .plan-card {
+            padding: 16px; border: 2px solid #eee; border-radius: 12px;
+            cursor: pointer; transition: all 0.2s; position: relative;
+        }
+        .plan-card:hover { border-color: #667eea; }
+        .plan-card.selected { border-color: #667eea; background: #f0f3ff; }
+        .plan-card.recommended::after {
+            content: '推荐'; position: absolute; top: -10px; right: 12px;
+            background: #e74c3c; color: white; font-size: 12px;
+            padding: 2px 8px; border-radius: 8px;
+        }
+        .plan-card .plan-name { font-size: 16px; font-weight: bold; }
+        .plan-card .plan-price { font-size: 24px; color: #e74c3c; font-weight: bold; }
+        .plan-card .plan-price small { font-size: 13px; color: #999; font-weight: normal; }
+        .plan-card .plan-desc { font-size: 13px; color: #666; margin-top: 4px; }
+        .provider-tab {
+            flex: 1; padding: 10px; text-align: center; cursor: pointer;
+            font-size: 14px; transition: all 0.2s; border: none; background: #f9f9f9;
+        }
+        .provider-tab:hover { background: #f0f0f0; }
+        .provider-tab.active { background: #1677ff; color: white; }
+        .provider-tab .tab-icon { margin-right: 4px; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    </style>
+
     <script>
+        // 防止 Chrome bfcache（前进后退缓存）导致显示旧页面
+        window.addEventListener('pageshow', function(event) {
+            if (event.persisted) location.reload();
+        });
         let currentMode = 'upload';
 
         // ==================== 用户参数持久化 ====================
@@ -2113,11 +2368,11 @@
 
             // 保存当前预览的模板ID
             modal.dataset.templateId = templateId;
-            modal.classList.add('show');
+            modal.style.display = 'flex';
         }
 
         function hideTemplatePreview() {
-            document.getElementById('templatePreviewModal').classList.remove('show');
+            document.getElementById('templatePreviewModal').style.display = 'none';
         }
 
         // 从预览模态框选择模板
@@ -2352,8 +2607,8 @@
             }
         }
 
-        // 页面加载时加载模板
-        loadTemplates();
+        // 页面加载时加载模板（延迟到引导关闭后）
+        // loadTemplates(); // 不再自动加载，由 closeLoginGuide() 触发
 
         // ==================== 原有功能 ====================
 
@@ -2575,6 +2830,65 @@
         let currentSessionId = null;
         let statusInterval = null;
 
+        // ===== 预估时间功能 =====
+        const stageDurations = {
+            0: { name: '简历解析', avgSeconds: 15 },
+            1: { name: 'JD分析', avgSeconds: 15 },
+            2: { name: '匹配分析', avgSeconds: 15 },
+            3: { name: '内容改写', avgSeconds: 20 },
+            4: { name: '质量验证', avgSeconds: 10 }
+        };
+
+        function updateEstimatedTime(currentStage) {
+            let remaining = 0;
+            // 从当前阶段开始计算剩余时间
+            for (let i = Math.max(0, currentStage); i <= 4; i++) {
+                remaining += stageDurations[i].avgSeconds;
+            }
+            // 根据当前进度调整
+            const minutes = Math.floor(remaining / 60);
+            const seconds = remaining % 60;
+            const timeStr = minutes > 0
+                ? `${minutes}:${seconds.toString().padStart(2, '0')}`
+                : `${seconds}秒`;
+            document.getElementById('estimatedTime').textContent = `预计剩余 ${timeStr}`;
+        }
+
+        // ===== 教育性内容轮播 =====
+        const tips = [
+            { title: "简历关键词优化", content: "在简历中使用JD里的专业术语，能让ATS系统和HR更快识别你的匹配度。" },
+            { title: "量化你的成就", content: "用具体数字描述成果，如'提升30%效率'比'提升效率'更有说服力。" },
+            { title: "STAR法则", content: "描述经历时遵循Situation(情境)-Task(任务)-Action(行动)-Result(结果)结构。" },
+            { title: "研究目标公司", content: "了解公司的产品、文化和近期动态，在简历中体现你对公司的了解。" },
+            { title: "突出相关技能", content: "针对不同职位调整技能排序，把最相关的技能放在最显眼的位置。" },
+            { title: "简洁有力", content: "HR平均只花6-8秒浏览一份简历，确保关键信息一目了然。" },
+            { title: "行动动词开头", content: "用'主导''创建''优化'等强动词开头，展现你的主动性和影响力。" },
+            { title: "准备面试素材", content: "每段工作经历都准备2-3个可以展开的故事，为面试做铺垫。" }
+        ];
+        let currentTipIndex = 0;
+        let tipsInterval = null;
+
+        function showTip(index) {
+            const tip = tips[index];
+            const tipsContent = document.getElementById('tipsContent');
+            tipsContent.innerHTML = `<div class="tips-title">${tip.title}</div>${tip.content}`;
+        }
+
+        function startTipsCarousel() {
+            showTip(0);
+            tipsInterval = setInterval(() => {
+                currentTipIndex = (currentTipIndex + 1) % tips.length;
+                showTip(currentTipIndex);
+            }, 8000); // 每8秒切换一次
+        }
+
+        function stopTipsCarousel() {
+            if (tipsInterval) {
+                clearInterval(tipsInterval);
+                tipsInterval = null;
+            }
+        }
+
         // 更新步骤指示器
         function updateStepIndicator(currentStage) {
             for (let i = 0; i <= 4; i++) {
@@ -2610,9 +2924,10 @@
                     progressText.textContent = status.message;
                 }
 
-                // 更新步骤指示器
+                // 更新步骤指示器和预估时间
                 if (status.stage !== undefined) {
                     updateStepIndicator(status.stage);
+                    updateEstimatedTime(status.stage);
                 }
 
                 // 如果完成，停止轮询
@@ -2665,6 +2980,10 @@
                 clearInterval(statusInterval);
                 statusInterval = null;
             }
+
+            // 启动预估时间和教育性内容
+            updateEstimatedTime(0);
+            startTipsCarousel();
 
             try {
                 progressText.textContent = '正在上传...';
@@ -2760,6 +3079,20 @@
 
                 const result = await response.json();
 
+                // 处理配额不足和需要登录
+                if (result.quota_exceeded) {
+                    submitBtn.disabled = false;
+                    progressContainer.classList.remove('show');
+                    showQuotaExhausted(result.error || '配额已用完，购买套餐继续使用');
+                    return;
+                }
+                if (result.need_login) {
+                    submitBtn.disabled = false;
+                    progressContainer.classList.remove('show');
+                    showLoginModal();
+                    return;
+                }
+
                 if (result.error) {
                     throw new Error(result.error);
                 }
@@ -2774,6 +3107,8 @@
                 progressFill.style.width = '100%';
                 progressText.textContent = '完成！';
                 updateStepIndicator(5); // 所有步骤完成
+                stopTipsCarousel(); // 停止教育性内容轮播
+                document.getElementById('estimatedTime').textContent = '已完成';
 
                 showResult(result);
 
@@ -2795,6 +3130,8 @@
                     clearInterval(statusInterval);
                     statusInterval = null;
                 }
+                // 清理教育性内容轮播
+                stopTipsCarousel();
             }
         });
 
@@ -3072,6 +3409,458 @@
             updateProgressIndicator(1);
             window.scrollTo({ top: 0, behavior: 'smooth' });
         });
+
+        // ==================== 用户认证系统 ====================
+
+        let currentUser = null;
+        let currentQuota = null;
+
+        // 页面加载时检查登录状态
+        async function checkAuthStatus() {
+            try {
+                const resp = await fetch('/api/auth/me');
+                if (resp.ok) {
+                    const data = await resp.json();
+                    if (data.success) {
+                        currentUser = data.user;
+                        currentQuota = data.quota;
+                        updateUIForLoggedIn();
+                        closeLoginGuide();
+                    }
+                }
+                // 401 = 未登录，静默处理，不报错
+            } catch (e) {
+                // 网络错误，静默处理
+            }
+        }
+
+        function closeLoginGuide() {
+            const guide = document.getElementById('loginGuide');
+            if (guide) guide.style.display = 'none';
+            // 引导关闭后再加载模板
+            if (typeof loadTemplates === 'function' && templates.length === 0) {
+                loadTemplates();
+            }
+        }
+
+        function updateUIForLoggedIn() {
+            document.getElementById('loginBtn').style.display = 'none';
+            document.getElementById('userCenterBtn').style.display = '';
+            document.getElementById('userQuotaBadge').style.display = '';
+            updateQuotaBadge();
+        }
+
+        function updateUIForLoggedOut() {
+            currentUser = null;
+            currentQuota = null;
+            document.getElementById('loginBtn').style.display = '';
+            document.getElementById('userCenterBtn').style.display = 'none';
+            document.getElementById('userQuotaBadge').style.display = 'none';
+        }
+
+        function updateQuotaBadge() {
+            if (!currentQuota) return;
+            const el = document.getElementById('quotaDisplay');
+            if (currentQuota.is_developer) {
+                el.textContent = '无限';
+            } else if (currentQuota.plan_type === 'monthly' || currentQuota.plan_type === 'quarterly') {
+                el.textContent = `${currentQuota.daily_used || 0}/${currentQuota.daily_limit || 0}(今日)`;
+            } else {
+                el.textContent = currentQuota.remaining >= 0 ? currentQuota.remaining : '无限';
+            }
+        }
+
+        // 登录弹窗
+        function showLoginModal() {
+            document.getElementById('loginModal').style.display = 'flex';
+            document.getElementById('loginStep1').style.display = '';
+            document.getElementById('loginStep2').style.display = 'none';
+            document.getElementById('loginEmail').value = '';
+            document.getElementById('loginEmail').focus();
+        }
+
+        function closeLoginModal() {
+            document.getElementById('loginModal').style.display = 'none';
+        }
+
+        function resetLogin() {
+            document.getElementById('loginStep1').style.display = '';
+            document.getElementById('loginStep2').style.display = 'none';
+            document.getElementById('loginEmail').value = '';
+            document.getElementById('loginCode').value = '';
+        }
+
+        let sendCodeCooldown = 0;
+        async function handleSendCode() {
+            const email = document.getElementById('loginEmail').value.trim();
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                alert('请输入正确的邮箱地址');
+                return;
+            }
+            if (sendCodeCooldown > 0) return;
+
+            const btn = document.getElementById('sendCodeBtn');
+            btn.disabled = true;
+            btn.textContent = '发送中...';
+
+            try {
+                const resp = await fetch('/api/auth/send-code', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    document.getElementById('loginStep1').style.display = 'none';
+                    document.getElementById('loginStep2').style.display = '';
+                    // 隐藏邮箱前缀
+                    const parts = email.split('@');
+                    document.getElementById('maskedEmail').textContent =
+                        parts[0].slice(0, 2) + '***@' + parts[1];
+                    document.getElementById('loginCode').focus();
+                    // 倒计时
+                    sendCodeCooldown = 60;
+                    const timer = setInterval(() => {
+                        sendCodeCooldown--;
+                        if (sendCodeCooldown <= 0) {
+                            clearInterval(timer);
+                            btn.disabled = false;
+                            btn.textContent = '重新发送';
+                        } else {
+                            btn.textContent = `${sendCodeCooldown}s 后重发`;
+                        }
+                    }, 1000);
+                } else {
+                    alert(data.error || '发送失败');
+                    btn.disabled = false;
+                    btn.textContent = '获取验证码';
+                }
+            } catch (e) {
+                alert('网络错误');
+                btn.disabled = false;
+                btn.textContent = '获取验证码';
+            }
+        }
+
+        async function handleLogin() {
+            const email = document.getElementById('loginEmail').value.trim();
+            const code = document.getElementById('loginCode').value.trim();
+            const duration = document.querySelector('input[name="loginDuration"]:checked').value;
+            if (!code || code.length !== 6) {
+                alert('请输入6位验证码');
+                return;
+            }
+
+            try {
+                const resp = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, code, duration })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    currentUser = data.user;
+                    currentQuota = data.quota;
+                    closeLoginModal();
+                    closeLoginGuide();
+                    updateUIForLoggedIn();
+                    if (data.user.is_new_user) {
+                        alert('注册成功！您有 1 次免费体验机会');
+                    }
+                } else {
+                    alert(data.error || '登录失败');
+                }
+            } catch (e) {
+                alert('网络错误');
+            }
+        }
+
+        async function handleLogout() {
+            try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+            } catch (e) {}
+            closeUserCenter();
+            updateUIForLoggedOut();
+        }
+
+        // ==================== 支付系统 ====================
+
+        let selectedPlanType = null;
+        let currentOrderNo = null;
+        let paymentPollingTimer = null;
+        let paymentProviders = [];      // 可用支付方式列表
+        let selectedProviderId = '';     // 当前选中的支付方式
+
+        async function showPaymentModal() {
+            document.getElementById('paymentModal').style.display = 'flex';
+            try {
+                // 并行获取套餐和支付方式
+                const [plansResp, provResp] = await Promise.all([
+                    fetch('/api/payment/plans'),
+                    fetch('/api/payment/providers')
+                ]);
+                const plansData = await plansResp.json();
+                const provData = await provResp.json();
+                if (plansData.success) renderPlans(plansData.plans);
+                if (provData.success) {
+                    paymentProviders = provData.providers;
+                    selectedProviderId = paymentProviders.length > 0 ? paymentProviders[0].provider_id : '';
+                }
+            } catch (e) {
+                alert('获取套餐信息失败');
+            }
+        }
+
+        function closePaymentModal() {
+            document.getElementById('paymentModal').style.display = 'none';
+        }
+
+        function renderPlans(plans) {
+            const container = document.getElementById('planList');
+            container.innerHTML = plans.filter(p => p.price > 0).map(p => `
+                <div class="plan-card ${p.type === 'monthly' ? 'recommended' : ''}"
+                     onclick="selectPlan('${p.type}')" id="plan_${p.type}">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <div class="plan-name">${p.name}</div>
+                            <div class="plan-desc">${p.quota > 0 ? p.quota + '次定制' : '不限次定制'} · 每日上限${p.daily_limit}次</div>
+                        </div>
+                        <div class="plan-price">¥${p.price}<small>/${p.type === 'quarterly' ? '季' : p.type === 'monthly' ? '月' : ''}</small></div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function selectPlan(planType) {
+            selectedPlanType = planType;
+            document.querySelectorAll('.plan-card').forEach(c => c.classList.remove('selected'));
+            document.getElementById('plan_' + planType).classList.add('selected');
+
+            try {
+                const resp = await fetch('/api/payment/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ plan_type: planType, provider: selectedProviderId })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    currentOrderNo = data.order_no;
+                    selectedProviderId = data.provider || selectedProviderId;
+                    closePaymentModal();
+                    showQrcodeModal(data);
+                } else {
+                    alert(data.error || '创建订单失败');
+                }
+            } catch (e) {
+                alert('网络错误');
+            }
+        }
+
+        function showQrcodeModal(data) {
+            document.getElementById('qrcodeModal').style.display = 'flex';
+            document.getElementById('qrcodeTitle').textContent = data.plan_name;
+            document.getElementById('qrcodeAmount').textContent = '¥' + data.amount;
+            document.getElementById('qrcodeOrderNo').textContent = data.order_no;
+            document.getElementById('paymentStatusText').textContent = '等待支付...';
+
+            // 渲染支付方式切换 tab
+            renderProviderTabs(data.provider || selectedProviderId);
+
+            // 显示二维码图片（后端生成的 base64）
+            const providerName = paymentProviders.find(p => p.provider_id === (data.provider || selectedProviderId))?.provider_name || '';
+            document.getElementById('qrcodeProviderName').textContent = providerName;
+            if (data.qr_image) {
+                document.getElementById('qrcodeImage').src = 'data:image/png;base64,' + data.qr_image;
+                document.getElementById('qrcodeImage').style.display = 'block';
+            } else {
+                document.getElementById('qrcodeImage').alt = '二维码生成失败';
+                document.getElementById('qrcodeImage').style.display = 'none';
+            }
+
+            // 沙箱模式显示模拟支付按钮
+            document.getElementById('sandboxPayBtn').style.display = data.sandbox ? '' : 'none';
+
+            // 轮询支付状态
+            startPaymentPolling(data.order_no);
+        }
+
+        function renderProviderTabs(currentProviderId) {
+            const container = document.getElementById('providerTabs');
+            if (paymentProviders.length <= 1) {
+                // 只有一个支付方式，不显示切换 tab
+                container.style.display = 'none';
+                return;
+            }
+            container.style.display = 'flex';
+            container.innerHTML = paymentProviders.map(p => {
+                const icons = { alipay: '🔷', wechat: '💬' };
+                const icon = icons[p.provider_id] || '💳';
+                const active = p.provider_id === currentProviderId ? 'active' : '';
+                return `<button class="provider-tab ${active}" onclick="switchProvider('${p.provider_id}')">
+                    <span class="tab-icon">${icon}</span>${p.provider_name}
+                </button>`;
+            }).join('');
+        }
+
+        async function switchProvider(providerId) {
+            if (providerId === selectedProviderId || !selectedPlanType) return;
+            selectedProviderId = providerId;
+
+            // 更新 tab 样式
+            document.querySelectorAll('.provider-tab').forEach(tab => tab.classList.remove('active'));
+            event.target.closest('.provider-tab').classList.add('active');
+
+            // 重新创建订单
+            try {
+                const resp = await fetch('/api/payment/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ plan_type: selectedPlanType, provider: providerId })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    currentOrderNo = data.order_no;
+                    document.getElementById('qrcodeOrderNo').textContent = data.order_no;
+                    document.getElementById('paymentStatusText').textContent = '等待支付...';
+                    if (data.qr_image) {
+                        document.getElementById('qrcodeImage').src = 'data:image/png;base64,' + data.qr_image;
+                        document.getElementById('qrcodeImage').style.display = 'block';
+                    }
+                    document.getElementById('sandboxPayBtn').style.display = data.sandbox ? '' : 'none';
+                    // 重启轮询
+                    if (paymentPollingTimer) clearInterval(paymentPollingTimer);
+                    startPaymentPolling(data.order_no);
+                } else {
+                    alert(data.error || '切换支付方式失败');
+                }
+            } catch (e) {
+                alert('网络错误');
+            }
+        }
+
+        function closeQrcodeModal() {
+            document.getElementById('qrcodeModal').style.display = 'none';
+            if (paymentPollingTimer) {
+                clearInterval(paymentPollingTimer);
+                paymentPollingTimer = null;
+            }
+        }
+
+        function startPaymentPolling(orderNo) {
+            if (paymentPollingTimer) clearInterval(paymentPollingTimer);
+            let attempts = 0;
+            paymentPollingTimer = setInterval(async () => {
+                attempts++;
+                if (attempts > 60) { // 最多轮询3分钟
+                    clearInterval(paymentPollingTimer);
+                    document.getElementById('paymentStatusText').textContent = '支付超时，请重新购买';
+                    return;
+                }
+                try {
+                    const resp = await fetch(`/api/payment/query/${orderNo}`);
+                    const data = await resp.json();
+                    if (data.success && data.status === 'paid') {
+                        clearInterval(paymentPollingTimer);
+                        paymentPollingTimer = null;
+                        document.getElementById('paymentStatusText').textContent = '支付成功！';
+                        currentQuota = data.quota || currentQuota;
+                        updateQuotaBadge();
+                        setTimeout(() => {
+                            closeQrcodeModal();
+                            alert('支付成功！套餐已激活');
+                        }, 1000);
+                    }
+                } catch (e) {}
+            }, 3000);
+        }
+
+        async function handleSimulatePayment() {
+            if (!currentOrderNo) return;
+            try {
+                const resp = await fetch('/api/payment/simulate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ order_no: currentOrderNo })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    currentQuota = data.quota;
+                    updateQuotaBadge();
+                    document.getElementById('paymentStatusText').textContent = '支付成功！';
+                    setTimeout(() => {
+                        closeQrcodeModal();
+                    }, 1000);
+                } else {
+                    alert(data.error || '模拟支付失败');
+                }
+            } catch (e) {
+                alert('网络错误');
+            }
+        }
+
+        // ==================== 用户中心 ====================
+
+        function showUserCenter() {
+            document.getElementById('userCenterModal').style.display = 'flex';
+            if (currentUser) {
+                document.getElementById('ucEmail').textContent = currentUser.email || currentUser.phone || '';
+            }
+            if (currentQuota) {
+                document.getElementById('ucPlanName').textContent = currentQuota.plan_name || '免费体验';
+                if (currentQuota.is_developer) {
+                    document.getElementById('ucQuota').textContent = '无限次（开发者）';
+                    document.getElementById('ucExpiresRow').style.display = 'none';
+                } else if (currentQuota.plan_type === 'monthly' || currentQuota.plan_type === 'quarterly') {
+                    document.getElementById('ucQuota').textContent = `${currentQuota.daily_used || 0}/${currentQuota.daily_limit || 0}(今日)`;
+                    document.getElementById('ucExpiresRow').style.display = '';
+                    document.getElementById('ucExpires').textContent = currentQuota.plan_expires_at || '';
+                } else {
+                    document.getElementById('ucQuota').textContent = currentQuota.remaining + '次';
+                    document.getElementById('ucExpiresRow').style.display = 'none';
+                }
+            }
+            // 加载使用历史
+            loadUserHistory();
+        }
+
+        function closeUserCenter() {
+            document.getElementById('userCenterModal').style.display = 'none';
+        }
+
+        async function loadUserHistory() {
+            try {
+                const resp = await fetch('/api/user/history');
+                const data = await resp.json();
+                const container = document.getElementById('ucHistoryList');
+                if (data.success && data.records.length > 0) {
+                    container.innerHTML = data.records.map(r => `
+                        <div style="padding:10px; border-bottom:1px solid #f0f0f0; font-size:13px;">
+                            <span style="color:#666;">${r.created_at || ''}</span>
+                            ${r.job_title ? `<span style="margin-left:8px;">🎯 ${r.job_title}</span>` : ''}
+                            ${r.match_score ? `<span style="margin-left:8px; color:#27ae60;">${r.match_score}分</span>` : ''}
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = '<p style="color:#999; font-size:13px; text-align:center;">暂无使用记录</p>';
+                }
+            } catch (e) {
+                document.getElementById('ucHistoryList').innerHTML = '<p style="color:#999;">加载失败</p>';
+            }
+        }
+
+        // ==================== 配额不足处理 ====================
+
+        function showQuotaExhausted(msg) {
+            document.getElementById('quotaExhaustedMsg').textContent = msg || '配额已用完，购买套餐继续使用';
+            document.getElementById('quotaExhaustedModal').style.display = 'flex';
+        }
+
+        function closeQuotaModal() {
+            document.getElementById('quotaExhaustedModal').style.display = 'none';
+        }
+
+        // ==================== 初始化 ====================
+        checkAuthStatus();
     </script>
 </body>
 </html>

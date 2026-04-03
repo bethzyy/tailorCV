@@ -40,6 +40,12 @@ core/
 ├── evidence_tracker.py # 依据追踪器
 ├── template_processor.py   # 模板处理器
 ├── structure_detector.py   # 结构检测器
+├── auth.py               # 用户认证（邮箱验证码登录）
+├── quota.py              # 配额管理
+├── payment/              # 支付模块（provider 模式）
+│   ├── base.py           # 支付抽象基类
+│   ├── alipay.py         # 支付宝当面付
+│   └── wechat.py         # 微信支付（预留）
 └── providers/          # AI 提供商适配器
     ├── zhipu_provider.py   # 智谱AI
     └── alibaba_provider.py # 阿里云
@@ -104,6 +110,10 @@ MULTI_APP_PORT = 5002    # 多模型工具
 | 端点 | 方法 | 说明 |
 |------|------|------|
 | `/api/health` | GET | 健康检查 |
+| `/api/payment/create` | POST | 创建支付订单 |
+| `/api/payment/providers` | GET | 获取可用支付方式 |
+| `/api/payment/notify/alipay` | POST | 支付宝回调 |
+| `/api/payment/notify/wechat` | POST | 微信支付回调 |
 | `/api/tailor/file` | POST | 文件上传模式 |
 | `/api/tailor/form` | POST | 引导输入模式 |
 | `/api/shutdown` | POST | 关闭服务 |
@@ -120,6 +130,7 @@ MULTI_APP_PORT = 5002    # 多模型工具
 
 | Date | Change |
 |------|--------|
+| 2026-04-02 | 支付系统重构：provider 模式、支付宝当面付接入、微信支付预留、前端支付方式切换 |
 | 2026-03-18 | 模板管理功能：6个内置模板、模板选择器UI、模板API、预览图生成 |
 | 2026-03-17 | 五阶段进度优化：后台线程模拟进度更新，每1.5秒反馈一次，解决长时间无响应问题 |
 | 2026-03-16 | 统一关闭按钮样式（工具选择器与简版工具风格一致） |
@@ -127,4 +138,4 @@ MULTI_APP_PORT = 5002    # 多模型工具
 
 ---
 
-*Last updated: 2026-03-18*
+*Last updated: 2026-04-02*

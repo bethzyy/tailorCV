@@ -139,6 +139,78 @@ class Database:
                 )
             ''')
 
+            # 用户表（支持邮箱和手机号两种登录方式）
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    phone TEXT DEFAULT '',
+                    email TEXT DEFAULT '',
+                    nickname TEXT DEFAULT '',
+                    plan_type TEXT DEFAULT 'free',
+                    quota_total INTEGER DEFAULT 1,
+                    quota_used INTEGER DEFAULT 0,
+                    plan_expires_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_login_at TIMESTAMP,
+                    is_active INTEGER DEFAULT 1,
+                    UNIQUE(email)
+                )
+            ''')
+
+            # 手机号唯一约束：仅对非空手机号生效
+            cursor.execute('''
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_users_phone
+                ON users(phone) WHERE phone != ''
+            ''')
+
+            # 订单表
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS orders (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    order_no TEXT UNIQUE NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    plan_type TEXT NOT NULL,
+                    plan_name TEXT NOT NULL,
+                    amount REAL NOT NULL,
+                    status TEXT DEFAULT 'pending',
+                    provider TEXT DEFAULT '',
+                    transaction_id TEXT DEFAULT '',
+                    wechat_transaction_id TEXT,
+                    paid_at TIMESTAMP,
+                    expires_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+            ''')
+
+            # 订单表迁移：新增字段
+            cursor.execute("PRAGMA table_info(orders)")
+            existing_columns = [col[1] for col in cursor.fetchall()]
+            if 'provider' not in existing_columns:
+                cursor.execute("ALTER TABLE orders ADD COLUMN provider TEXT DEFAULT ''")
+                logger.info("订单表新增 provider 字段")
+            if 'transaction_id' not in existing_columns:
+                cursor.execute("ALTER TABLE orders ADD COLUMN transaction_id TEXT DEFAULT ''")
+                logger.info("订单表新增 transaction_id 字段")
+                # 迁移旧数据
+                cursor.execute('''
+                    UPDATE orders SET transaction_id = wechat_transaction_id
+                    WHERE transaction_id = '' AND wechat_transaction_id IS NOT NULL
+                ''')
+
+            # 使用记录表
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS usage_records (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    task_id TEXT,
+                    session_id TEXT,
+                    tokens_used INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+            ''')
+
             # 创建索引
             cursor.execute('''
                 CREATE INDEX IF NOT EXISTS idx_history_created_at
@@ -163,6 +235,26 @@ class Database:
             cursor.execute('''
                 CREATE INDEX IF NOT EXISTS idx_templates_is_default
                 ON templates(is_default)
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_users_phone
+                ON users(phone)
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_users_email
+                ON users(email)
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_orders_user_id
+                ON orders(user_id)
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_orders_status
+                ON orders(status)
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_usage_records_user_id
+                ON usage_records(user_id)
             ''')
 
             logger.info(f"数据库初始化完成: {self.db_path}")
@@ -640,7 +732,237 @@ class Database:
             cursor.execute('SELECT SUM(tokens_used) as total_tokens FROM history')
             stats['total_tokens'] = cursor.fetchone()['total_tokens'] or 0
 
+            # 用户统计
+            cursor.execute('SELECT COUNT(*) as count FROM users')
+            stats['user_count'] = cursor.fetchone()['count']
+
+            # 收入统计
+            cursor.execute("SELECT COALESCE(SUM(amount), 0) as total FROM orders WHERE status = 'paid'")
+            stats['total_revenue'] = cursor.fetchone()['total']
+
             return stats
+
+    # ==================== 用户管理 ====================
+
+    def create_user(self, phone: str = '', email: str = '', nickname: str = '') -> Optional[int]:
+        """
+        创建新用户（支持手机号或邮箱）
+
+        Args:
+            phone: 手机号（可选）
+            email: 邮箱（可选）
+            nickname: 昵称
+
+        Returns:
+            用户ID，失败返回None
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute('''
+                    INSERT INTO users (phone, email, nickname, plan_type, quota_total, quota_used)
+                    VALUES (?, ?, ?, 'free', 1, 0)
+                ''', (phone or '', email or '', nickname))
+                return cursor.lastrowid
+            except sqlite3.IntegrityError:
+                identifier = email or phone
+                logger.warning(f"用户已存在: {identifier}")
+                return None
+
+    def get_user_by_phone(self, phone: str) -> Optional[Dict[str, Any]]:
+        """根据手机号获取用户"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM users WHERE phone = ? AND phone != ""', (phone,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
+        """根据邮箱获取用户"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM users WHERE email = ? AND email != ""', (email,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def get_user_by_id(self, user_id: int) -> Optional[Dict[str, Any]]:
+        """根据ID获取用户"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def update_user_login(self, user_id: int):
+        """更新用户最后登录时间"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?
+            ''', (user_id,))
+
+    def get_user_quota(self, user_id: int) -> Dict[str, Any]:
+        """
+        获取用户配额信息
+
+        Returns:
+            dict: {plan_type, quota_total, quota_used, quota_remaining, plan_expires_at, is_expired}
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))
+            row = cursor.fetchone()
+            if not row:
+                return {'plan_type': 'free', 'quota_total': 0, 'quota_used': 0, 'quota_remaining': 0}
+
+            user = dict(row)
+            plan_type = user['plan_type']
+            quota_total = user['quota_total']
+            quota_used = user['quota_used']
+
+            # 月卡到期检查
+            is_expired = False
+            if plan_type == 'monthly' and user['plan_expires_at']:
+                expires_at = datetime.fromisoformat(user['plan_expires_at'])
+                if datetime.now() > expires_at:
+                    is_expired = True
+                    # 自动降级为免费用户
+                    cursor.execute('''
+                        UPDATE users SET plan_type = 'free', quota_total = 1,
+                        quota_used = 0, plan_expires_at = NULL WHERE id = ?
+                    ''', (user_id,))
+                    plan_type = 'free'
+                    quota_total = 1
+                    quota_used = 0
+
+            # 月卡用户配额为无限（但有日上限，在 quota 模块处理）
+            if plan_type == 'monthly':
+                return {
+                    'plan_type': plan_type,
+                    'quota_total': -1,  # -1 表示无限
+                    'quota_used': quota_used,
+                    'quota_remaining': -1,
+                    'plan_expires_at': user['plan_expires_at'],
+                    'is_expired': False
+                }
+
+            return {
+                'plan_type': plan_type,
+                'quota_total': quota_total,
+                'quota_used': quota_used,
+                'quota_remaining': max(0, quota_total - quota_used),
+                'plan_expires_at': user.get('plan_expires_at'),
+                'is_expired': is_expired
+            }
+
+    # ==================== 订单管理 ====================
+
+    def create_order(self, order_no: str, user_id: int, plan_type: str,
+                     plan_name: str, amount: float, provider: str = '') -> bool:
+        """
+        创建订单
+
+        Args:
+            order_no: 订单号
+            user_id: 用户ID
+            plan_type: 套餐类型 (pack5/monthly)
+            plan_name: 套餐名称
+            amount: 金额（元）
+            provider: 支付渠道 ('alipay'/'wechat')
+
+        Returns:
+            bool
+        """
+        # 订单30分钟过期
+        expires_at = datetime.now() + timedelta(minutes=30)
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO orders (order_no, user_id, plan_type, plan_name, amount, provider, expires_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (order_no, user_id, plan_type, plan_name, amount, provider, expires_at))
+            return cursor.rowcount > 0
+
+    def get_order(self, order_no: str) -> Optional[Dict[str, Any]]:
+        """获取订单"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM orders WHERE order_no = ?', (order_no,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def update_order_paid(self, order_no: str, transaction_id: str):
+        """更新订单为已支付"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE orders SET status = 'paid', transaction_id = ?,
+                wechat_transaction_id = ?, paid_at = CURRENT_TIMESTAMP
+                WHERE order_no = ?
+            ''', (transaction_id, transaction_id, order_no))
+
+    def get_user_orders(self, user_id: int, limit: int = 20) -> List[Dict[str, Any]]:
+        """获取用户订单列表"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT * FROM orders WHERE user_id = ?
+                ORDER BY created_at DESC LIMIT ?
+            ''', (user_id, limit))
+            return [dict(row) for row in cursor.fetchall()]
+
+    def get_pending_order(self, user_id: int, plan_type: str) -> Optional[Dict[str, Any]]:
+        """获取用户未支付的待处理订单（30分钟内）"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT * FROM orders WHERE user_id = ? AND plan_type = ?
+                AND status = 'pending' AND expires_at > CURRENT_TIMESTAMP
+                ORDER BY created_at DESC LIMIT 1
+            ''', (user_id, plan_type))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    # ==================== 使用记录 ====================
+
+    def record_usage(self, user_id: int, task_id: str = None,
+                     session_id: str = None, tokens_used: int = 0) -> bool:
+        """记录一次使用"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO usage_records (user_id, task_id, session_id, tokens_used)
+                VALUES (?, ?, ?, ?)
+            ''', (user_id, task_id, session_id, tokens_used))
+            # 更新用户已用配额
+            cursor.execute('''
+                UPDATE users SET quota_used = quota_used + 1 WHERE id = ?
+            ''', (user_id,))
+            return cursor.rowcount > 0
+
+    def get_user_usage_count(self, user_id: int) -> int:
+        """获取用户今日使用次数"""
+        today = datetime.now().strftime('%Y-%m-%d')
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT COUNT(*) as count FROM usage_records
+                WHERE user_id = ? AND DATE(created_at) = ?
+            ''', (user_id, today))
+            return cursor.fetchone()['count']
+
+    def get_user_usage_history(self, user_id: int, limit: int = 20) -> List[Dict[str, Any]]:
+        """获取用户使用历史"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT ur.*, h.candidate_name, h.job_title, h.company, h.match_score
+                FROM usage_records ur
+                LEFT JOIN history h ON ur.session_id = h.session_id
+                WHERE ur.user_id = ?
+                ORDER BY ur.created_at DESC LIMIT ?
+            ''', (user_id, limit))
+            return [dict(row) for row in cursor.fetchall()]
 
 
 # 创建全局数据库实例

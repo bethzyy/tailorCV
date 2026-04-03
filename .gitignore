@@ -10,6 +10,7 @@ apikey*.txt
 # Database
 storage/*.db
 storage/*.sqlite
+storage/
 
 # Cache
 __pycache__/

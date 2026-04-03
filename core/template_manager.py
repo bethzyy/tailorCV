@@ -132,6 +132,9 @@ class TemplateManager:
         # 初始化内置模板
         self._init_builtin_templates()
 
+        # 恢复数据库丢失的自建模板（从文件重新注册）
+        self._recover_user_templates()
+
     def _init_builtin_templates(self):
         """初始化内置模板到数据库"""
         import io as io_module
@@ -230,6 +233,56 @@ class TemplateManager:
             List[Dict]: 模板列表
         """
         return db.get_templates(source=source)
+
+    def _recover_user_templates(self):
+        """从 uploaded/ 和 extracted/ 目录恢复数据库中丢失的自建模板"""
+        import hashlib
+
+        for source_dir, source_type in [(self.uploaded_dir, 'uploaded'),
+                                       (self.extracted_dir, 'extracted')]:
+            if not source_dir.exists():
+                continue
+            for file_path in source_dir.glob('*.docx'):
+                template_id = file_path.stem
+                # 检查数据库中是否已有此模板
+                existing = db.get_template(template_id)
+                if existing:
+                    continue
+                try:
+                    content = file_path.read_bytes()
+                    content_hash = hashlib.md5(content).hexdigest()
+                    # 检查文件名是否与哈希匹配（旧格式文件名就是哈希）
+                    if template_id == content_hash[:16]:
+                        logger.info(f"恢复自建模板 [{source_type}]: {file_path.name}")
+                        from .template_processor import TemplateProcessor
+                        template_processor = TemplateProcessor()
+                        from docx import Document
+                        import io as io_module
+                        doc = Document(io_module.BytesIO(content))
+                        sections, confidence = self._detect_template_structure_from_doc(doc)
+                        preprocessed_path = Path('templates/preprocessed') / f"{template_id}.docx"
+                        if preprocessed_path.exists():
+                            shutil.copy(preprocessed_path, file_path)
+                        else:
+                            # 无预处理文件，直接用原始文件
+                            logger.warning(f"无预处理文件，使用原始文件恢复: {template_id}")
+                        db.save_template({
+                            'template_id': template_id,
+                            'name': f"恢复模板 {template_id[:8]}",
+                            'source': source_type,
+                            'file_path': str(file_path),
+                            'content_hash': content_hash,
+                            'structure_confidence': confidence,
+                            'sections': sections,
+                            'variables': [],
+                            'description': '从文件恢复',
+                            'tags': [],
+                            'preview_image': '',
+                            'is_default': False,
+                            'use_count': 0
+                        })
+                except Exception as e:
+                    logger.error(f"恢复模板失败 {file_path.name}: {e}")
 
     def get_template(self, template_id: str) -> Optional[Dict[str, Any]]:
         """获取指定模板"""

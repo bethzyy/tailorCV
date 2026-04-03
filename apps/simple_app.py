@@ -18,6 +18,8 @@ from typing import Dict, Any, Tuple
 
 from flask import Flask, request, jsonify, render_template, send_file, make_response
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from werkzeug.utils import secure_filename
 
 # 添加父目录到路径
@@ -36,6 +38,9 @@ from core.cache_manager import CacheManager
 from core.template_processor import TemplateProcessor
 from core.template_manager import TemplateManager
 from core.database import db
+from core.auth import send_code, verify_code, login_or_register, login_required, get_current_user, set_login_duration
+from core.quota import check_quota, use_quota, get_quota_display
+from core.payment import create_payment, handle_payment_notify, query_payment, simulate_payment, get_available_providers
 
 # 是否使用新版五阶段流程
 USE_V2_PIPELINE = True
@@ -57,6 +62,28 @@ def create_app() -> Flask:
     app.config['SECRET_KEY'] = config.SECRET_KEY
     app.config['MAX_CONTENT_LENGTH'] = config.MAX_CONTENT_LENGTH
     CORS(app)
+
+    # 全局禁止浏览器缓存（解决开发时反复遇到旧页面缓存的问题）
+    @app.after_request
+    def add_no_cache_headers(response):
+        if 'text/html' in response.content_type:
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+        return response
+
+    # 限流初始化
+    limiter = Limiter(
+        app=app,
+        key_func=get_remote_address,
+        default_limits=[config.RATE_LIMIT_ANON],
+        storage_uri='memory://'
+    )
+
+    # 429 限流错误处理器（必须在全局 Exception 处理器之前）
+    @app.errorhandler(429)
+    def handle_rate_limit(e):
+        return jsonify({'error': '请求过于频繁，请稍后再试', 'success': False, 'rate_limited': True}), 429
 
     # 全局异常处理器 - 防止未捕获的异常导致进程崩溃
     @app.errorhandler(Exception)
@@ -88,16 +115,16 @@ def create_app() -> Flask:
 
     # ==================== 辅助函数 ====================
 
-    def save_uploaded_file(file, session_id: str) -> str:
-        upload_dir = Path('storage/uploads') / session_id
+    def save_uploaded_file(file, session_id: str, user_id: str = None) -> str:
+        upload_dir = Path('storage/uploads') / (user_id or 'anonymous') / session_id
         upload_dir.mkdir(parents=True, exist_ok=True)
         ext = Path(file.filename).suffix.lower()
         file_path = upload_dir / f'original{ext}'
         file.save(str(file_path))
         return str(file_path)
 
-    def save_uploaded_bytes(content: bytes, filename: str, session_id: str) -> str:
-        upload_dir = Path('storage/uploads') / session_id
+    def save_uploaded_bytes(content: bytes, filename: str, session_id: str, user_id: str = None) -> str:
+        upload_dir = Path('storage/uploads') / (user_id or 'anonymous') / session_id
         upload_dir.mkdir(parents=True, exist_ok=True)
         ext = Path(filename).suffix.lower()
         file_path = upload_dir / f'original{ext}'
@@ -105,8 +132,8 @@ def create_app() -> Flask:
             f.write(content)
         return str(file_path)
 
-    def save_tailored_file(content: bytes, session_id: str) -> str:
-        output_dir = Path('storage/tailored') / session_id
+    def save_tailored_file(content: bytes, session_id: str, user_id: str = None) -> str:
+        output_dir = Path('storage/tailored') / (user_id or 'anonymous') / session_id
         output_dir.mkdir(parents=True, exist_ok=True)
         file_path = output_dir / 'tailored.docx'
         with open(file_path, 'wb') as f:
@@ -150,6 +177,10 @@ def create_app() -> Flask:
         代码期望:
         - work_experience[].tailored: "..."
         - projects[].tailored: "..."
+
+        改进:
+        - 保留【】标记的 JD 关键词
+        - 删除原始字段避免模板渲染混乱
         """
         if not resume:
             return resume
@@ -160,35 +191,68 @@ def create_app() -> Flask:
         work_exp = resume.get('work_experience', [])
         if isinstance(work_exp, list):
             for exp in work_exp:
-                if isinstance(exp, dict) and 'tailored_bullets' in exp and 'tailored' not in exp:
+                if not isinstance(exp, dict):
+                    continue
+
+                # 优先使用已有的 tailored 字符串（增强降级可能已经生成）
+                if 'tailored' in exp and exp['tailored']:
+                    # 删除原始字段避免模板渲染混乱
+                    exp.pop('responsibilities', None)
+                    exp.pop('description', None)
+                    continue
+
+                # 从 tailored_bullets 合并（保留【】标记）
+                if 'tailored_bullets' in exp:
                     bullets = exp.get('tailored_bullets', [])
                     if isinstance(bullets, list) and bullets:
                         contents = []
                         for b in bullets:
                             if isinstance(b, dict):
-                                contents.append(b.get('content', ''))
+                                # 保留完整的 content，包含【】标记
+                                content = b.get('content', '')
+                                if content:
+                                    contents.append(content)
                             elif isinstance(b, str):
                                 contents.append(b)
                         merged = '\n'.join(filter(None, contents))
                         if merged:
                             exp['tailored'] = merged
+                            # 删除原始字段避免模板渲染混乱
+                            exp.pop('responsibilities', None)
+                            exp.pop('description', None)
                             logger.info(f"📊 格式转换: work_experience {len(bullets)} bullets -> tailored ({len(merged)} 字符)")
 
         # 处理 projects: tailored_description -> tailored
         projects = resume.get('projects', [])
         if isinstance(projects, list):
             for proj in projects:
-                if isinstance(proj, dict) and 'tailored_description' in proj and 'tailored' not in proj:
+                if not isinstance(proj, dict):
+                    continue
+
+                # 优先使用已有的 tailored 字符串
+                if 'tailored' in proj and proj['tailored']:
+                    proj.pop('description', None)
+                    continue
+
+                if 'tailored_description' in proj:
                     desc = proj.get('tailored_description', '')
                     if desc:
                         proj['tailored'] = desc
+                        proj.pop('description', None)
                         logger.info(f"📊 格式转换: projects tailored_description -> tailored ({len(desc)} 字符)")
 
         # 处理 education: tailored_highlights -> tailored
         education = resume.get('education', [])
         if isinstance(education, list):
             for edu in education:
-                if isinstance(edu, dict) and 'tailored_highlights' in edu and 'tailored' not in edu:
+                if not isinstance(edu, dict):
+                    continue
+
+                # 优先使用已有的 tailored 字符串
+                if 'tailored' in edu and edu['tailored']:
+                    continue
+
+                if 'tailored_highlights' in edu:
                     highlights = edu.get('tailored_highlights', [])
                     if isinstance(highlights, list) and highlights:
                         merged = '\n'.join(filter(None, highlights))
@@ -349,9 +413,204 @@ def create_app() -> Flask:
         threading.Thread(target=do_shutdown, daemon=True).start()
         return jsonify({'status': 'shutting_down'})
 
+    # ==================== 认证 API ====================
+
+    @app.route('/api/auth/send-code', methods=['POST'])
+    @limiter.limit("1 per minute")
+    def api_send_code():
+        """发送邮箱验证码"""
+        data = request.get_json() or {}
+        email = data.get('email', '').strip()
+        if not email:
+            return jsonify({'success': False, 'error': '请输入邮箱'}), 400
+        if not send_code(email):
+            return jsonify({'success': False, 'error': '验证码发送失败，请稍后再试'}), 400
+        return jsonify({'success': True, 'message': '验证码已发送到您的邮箱'})
+
+    @app.route('/api/auth/login', methods=['POST'])
+    @limiter.limit("5 per minute")
+    def api_login():
+        """邮箱验证码登录/注册"""
+        data = request.get_json() or {}
+        email = data.get('email', '').strip()
+        code = data.get('code', '').strip()
+        duration = data.get('duration', 'session')  # session / 7d / 30d / forever
+        if not email or not code:
+            return jsonify({'success': False, 'error': '邮箱和验证码不能为空'}), 400
+        if not verify_code(email, code):
+            return jsonify({'success': False, 'error': '验证码错误或已过期'}), 401
+        try:
+            result = login_or_register(email)
+            from flask import session
+            session['user_id'] = result['user_id']
+            session['email'] = result['email']
+            # 设置登录有效期
+            set_login_duration(duration)
+            quota_info = get_quota_display(result['user_id'])
+            return jsonify({
+                'success': True,
+                'user': {
+                    'user_id': result['user_id'],
+                    'email': result['email'],
+                    'is_new_user': result['is_new_user'],
+                },
+                'quota': quota_info
+            })
+        except Exception as e:
+            logger.error(f"登录失败: {e}")
+            return jsonify({'success': False, 'error': '登录失败'}), 500
+
+    @app.route('/api/auth/logout', methods=['POST'])
+    def api_logout():
+        """退出登录"""
+        from flask import session
+        session.clear()
+        return jsonify({'success': True})
+
+    @app.route('/api/auth/me', methods=['GET'])
+    @login_required
+    def api_auth_me():
+        """获取当前用户信息"""
+        user = get_current_user()
+        quota_info = get_quota_display(request.user_id)
+        return jsonify({
+            'success': True,
+            'user': {
+                'user_id': user['id'],
+                'email': user['email'],
+                'phone': user.get('phone', ''),
+                'nickname': user.get('nickname', ''),
+                'plan_type': user['plan_type'],
+                'created_at': user['created_at'],
+            },
+            'quota': quota_info
+        })
+
+    # ==================== 配额 API ====================
+
+    @app.route('/api/quota', methods=['GET'])
+    @login_required
+    def api_get_quota():
+        """获取当前用户配额"""
+        quota_info = get_quota_display(request.user_id)
+        return jsonify({'success': True, 'quota': quota_info})
+
+    # ==================== 支付 API ====================
+
+    @app.route('/api/payment/plans', methods=['GET'])
+    def api_get_plans():
+        """获取所有套餐信息"""
+        plans = []
+        for key, val in config.PLANS.items():
+            plans.append({
+                'type': key,
+                'name': val['name'],
+                'price': val['price'],
+                'quota': val['quota'],
+                'daily_limit': val['daily_limit'],
+            })
+        return jsonify({'success': True, 'plans': plans})
+
+    @app.route('/api/payment/providers', methods=['GET'])
+    def api_get_providers():
+        """获取可用支付方式列表"""
+        providers = get_available_providers()
+        return jsonify({'success': True, 'providers': providers})
+
+    @app.route('/api/payment/create', methods=['POST'])
+    @login_required
+    def api_create_payment():
+        """创建支付订单"""
+        data = request.get_json() or {}
+        plan_type = data.get('plan_type', '')
+        provider_id = data.get('provider', '')
+        if plan_type not in config.PLANS or config.PLANS[plan_type]['price'] <= 0:
+            return jsonify({'success': False, 'error': '无效的套餐'}), 400
+        try:
+            result = create_payment(request.user_id, plan_type, provider_id=provider_id)
+            return jsonify({'success': True, **result})
+        except Exception as e:
+            logger.error(f"创建支付失败: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @app.route('/api/payment/query/<order_no>', methods=['GET'])
+    @login_required
+    def api_query_payment(order_no):
+        """查询支付状态"""
+        result = query_payment(order_no)
+        return jsonify({'success': True, **result})
+
+    @app.route('/api/payment/notify/alipay', methods=['POST'])
+    def api_alipay_notify():
+        """支付宝异步回调通知"""
+        success = handle_payment_notify(request, 'alipay')
+        if success:
+            return 'success'
+        return 'fail', 400
+
+    @app.route('/api/payment/notify/wechat', methods=['POST'])
+    def api_wechat_notify():
+        """微信支付回调通知"""
+        success = handle_payment_notify(request, 'wechat')
+        if success:
+            return jsonify({'code': 'SUCCESS', 'message': 'OK'})
+        return jsonify({'code': 'FAIL', 'message': '处理失败'}), 500
+
+    @app.route('/api/payment/simulate', methods=['POST'])
+    @login_required
+    def api_simulate_payment():
+        """模拟支付成功（仅沙箱环境）"""
+        data = request.get_json() or {}
+        order_no = data.get('order_no', '')
+        if not order_no:
+            return jsonify({'success': False, 'error': '缺少订单号'}), 400
+        if simulate_payment(order_no):
+            quota_info = get_quota_display(request.user_id)
+            return jsonify({'success': True, 'quota': quota_info})
+        return jsonify({'success': False, 'error': '模拟支付失败'}), 400
+
+    # ==================== 用户中心 API ====================
+
+    @app.route('/api/user/history', methods=['GET'])
+    @login_required
+    def api_user_history():
+        """获取用户使用历史"""
+        records = db.get_user_usage_history(request.user_id, limit=20)
+        return jsonify({'success': True, 'records': records})
+
+    @app.route('/api/user/orders', methods=['GET'])
+    @login_required
+    def api_user_orders():
+        """获取用户订单列表"""
+        orders = db.get_user_orders(request.user_id)
+        return jsonify({'success': True, 'orders': orders})
+
+    def _check_quota_or_anonymous():
+        """配额检查（复用逻辑，避免 tailor_file/text/form 重复代码）。
+        Returns: (error_response, current_user) — error_response 为 None 表示通过。
+        """
+        current_user = get_current_user()
+        if current_user:
+            can_use, quota_info = check_quota(current_user['id'])
+            if not can_use:
+                return (jsonify({'error': quota_info.get('reason', '配额已用完'), 'quota_exceeded': True}), 403), current_user
+        else:
+            from flask import session as flask_session
+            if not flask_session.get('anonymous_used'):
+                flask_session['anonymous_used'] = True
+            else:
+                return (jsonify({'error': '免费体验次数已用完，请登录获取更多次数', 'need_login': True}), 403), current_user
+        return None, current_user
+
     @app.route('/api/tailor/file', methods=['POST'])
+    @limiter.limit("5 per hour")
     def tailor_file():
         try:
+            # 配额检查（允许未登录用户使用免费额度）
+            err_resp, current_user = _check_quota_or_anonymous()
+            if err_resp:
+                return err_resp
+
             start_time = time.time()
 
             # 记录请求参数
@@ -382,7 +641,8 @@ def create_app() -> Flask:
             task_status[session_id] = {'status': 'processing', 'progress': 0, 'message': '正在解析简历...'}
 
             resume_content = resume_file.read()
-            save_uploaded_bytes(resume_content, resume_file.filename, session_id)
+            user_id_str = str(current_user['id']) if current_user else None
+            save_uploaded_bytes(resume_content, resume_file.filename, session_id, user_id_str)
 
             parsed_resume = parser.parse(
                 file_content=resume_content,
@@ -613,6 +873,10 @@ def create_app() -> Flask:
                 'processing_time_ms': processing_time_ms
             })
 
+            # 扣减用户配额
+            if current_user:
+                use_quota(current_user['id'], session_id=session_id)
+
             return jsonify(result)
 
         except Exception as e:
@@ -634,6 +898,11 @@ def create_app() -> Flask:
     def tailor_text():
         """处理纯文本简历定制请求"""
         try:
+            # 配额检查
+            err_resp, current_user = _check_quota_or_anonymous()
+            if err_resp:
+                return err_resp
+
             start_time = time.time()
 
             data = request.get_json()
@@ -823,6 +1092,10 @@ def create_app() -> Flask:
                 'processing_time_ms': processing_time_ms
             })
 
+            # 扣减用户配额
+            if current_user:
+                use_quota(current_user['id'], session_id=session_id)
+
             return jsonify(result)
 
         except Exception as e:
@@ -843,6 +1116,11 @@ def create_app() -> Flask:
     @app.route('/api/tailor/form', methods=['POST'])
     def tailor_form():
         try:
+            # 配额检查
+            err_resp, current_user = _check_quota_or_anonymous()
+            if err_resp:
+                return err_resp
+
             start_time = time.time()
 
             data = request.get_json()
@@ -861,9 +1139,13 @@ def create_app() -> Flask:
             task_status[session_id]['progress'] = 20
             task_status[session_id]['message'] = '正在分析JD需求...'
 
+            # 检查是否强制跳过缓存（与 tailor_file/tailor_text 保持一致）
+            no_cache = data.get('no_cache', True)
+
             cached_result = cache_manager.get(resume_text, jd_content)
             # 检查缓存是否包含必要字段（旧缓存可能缺少 tailored_resume）
-            if cached_result and cached_result.get('tailored_resume'):
+            # 只有 no_cache=False 时才使用缓存
+            if not no_cache and cached_result and cached_result.get('tailored_resume'):
                 logger.info(f"命中缓存且包含 tailored_resume: session={session_id}")
                 task_status[session_id]['progress'] = 100
                 task_status[session_id]['status'] = 'completed'
@@ -953,6 +1235,10 @@ def create_app() -> Flask:
                 'tokens_used': 0,
                 'processing_time_ms': processing_time_ms
             })
+
+            # 扣减用户配额
+            if current_user:
+                use_quota(current_user['id'], session_id=session_id)
 
             return jsonify(result)
 
@@ -1098,6 +1384,7 @@ def create_app() -> Flask:
             return jsonify({'error': str(e)}), 500
 
     @app.route('/api/templates/<template_id>/preview', methods=['GET'])
+    @limiter.exempt
     def get_template_preview(template_id: str):
         """获取模板预览图"""
         import os
@@ -1139,6 +1426,7 @@ def create_app() -> Flask:
         )
 
     @app.route('/api/templates/<template_id>/preview/html', methods=['GET'])
+    @limiter.exempt
     def get_template_html_preview(template_id: str):
         """获取模板的 HTML 预览（使用示例数据渲染）"""
         import mammoth
@@ -1216,19 +1504,81 @@ def create_app() -> Flask:
         """将定制后的简历（base64 docx）转换为 HTML 预览"""
         logger.info("🔄 /api/preview/tailored endpoint called")
         import mammoth
-
-        data = request.get_json()
-        if not data or 'tailored_word' not in data:
-            return jsonify({'error': '未提供简历数据', 'success': False}), 400
+        import binascii
 
         try:
-            word_bytes = base64.b64decode(data['tailored_word'])
+            data = request.get_json()
+            if not data:
+                logger.error("❌ 请求体为空")
+                return jsonify({'error': '请求数据为空', 'success': False}), 400
 
-            result = mammoth.convert_to_html(io.BytesIO(word_bytes))
-            html = result.value
+            if 'tailored_word' not in data:
+                logger.error("❌ 缺少 tailored_word 参数")
+                return jsonify({'error': '未提供简历数据', 'success': False}), 400
 
-            if result.messages:
-                logger.warning(f"mammoth 转换警告: {result.messages}")
+            b64_data = data['tailored_word']
+            if not b64_data or not b64_data.strip():
+                logger.error("❌ tailored_word 为空")
+                return jsonify({'error': '简历数据为空', 'success': False}), 400
+
+            logger.info(f"📊 base64 数据长度: {len(b64_data)}")
+
+            # 解码 base64
+            try:
+                word_bytes = base64.b64decode(b64_data)
+                logger.info(f"✅ 解码成功，字节数: {len(word_bytes)}")
+            except binascii.Error as e:
+                logger.error(f"❌ base64 解码失败: {e}")
+                return jsonify({'error': f'简历数据格式错误: {str(e)}', 'success': False}), 400
+
+            # 验证是否为有效的 docx 文件（ZIP 格式）
+            if len(word_bytes) < 8 or word_bytes[:4] != b'PK\x03\x04':
+                logger.error(f"❌ 无效的 Word 文档格式，文件头: {word_bytes[:8].hex() if len(word_bytes) >= 8 else 'too short'}")
+                return jsonify({'error': '无效的 Word 文档格式', 'success': False}), 400
+
+            # mammoth 转换 - 添加 style_map 选项处理 Word 样式
+            try:
+                result = mammoth.convert_to_html(
+                    io.BytesIO(word_bytes),
+                    style_map="""
+                        p[style-name='Heading 1'] => h1:fresh
+                        p[style-name='Heading 2'] => h2:fresh
+                        p[style-name='Heading 3'] => h3:fresh
+                        p[style-name='标题 1'] => h1:fresh
+                        p[style-name='标题 2'] => h2:fresh
+                        p[style-name='标题 3'] => h3:fresh
+                    """
+                )
+                html = result.value
+
+                if result.messages:
+                    for msg in result.messages:
+                        logger.warning(f"⚠️ mammoth 警告: {msg}")
+
+                logger.info(f"✅ HTML 生成成功，长度: {len(html)}")
+
+                # 检查转换结果是否有效
+                if not html or len(html.strip()) < 10:
+                    logger.warning("⚠️ HTML 内容过短，可能转换失败")
+                    raise ValueError("转换结果为空或内容过短")
+
+            except Exception as mammoth_error:
+                logger.error(f"❌ mammoth 转换失败: {type(mammoth_error).__name__}: {mammoth_error}", exc_info=True)
+
+                # 降级方案：返回友好的提示（返回 success: True 让前端显示降级内容）
+                fallback_html = """
+                <div style="padding: 40px; text-align: center; background: #f8f9fa; border-radius: 8px; margin: 20px;">
+                    <div style="font-size: 48px; margin-bottom: 16px;">📄</div>
+                    <h3 style="color: #495057; margin-bottom: 8px;">预览暂时不可用</h3>
+                    <p style="color: #6c757d; margin-bottom: 16px;">简历文件已生成，请点击上方"下载简历"按钮查看完整内容</p>
+                    <p style="color: #adb5bd; font-size: 12px;">技术提示: 文档格式转换遇到问题</p>
+                </div>
+                """
+                return jsonify({
+                    'html': fallback_html,
+                    'success': True,  # 返回 True，让前端显示降级内容
+                    'preview_failed': True
+                })
 
             # 返回带样式的 HTML
             styled_html = f"""
@@ -1250,11 +1600,13 @@ def create_app() -> Flask:
             return jsonify({'html': styled_html, 'success': True})
 
         except Exception as e:
-            logger.error(f"预览转换失败: {e}", exc_info=True)
+            logger.error(f"❌ 预览 API 异常: {e}", exc_info=True)
+            # 异常时也返回降级内容，而不是 500 错误
             return jsonify({
-                'error': f'预览生成失败: {str(e)}',
-                'success': False
-            }), 500
+                'html': '<div style="padding:20px;text-align:center;color:#666;">预览加载失败，请下载查看</div>',
+                'success': True,
+                'preview_failed': True
+            })
 
     @app.route('/api/templates/<template_id>/compatibility', methods=['POST'])
     def check_template_compatibility(template_id: str):

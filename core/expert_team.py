@@ -19,6 +19,7 @@ import json
 import logging
 import re
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, Optional, Tuple, List, Callable, TYPE_CHECKING
 from pathlib import Path
 from dataclasses import dataclass, field
@@ -125,6 +126,7 @@ class RewriteContentResult(StageResult):
     tailored_resume: Dict[str, Any] = field(default_factory=dict)
     change_log: List[Dict[str, Any]] = field(default_factory=list)
     keyword_coverage: Dict[str, Any] = field(default_factory=dict)
+    jd_keyword_coverage: Dict[str, Any] = field(default_factory=dict)  # JD关键词覆盖率验证结果
 
 
 @dataclass
@@ -913,14 +915,73 @@ class ExpertTeamV2:
                             edu['tailored'] = merged
                             logger.info(f"📊 格式转换: education {len(highlights)} highlights -> tailored ({len(merged)} 字符)")
 
+        # 处理 summary: dict(title, highlights, evidence) -> string
+        summary = resume.get('summary')
+        if isinstance(summary, dict) and summary:
+            title = summary.get('title', '')
+            highlights = summary.get('highlights', [])
+            parts = []
+            if title:
+                parts.append(title)
+            if isinstance(highlights, list) and highlights:
+                for h in highlights:
+                    text = h.get('content', h) if isinstance(h, dict) else h
+                    if text:
+                        parts.append(f"- {text}")
+            if parts:
+                resume['summary'] = '\n'.join(parts)
+                logger.info(f"📊 格式转换: summary dict -> string ({len(resume['summary'])} 字符)")
+
         return resume
+
+    def _build_jd_core_requirements(self, jd_analysis: DecodeJdResult) -> Dict[str, Any]:
+        """
+        从 JD 解析结果提取必须覆盖的核心要求
+
+        用于：
+        1. 传递给 rewrite_content 阶段作为强制约束
+        2. 增强降级机制中生成 JD 定向内容
+        3. 质量验证阶段计算覆盖率
+        """
+        # 提取 must_have 技能
+        must_have_skills = []
+        if jd_analysis.must_have:
+            skills_data = jd_analysis.must_have.get('skills', [])
+            if isinstance(skills_data, list):
+                must_have_skills = [
+                    s.get('skill', s) if isinstance(s, dict) else s
+                    for s in skills_data
+                ]
+
+        # 提取 must_have 经验要求
+        must_have_experience = jd_analysis.must_have.get('experience', []) if jd_analysis.must_have else []
+
+        # 提取前 10 个关键词
+        top_keywords = list(jd_analysis.keyword_weights.keys())[:10]
+
+        # 提取核心能力要求
+        core_abilities = []
+        if jd_analysis.must_have:
+            core_abilities = jd_analysis.must_have.get('abilities', [])
+
+        result = {
+            'job_title': jd_analysis.job_title,
+            'must_have_skills': must_have_skills,
+            'must_have_experience': must_have_experience,
+            'top_keywords': top_keywords,
+            'core_abilities': core_abilities,
+            'target_coverage': 0.8  # 目标覆盖率 80%
+        }
+
+        logger.info(f"📋 JD核心要求提取: 职位={jd_analysis.job_title}, 必备技能={must_have_skills}, 关键词={top_keywords}")
+        return result
 
     def _create_fallback_tailored_resume(self, parsed_resume: ParseResumeResult) -> Dict[str, Any]:
         """创建降级定制简历（当AI改写失败时使用）"""
         logger.info("📝 启用降级方案：使用原始简历数据")
         return {
             'basic_info': parsed_resume.basic_info or {},
-            'summary': parsed_resume.summary or {},
+            'summary': '',
             'education': parsed_resume.education or [],
             'work_experience': parsed_resume.work_experience or [],
             'projects': parsed_resume.projects or [],
@@ -929,6 +990,214 @@ class ExpertTeamV2:
             'certificates': parsed_resume.certificates or [],
             'self_evaluation': parsed_resume.self_evaluation or ''
         }
+
+    def _create_enhanced_fallback_tailored_resume(
+        self,
+        parsed_resume: ParseResumeResult,
+        jd_analysis: DecodeJdResult,
+        match_result: MatchAnalysisResult
+    ) -> Dict[str, Any]:
+        """
+        增强降级：执行规则化轻量定制
+
+        当 AI 改写失败时，不是简单返回原始数据，而是：
+        1. 生成 JD 定向的 summary（包含职位名称）
+        2. 在原始内容中标记 JD 关键词
+        3. 按匹配分析调整技能顺序
+        """
+        logger.info("📝 启用增强降级方案：规则化轻量定制")
+
+        jd_requirements = self._build_jd_core_requirements(jd_analysis)
+        jd_keywords = jd_requirements['top_keywords']
+        job_title = jd_analysis.job_title or "求职者"
+
+        # 1. 生成 JD 定向的 summary
+        strengths_text = ""
+        if match_result.strengths:
+            strengths_text = match_result.strengths[0].get('item', '') if isinstance(match_result.strengths[0], dict) else str(match_result.strengths[0])
+
+        enhanced_summary = {
+            'title': f"{job_title} | {strengths_text}" if strengths_text else job_title,
+            'highlights': [
+                s.get('item', str(s)) if isinstance(s, dict) else str(s)
+                for s in match_result.strengths[:3]
+            ] if match_result.strengths else []
+        }
+
+        # 2. 在工作经历中标记 JD 关键词
+        enhanced_work = self._mark_jd_keywords(
+            parsed_resume.work_experience or [],
+            jd_keywords
+        )
+
+        # 3. 按 JD 相关性重排技能
+        enhanced_skills = self._reorder_skills(
+            parsed_resume.skills or {},
+            jd_keywords
+        )
+
+        return {
+            'basic_info': parsed_resume.basic_info or {},
+            'summary': enhanced_summary,
+            'education': parsed_resume.education or [],
+            'work_experience': enhanced_work,
+            'projects': self._mark_jd_keywords(parsed_resume.projects or [], jd_keywords),
+            'skills': enhanced_skills,
+            'awards': parsed_resume.awards or [],
+            'certificates': parsed_resume.certificates or [],
+            'self_evaluation': self._generate_jd_aligned_self_evaluation(
+                parsed_resume.self_evaluation or '',
+                job_title,
+                jd_keywords
+            )
+        }
+
+    def _mark_jd_keywords(self, items: List[Dict], jd_keywords: List[str]) -> List[Dict]:
+        """在内容中标记 JD 关键词（用【】标记）"""
+        if not jd_keywords or not items:
+            return items
+
+        enhanced_items = []
+        for item in items:
+            if not isinstance(item, dict):
+                enhanced_items.append(item)
+                continue
+
+            enhanced_item = dict(item)
+
+            # 处理 responsibilities 或 description 字段
+            for field in ['responsibilities', 'description', 'tailored']:
+                if field in enhanced_item and enhanced_item[field]:
+                    text = enhanced_item[field]
+                    if isinstance(text, str):
+                        # 标记关键词
+                        marked_text = text
+                        for kw in jd_keywords:
+                            if kw.lower() in marked_text.lower() and f'【{kw}】' not in marked_text:
+                                # 不区分大小写替换，保留原文大小写
+                                import re
+                                pattern = re.compile(re.escape(kw), re.IGNORECASE)
+                                marked_text = pattern.sub(f'【{kw}】', marked_text, count=1)
+                        enhanced_item[field] = marked_text
+
+            enhanced_items.append(enhanced_item)
+
+        return enhanced_items
+
+    def _reorder_skills(self, skills: Dict, jd_keywords: List[str]) -> Dict:
+        """按 JD 相关性重排技能"""
+        if not jd_keywords or not skills:
+            return skills
+
+        # 获取技能列表
+        skill_items = skills.get('items', skills.get('technical', []))
+        if not isinstance(skill_items, list):
+            return skills
+
+        # 计算每个技能与 JD 的相关性分数
+        scored_skills = []
+        for skill in skill_items:
+            if isinstance(skill, dict):
+                skill_name = skill.get('skill', skill.get('name', ''))
+            else:
+                skill_name = str(skill)
+
+            # 计算匹配分数
+            score = 0
+            skill_lower = skill_name.lower()
+            for kw in jd_keywords:
+                if kw.lower() in skill_lower or skill_lower in kw.lower():
+                    score += 1
+
+            scored_skills.append((score, skill))
+
+        # 按分数降序排列
+        scored_skills.sort(key=lambda x: x[0], reverse=True)
+
+        # 重建技能字典
+        reordered = [s[1] for s in scored_skills]
+
+        result = dict(skills)
+        if 'items' in result:
+            result['items'] = reordered
+        elif 'technical' in result:
+            result['technical'] = reordered
+        else:
+            result['ordered_by_jd_relevance'] = reordered
+
+        result['_jd_relevance_sorted'] = True
+        return result
+
+    def _generate_jd_aligned_self_evaluation(
+        self,
+        original: str,
+        job_title: str,
+        jd_keywords: List[str]
+    ) -> str:
+        """生成 JD 对齐的自我评价"""
+        if not original:
+            return f"专注{job_title}领域，期待在新的岗位中发挥价值。"
+
+        # 如果原文已经包含职位关键词，直接返回
+        if job_title and job_title in original:
+            return original
+
+        # 否则在开头加上职位定位
+        if job_title:
+            return f"作为{job_title}，{original}"
+
+        return original
+
+    def _validate_jd_keyword_coverage(
+        self,
+        tailored_resume: Dict[str, Any],
+        jd_keywords: List[str]
+    ) -> Dict[str, Any]:
+        """
+        验证 JD 关键词覆盖率，目标 >= 80%
+
+        返回:
+        - total: 关键词总数
+        - covered: 已覆盖数
+        - coverage_rate: 覆盖率
+        - missing: 未覆盖的关键词列表
+        """
+        if not jd_keywords:
+            return {
+                'total': 0,
+                'covered': 0,
+                'coverage_rate': 1.0,
+                'missing': [],
+                'status': 'no_keywords'
+            }
+
+        # 将整个简历转为文本进行搜索
+        all_text = json.dumps(tailored_resume, ensure_ascii=False).lower()
+
+        covered = []
+        missing = []
+
+        for kw in jd_keywords:
+            kw_lower = kw.lower()
+            # 支持多种匹配方式
+            if kw_lower in all_text or f'【{kw}】'.lower() in all_text:
+                covered.append(kw)
+            else:
+                missing.append(kw)
+
+        coverage_rate = len(covered) / len(jd_keywords) if jd_keywords else 0
+
+        result = {
+            'total': len(jd_keywords),
+            'covered': len(covered),
+            'coverage_rate': round(coverage_rate, 2),
+            'missing': missing,
+            'status': 'pass' if coverage_rate >= 0.8 else 'fail'
+        }
+
+        logger.info(f"📊 JD关键词覆盖: {len(covered)}/{len(jd_keywords)} = {coverage_rate:.0%}, 缺失: {missing}")
+
+        return result
 
     # ==================== 各阶段实现 ====================
 
@@ -1127,6 +1396,10 @@ class ExpertTeamV2:
             logger.warning("⚠️ 解析结果为空，将使用原始简历作为主要参考")
         logger.info(f"原始简历长度: {len(original_resume)} 字符")
 
+        # 提取 JD 核心要求（用于强化约束）
+        jd_core_requirements = self._build_jd_core_requirements(jd_analysis)
+        logger.info(f"📋 JD核心要求: {jd_core_requirements}")
+
         prompt = self.prompts['rewrite_content'].format(
             original_resume=original_resume,
             parsed_resume=json.dumps({
@@ -1162,7 +1435,8 @@ class ExpertTeamV2:
                 'red_flags': jd_analysis.red_flags,
                 'pain_points': jd_analysis.pain_points,
                 'competitor_profile': jd_analysis.competitor_profile  # 新增
-            }, ensure_ascii=False, indent=2)
+            }, ensure_ascii=False, indent=2),
+            jd_core_requirements=json.dumps(jd_core_requirements, ensure_ascii=False, indent=2)
         )
 
         response, model_id, tokens = self._call_model(
@@ -1186,39 +1460,70 @@ class ExpertTeamV2:
                 result.tailored_resume = self._convert_tailored_format(result.tailored_resume)
                 result.change_log = self._safe_get_list(data, 'change_log')
                 result.keyword_coverage = self._safe_get_dict(data, 'keyword_coverage')
+
+                # 验证 JD 关键词覆盖率
+                coverage_result = self._validate_jd_keyword_coverage(
+                    result.tailored_resume,
+                    jd_core_requirements['top_keywords']
+                )
+                result.jd_keyword_coverage = coverage_result
+                logger.info(f"📊 阶段3 JD关键词覆盖率: {coverage_result['coverage_rate']:.0%}")
+
                 result.success = True
             else:
                 result.success = False
                 result.error = "无法从响应中提取JSON"
                 logger.warning(f"📝 阶段3 原始响应前500字符: {response[:500] if response else '空'}")
 
-                # 降级：使用解析后的简历数据创建基础结果
-                result.tailored_resume = self._create_fallback_tailored_resume(parsed_resume)
+                # 增强降级：使用 JD 定向的轻量定制
+                result.tailored_resume = self._create_enhanced_fallback_tailored_resume(
+                    parsed_resume, jd_analysis, match_result
+                )
                 result.tailored_resume = self._convert_tailored_format(result.tailored_resume)
+
+                # 验证覆盖率
+                coverage_result = self._validate_jd_keyword_coverage(
+                    result.tailored_resume,
+                    jd_core_requirements['top_keywords']
+                )
+                result.jd_keyword_coverage = coverage_result
+
                 result.change_log = [{
-                    "section": "fallback",
+                    "section": "enhanced_fallback",
                     "original": "AI改写失败",
-                    "tailored": "使用原始简历数据",
-                    "reason": "JSON提取失败，启用降级方案",
-                    "rewrite_type": "fallback"
+                    "tailored": "JD定向轻量定制",
+                    "reason": "JSON提取失败，启用增强降级方案",
+                    "rewrite_type": "enhanced_fallback",
+                    "jd_keyword_coverage": coverage_result['coverage_rate']
                 }]
-                logger.info("📝 阶段3 启用降级方案：使用原始简历数据")
+                logger.info(f"📝 阶段3 启用增强降级方案，JD关键词覆盖率: {coverage_result['coverage_rate']:.0%}")
         except Exception as e:
             logger.error(f"内容改写失败: {e}")
             result.success = False
             result.error = str(e)
 
-            # 降级：使用解析后的简历数据创建基础结果
-            result.tailored_resume = self._create_fallback_tailored_resume(parsed_resume)
+            # 增强降级：使用 JD 定向的轻量定制
+            result.tailored_resume = self._create_enhanced_fallback_tailored_resume(
+                parsed_resume, jd_analysis, match_result
+            )
             result.tailored_resume = self._convert_tailored_format(result.tailored_resume)
+
+            # 验证覆盖率
+            coverage_result = self._validate_jd_keyword_coverage(
+                result.tailored_resume,
+                jd_core_requirements['top_keywords']
+            )
+            result.jd_keyword_coverage = coverage_result
+
             result.change_log = [{
-                "section": "fallback",
+                "section": "enhanced_fallback",
                 "original": "AI改写异常",
-                "tailored": "使用原始简历数据",
+                "tailored": "JD定向轻量定制",
                 "reason": f"异常: {str(e)}",
-                "rewrite_type": "fallback"
+                "rewrite_type": "enhanced_fallback",
+                "jd_keyword_coverage": coverage_result['coverage_rate']
             }]
-            logger.info("📝 阶段3 启用降级方案（异常）：使用原始简历数据")
+            logger.info(f"📝 阶段3 启用增强降级方案（异常），JD关键词覆盖率: {coverage_result['coverage_rate']:.0%}")
 
         logger.info(f"阶段3完成: success={result.success}")
         return result
@@ -1303,63 +1608,60 @@ class ExpertTeamV2:
                 report_progress(stage, msg, pct)
                 stop_event.wait(1.5)  # 每1.5秒更新一次
 
-        logger.info("开始五阶段定制流程")
+        logger.info("开始五阶段定制流程（并行优化版）")
 
         result = TailorResultV2()
 
+        # 用于线程间共享的统计数据（线程安全）
+        stats_lock = threading.Lock()
+
         try:
-            # 阶段0: 解析简历结构
-            stop_event = threading.Event()
-            thread = threading.Thread(
+            # ===== 阶段0和阶段1并行执行 =====
+            # 这两个阶段完全独立，可以并行执行
+            parallel_stop_event = threading.Event()
+
+            # 并行进度消息（交替显示两个阶段的消息）
+            parallel_messages = [
+                "正在理解你的经历亮点...",
+                "正在分析职位核心要求...",
+                "正在提取关键技能...",
+                "正在解码JD关键词...",
+                "正在匹配专业能力...",
+                "正在评估岗位需求..."
+            ]
+            parallel_progress_thread = threading.Thread(
                 target=simulate_progress,
-                args=(0, [
-                    "正在识别简历格式...",
-                    "正在提取基本信息...",
-                    "正在解析工作经历...",
-                    "正在分析技能关键词..."
-                ], 0, 18, stop_event),
+                args=(0, parallel_messages, 0, 38, parallel_stop_event),
                 daemon=True
             )
-            thread.start()
+            parallel_progress_thread.start()
 
-            result.parse_result = self.parse_resume(resume_content)
+            # 使用 ThreadPoolExecutor 并行执行
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                future_parse = executor.submit(self.parse_resume, resume_content)
+                future_decode = executor.submit(self.decode_jd, jd_content)
 
-            stop_event.set()  # 停止进度模拟
-            thread.join(timeout=0.1)
+                # 等待两个任务完成
+                result.parse_result = future_parse.result()
+                result.decode_result = future_decode.result()
+
+            parallel_stop_event.set()
+            parallel_progress_thread.join(timeout=0.1)
+
             # 低置信度警告
             if result.parse_result.parsing_confidence < 0.7:
                 logger.warning(f"⚠️ 简历解析置信度较低 ({result.parse_result.parsing_confidence:.2f})，定制质量可能受影响")
-            report_progress(0, "简历结构解析完成", 20)
-
-            # 阶段1: 解码JD
-            stop_event = threading.Event()
-            thread = threading.Thread(
-                target=simulate_progress,
-                args=(1, [
-                    "正在识别职位核心要求...",
-                    "正在提取关键词权重...",
-                    "正在分析隐性需求...",
-                    "正在评估竞争态势..."
-                ], 20, 38, stop_event),
-                daemon=True
-            )
-            thread.start()
-
-            result.decode_result = self.decode_jd(jd_content)
-
-            stop_event.set()
-            thread.join(timeout=0.1)
-            report_progress(1, "职位需求分析完成", 40)
+            report_progress(1, "简历和职位分析完成", 40)
 
             # 阶段2: 匹配分析
             stop_event = threading.Event()
             thread = threading.Thread(
                 target=simulate_progress,
                 args=(2, [
-                    "正在计算匹配度得分...",
-                    "正在识别优势亮点...",
-                    "正在分析差距项...",
-                    "正在制定改写策略..."
+                    "正在寻找你与职位的契合点...",
+                    "正在挖掘你的独特优势...",
+                    "正在分析如何扬长避短...",
+                    "正在制定个性化策略..."
                 ], 40, 58, stop_event),
                 daemon=True
             )
@@ -1378,10 +1680,10 @@ class ExpertTeamV2:
             thread = threading.Thread(
                 target=simulate_progress,
                 args=(3, [
-                    "正在优化个人总结...",
-                    "正在调整工作经历...",
-                    "正在强化项目描述...",
-                    "正在植入关键词..."
+                    "正在精心打磨你的简历...",
+                    "正在优化表达方式...",
+                    "正在突出核心亮点...",
+                    "正在植入职位关键词..."
                 ], 60, 78, stop_event),
                 daemon=True
             )
@@ -1401,10 +1703,10 @@ class ExpertTeamV2:
             thread = threading.Thread(
                 target=simulate_progress,
                 args=(4, [
-                    "正在检查内容一致性...",
-                    "正在验证关键词覆盖...",
-                    "正在评估真实性...",
-                    "正在生成优化建议..."
+                    "正在进行最后的质量检查...",
+                    "正在验证内容准确性...",
+                    "正在生成专业建议...",
+                    "即将完成..."
                 ], 80, 93, stop_event),
                 daemon=True
             )
