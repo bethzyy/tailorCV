@@ -364,12 +364,12 @@ class TemplateManager:
             )
 
             if preprocess_result.success:
-                # 使用预处理后的模板（已保存到 templates/preprocessed/ 目录）
-                preprocessed_path = Path(preprocess_result.template_path)
-                # 复制到 uploaded 目录
+                # 保存原始文件到 uploaded/（用于预览，不做任何修改）
                 file_path = self.uploaded_dir / f"{template_id}.docx"
-                shutil.copy(preprocessed_path, file_path)
-                logger.info(f"上传模板预处理成功，已插入 Jinja2 标记: {template_id}")
+                with open(file_path, 'wb') as f:
+                    f.write(file_content)
+                # preprocessed 文件已在 templates/preprocessed/ 目录，render() 会自动找到
+                logger.info(f"上传模板预处理成功，原始文件保存到 uploaded/: {template_id}")
 
                 # 更新变量列表（从预处理结果获取）
                 template_variables = list(preprocess_result.metadata.variables) if preprocess_result.metadata.variables else []
@@ -464,12 +464,12 @@ class TemplateManager:
             )
 
             if preprocess_result.success:
-                # 使用预处理后的模板（已保存到 templates/preprocessed/ 目录）
-                preprocessed_path = Path(preprocess_result.template_path)
-                # 复制到 extracted 目录
+                # 保存原始文件到 extracted/（用于预览，不做任何修改）
                 file_path = self.extracted_dir / f"{template_id}.docx"
-                shutil.copy(preprocessed_path, file_path)
-                logger.info(f"模板预处理成功，已插入 Jinja2 标记: {template_id}")
+                with open(file_path, 'wb') as f:
+                    f.write(file_content)
+                # preprocessed 文件已在 templates/preprocessed/ 目录，render() 会自动找到
+                logger.info(f"模板预处理成功，原始文件保存到 extracted/: {template_id}")
 
                 # 更新变量列表（从预处理结果获取）
                 template_variables = list(preprocess_result.metadata.variables) if preprocess_result.metadata.variables else []

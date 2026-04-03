@@ -147,7 +147,7 @@ class Database:
                     email TEXT DEFAULT '',
                     nickname TEXT DEFAULT '',
                     plan_type TEXT DEFAULT 'free',
-                    quota_total INTEGER DEFAULT 1,
+                    quota_total INTEGER DEFAULT 3,
                     quota_used INTEGER DEFAULT 0,
                     plan_expires_at TIMESTAMP,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -761,7 +761,7 @@ class Database:
             try:
                 cursor.execute('''
                     INSERT INTO users (phone, email, nickname, plan_type, quota_total, quota_used)
-                    VALUES (?, ?, ?, 'free', 1, 0)
+                    VALUES (?, ?, ?, 'free', 3, 0)
                 ''', (phone or '', email or '', nickname))
                 return cursor.lastrowid
             except sqlite3.IntegrityError:
@@ -828,11 +828,11 @@ class Database:
                     is_expired = True
                     # 自动降级为免费用户
                     cursor.execute('''
-                        UPDATE users SET plan_type = 'free', quota_total = 1,
+                        UPDATE users SET plan_type = 'free', quota_total = 3,
                         quota_used = 0, plan_expires_at = NULL WHERE id = ?
                     ''', (user_id,))
                     plan_type = 'free'
-                    quota_total = 1
+                    quota_total = 3
                     quota_used = 0
 
             # 月卡用户配额为无限（但有日上限，在 quota 模块处理）

@@ -8,11 +8,12 @@
 - **依据追踪**：透明的修改来源展示
 - **双模式输入**：文件上传 + 引导输入
 - **智能优化**：AI 深度分析 JD，针对性优化简历
+- **Writer-Reviewer 闭环**：多模型审阅迭代，简历质量多轮打磨
 
 ## 技术栈
 
 - **后端**：Flask 2.x
-- **AI 模型**：ZhipuAI GLM-4.6 / GLM-4-flash
+- **AI 模型**：ZhipuAI GLM-5 / GLM-4-flash, 阿里云 Qwen
 - **文档处理**：pdfplumber, PyPDF2, python-docx
 - **数据存储**：SQLite
 
@@ -62,18 +63,23 @@ python app.py
 
 ```
 tailorCV/
-├── app.py                 # Flask 主入口
-├── core/                  # 核心业务逻辑
+├── apps/
+│   ├── simple_app.py      # 简版工具 Flask 应用
+│   └── multi_app.py       # 多模型工具 Flask 应用
+├── core/
 │   ├── config.py          # 配置管理
-│   ├── resume_parser.py   # 简历解析器
-│   ├── expert_team.py     # AI 专家团队
-│   ├── evidence_tracker.py# 依据追踪器
-│   └── resume_generator.py# 简历生成器
-├── api/                   # REST API
-├── web/                   # Web 界面
+│   ├── expert_team.py     # AI 专家团队（含 Writer-Reviewer 闭环）
+│   ├── template_processor.py  # 模板渲染处理器
+│   ├── jinja_inserter.py  # Jinja2 标签插入器
+│   ├── structure_detector.py  # 简历结构检测器
+│   ├── auth.py            # 用户认证
+│   ├── quota.py           # 配额管理
+│   └── providers/         # AI 提供商适配器
+├── web/templates/simple/  # 简版工具前端
 ├── prompts/               # AI 提示词
 ├── templates/             # 简历模板
-└── storage/               # 数据存储
+├── tests/benchmark/       # Benchmark 测试套件
+└── docs/                  # 文档
 ```
 
 ## API 文档

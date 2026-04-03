@@ -95,7 +95,7 @@ openssl genrsa -out app_private_key.pem 2048
 DEFAULT_PAYMENT_PROVIDER=alipay
 
 # 支付宝当面付
-ALIPAY_APP_ID=你的AppID
+ALIPAY_APP_ID=你的支付宝AppID
 ALIPAY_PRIVATE_KEY_PATH=./certs/alipay_private_key.pem
 ALIPAY_PUBLIC_KEY_PATH=./certs/alipay_public_key.pem
 ALIPAY_NOTIFY_URL=https://yourdomain.com/api/payment/notify/alipay
@@ -154,9 +154,9 @@ ALIPAY_NOTIFY_URL=https://xxxx.cpolar.cn/api/payment/notify/alipay
 
 ```env
 # 微信支付
-WECHAT_APP_ID=wx1234567890
-WECHAT_MCH_ID=1234567890
-WECHAT_API_KEY_V3=your_api_v3_key_32chars
+WECHAT_APP_ID=你的微信AppID
+WECHAT_MCH_ID=你的微信商户号
+WECHAT_API_KEY_V3=你的APIv3密钥（32位字符串）
 WECHAT_CERT_PATH=./certs/apiclient_key
 WECHAT_KEY_PATH=./certs/apiclient_key.pem
 WECHAT_NOTIFY_URL=https://yourdomain.com/api/payment/notify/wechat

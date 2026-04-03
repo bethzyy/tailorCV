@@ -120,7 +120,7 @@ class Config:
     }
 
     # ==================== Flask 配置 ====================
-    SECRET_KEY = os.getenv('SECRET_KEY', 'tailorcv-secret-key-change-in-production')
+    SECRET_KEY = os.getenv('SECRET_KEY', '')  # 生产环境必须通过环境变量设置
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB 最大文件大小
 
     # ==================== 认证配置 ====================
@@ -162,7 +162,7 @@ class Config:
 
     # ==================== 套餐配置 ====================
     PLANS = {
-        'free': {'name': '免费体验', 'price': 0, 'quota': 1, 'daily_limit': 1},
+        'free': {'name': '免费体验', 'price': 0, 'quota': 3, 'daily_limit': 3},
         'pack5': {'name': '按次包', 'price': 9.9, 'quota': 5, 'daily_limit': 5},
         'monthly': {'name': '月卡', 'price': 29.9, 'quota': -1, 'daily_limit': 10},  # -1 = 无限
         'quarterly': {'name': '季卡', 'price': 59.9, 'quota': -1, 'daily_limit': 20},
@@ -175,6 +175,16 @@ class Config:
     # ==================== 限流配置 ====================
     RATE_LIMIT_DEFAULT = os.getenv('RATE_LIMIT_DEFAULT', '30 per hour')
     RATE_LIMIT_ANON = os.getenv('RATE_LIMIT_ANON', '10 per hour')
+
+    # ==================== AntiGravity 代理配置 ====================
+    ANTIGRAVITY_BASE_URL = os.getenv('ANTIGRAVITY_BASE_URL', 'http://127.0.0.1:8045/v1')
+
+    # ==================== Writer-Reviewer 闭环配置 ====================
+    WRITER_REVIEWER_ENABLED = os.getenv('WRITER_REVIEWER_ENABLED', 'false').lower() == 'true'
+    WRITER_REVIEWER_MAX_ITERATIONS = int(os.getenv('WRITER_REVIEWER_MAX_ITERATIONS', '3'))
+    WRITER_REVIEWER_SCORE_THRESHOLD = float(os.getenv('WRITER_REVIEWER_SCORE_THRESHOLD', '85.0'))
+    WRITER_REVIEWER_MIN_DIFF_THRESHOLD = float(os.getenv('WRITER_REVIEWER_MIN_DIFF_THRESHOLD', '0.05'))
+    WRITER_REVIEWER_REVIEWER_MODELS = os.getenv('WRITER_REVIEWER_REVIEWER_MODELS', 'qwen3.5-plus')
 
     # ==================== 端口配置 ====================
     SIMPLE_APP_PORT = int(os.getenv('SIMPLE_APP_PORT', 6003))
@@ -228,6 +238,7 @@ class Config:
             providers.append('zhipu')
         if cls.ALIBABA_API_KEY or Path(r'C:\D\CAIE_tool\LLM_Configs\ali\apikey.txt').exists():
             providers.append('alibaba')
+        providers.append('antigravity')  # 本地代理，始终列入（运行时检测在线状态）
         return providers
 
 

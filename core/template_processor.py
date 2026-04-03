@@ -8,6 +8,7 @@
 import os
 import io
 import re
+import copy
 import uuid
 import hashlib
 import logging
@@ -227,6 +228,7 @@ class TemplateProcessor:
                 render_context = self._build_context(context)
                 logger.info(f"📝 构建渲染上下文完成，变量数: {len(render_context)}")
                 doc.render(render_context)
+                self._post_process_tailored_content(doc)
                 bio = io.BytesIO()
                 doc.save(bio)
                 bio.seek(0)
@@ -403,6 +405,66 @@ class TemplateProcessor:
 
         return result
 
+    def _post_process_tailored_content(self, doc: 'Document'):
+        """
+        渲染后处理：将 tailored 内容中的 \\n 拆分为独立段落。
+
+        docxtpl 将 {{ var }} 中的 \\n 渲染为单个段落中的换行符，
+        需要拆分为独立的 <w:p> 元素，复制原段落的格式。
+        """
+        from docx.oxml.ns import qn
+
+        paragraphs = list(doc.paragraphs)
+        for para in paragraphs:
+            text = para.text
+            if '\n' not in text:
+                continue
+
+            lines = text.split('\n')
+            # 只有多行时才拆分
+            if len(lines) <= 1:
+                continue
+
+            # 保留第一行的内容
+            para.clear()
+            para.add_run(lines[0])
+
+            # 获取段落的 XML 元素
+            para_element = para._element
+            para_parent = para_element.getparent()
+
+            if para_parent is None:
+                continue
+
+            # 找到当前段落在父元素中的位置
+            para_index = list(para_parent).index(para_element)
+
+            # 为后续每行创建新段落，复制格式
+            for line in lines[1:]:
+                if not line.strip():
+                    continue
+                new_para_element = copy.deepcopy(para_element)
+                # 清除新段落中的 run 文本，设置为新行内容
+                for r in new_para_element.findall(qn('w:r')):
+                    for t in r.findall(qn('w:t')):
+                        t.text = ''
+                    # 设置第一个 run 的文本
+                    r_t = r.find(qn('w:t'))
+                    if r_t is not None:
+                        r_t.text = line
+                    break  # 只保留第一个 run
+
+                # 移除多余的 run 元素（只保留第一个）
+                runs = new_para_element.findall(qn('w:r'))
+                for r in runs[1:]:
+                    new_para_element.remove(r)
+
+                # 在当前段落之后插入新段落
+                para_parent.insert(para_index + 1, new_para_element)
+                para_index += 1
+
+            logger.debug(f"拆分 tailored 段落: {len(lines)} 行")
+
     def _generate_template_id(self, doc: 'Document', original_content: bytes = None) -> str:
         """
         生成模板ID - 基于内容哈希
@@ -478,6 +540,7 @@ class TemplateProcessor:
                 doc = DocxTemplate(str(preprocessed_path))
                 render_context = self._build_context(context)
                 doc.render(render_context)
+                self._post_process_tailored_content(doc)
                 bio = io.BytesIO()
                 doc.save(bio)
                 bio.seek(0)
@@ -537,6 +600,7 @@ class TemplateProcessor:
             doc = DocxTemplate(str(template_path))
             render_context = self._build_context(context)
             doc.render(render_context)
+            self._post_process_tailored_content(doc)
             bio = io.BytesIO()
             doc.save(bio)
             bio.seek(0)

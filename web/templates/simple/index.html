@@ -1413,27 +1413,33 @@
             </div>
         </header>
 
-        <div class="main-card" id="mainCard" style="position:relative;">
-            <!-- 未登录引导遮罩 -->
-            <div id="loginGuide" style="position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.92); z-index:100; border-radius:16px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;">
-                <div style="font-size:64px; margin-bottom:20px;">✨</div>
-                <h2 style="color:#333; margin-bottom:10px; font-size:24px;">tailorCV 智能简历定制</h2>
-                <p style="color:#666; font-size:15px; max-width:360px; line-height:1.8; margin-bottom:30px;">
-                    AI 深度分析职位需求，基于你真实简历生成定制化简历<br>
-                    零编造，每一条修改都有据可查
-                </p>
-                <div style="display:flex; gap:12px; flex-wrap:wrap; justify-content:center;">
-                    <button onclick="showLoginModal()"
-                        style="padding:14px 40px; background:linear-gradient(135deg,#667eea,#764ba2); color:white; border:none; border-radius:12px; font-size:17px; cursor:pointer; box-shadow:0 4px 15px rgba(102,126,234,0.4);">
-                        📧 邮箱登录 / 注册
-                    </button>
-                    <button onclick="closeLoginGuide()"
-                        style="padding:14px 28px; background:#f0f0f0; color:#666; border:none; border-radius:12px; font-size:15px; cursor:pointer;">
-                        先看看
-                    </button>
+        <!-- 未登录引导（fixed 覆盖整个视口） -->
+        <div id="loginGuide" style="position:fixed; top:0; left:0; width:100vw; height:100vh; background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); z-index:1000; display:flex; align-items:center; justify-content:center;">
+            <div style="background:white; border-radius:20px; padding:40px 36px 32px; max-width:360px; width:90%; box-shadow:0 20px 60px rgba(0,0,0,0.3); text-align:center;">
+                <div style="width:56px; height:56px; background:linear-gradient(135deg,#667eea,#764ba2); border-radius:14px; margin:0 auto 20px; display:flex; align-items:center; justify-content:center; font-size:26px;">
+                    📄
                 </div>
-                <p style="color:#bbb; font-size:12px; margin-top:20px;">新用户免费体验 1 次</p>
+                <h2 style="color:#1a1a2e; margin:0 0 8px; font-size:20px; font-weight:700;">tailorCV</h2>
+                <p style="color:#888; font-size:13px; line-height:1.6; margin:0 0 24px;">
+                    AI 分析职位需求，智能定制你的简历<br>
+                    <span style="color:#bbb; font-size:12px;">零编造 · 有据可查 · 新用户免费 3 次</span>
+                </p>
+                <button onclick="showLoginModal()"
+                    style="width:100%; padding:12px 0; background:linear-gradient(135deg,#667eea,#764ba2); color:white; border:none; border-radius:12px; font-size:15px; font-weight:500; cursor:pointer; box-shadow:0 4px 14px rgba(102,126,234,0.35); transition:transform 0.15s,box-shadow 0.15s;"
+                    onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(102,126,234,0.45)'"
+                    onmouseout="this.style.transform='';this.style.boxShadow='0 4px 14px rgba(102,126,234,0.35)'">
+                    📧 邮箱登录 / 注册
+                </button>
+                <a href="javascript:void(0)" onclick="closeLoginGuide()"
+                    style="display:inline-block; margin-top:14px; color:#aaa; font-size:13px; text-decoration:none; transition:color 0.15s;"
+                    onmouseover="this.style.color='#888'"
+                    onmouseout="this.style.color='#aaa'">
+                    先看看，稍后再登录
+                </a>
             </div>
+        </div>
+
+        <div class="main-card" id="mainCard" style="position:relative;">
 
             <!-- 进度指示器 -->
             <div class="progress-indicator">
@@ -1714,16 +1720,16 @@
 
             <!-- 模板预览模态框 -->
             <div class="modal-overlay" id="templatePreviewModal" style="display:none;">
-                <div class="modal-content" style="max-width: 800px;">
-                    <div class="modal-header">
+                <div class="modal-content" style="max-width: 800px; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden;">
+                    <div class="modal-header" style="flex-shrink: 0;">
                         <span class="modal-title" id="previewTemplateName">模板预览</span>
                         <button class="modal-close" onclick="hideTemplatePreview()">&times;</button>
                     </div>
-                    <div class="modal-body">
-                        <div id="previewTemplateContainer" style="width: 100%; min-height: 400px; border-radius: 8px; margin-bottom: 15px; background: #fff; overflow: hidden; border: 1px solid #e2e8f0;">
+                    <div class="modal-body" style="flex: 1; overflow-y: auto; min-height: 0;">
+                        <div id="previewTemplateContainer" style="width: 100%; height: 70vh; border-radius: 8px; margin-bottom: 15px; background: #fff; overflow: hidden; border: 1px solid #e2e8f0;">
                             <!-- HTML 预览 iframe -->
                             <iframe id="previewTemplateFrame"
-                                    style="width: 100%; height: 500px; border: none; display: none;">
+                                    style="width: 100%; height: 100%; border: none; display: none;">
                             </iframe>
                             <!-- 加载中提示 -->
                             <div id="previewLoading" style="text-align: center; padding: 60px; color: #666;">
@@ -1749,7 +1755,7 @@
                             <span>使用次数: <span id="previewTemplateUseCount">0</span></span>
                         </div>
                     </div>
-                    <div class="modal-footer">
+                    <div class="modal-footer" style="flex-shrink: 0;">
                         <button class="modal-btn modal-btn-cancel" onclick="hideTemplatePreview()">关闭</button>
                         <button class="modal-btn modal-btn-confirm" onclick="selectFromPreview()">使用此模板</button>
                     </div>
@@ -2054,7 +2060,7 @@
         }
         .modal-content {
             background: white; border-radius: 16px; padding: 30px;
-            position: relative; width: 90%; max-height: 90vh; overflow-y: auto;
+            position: relative; width: 90%; max-height: 90vh;
             animation: slideUp 0.3s;
         }
         .modal-close {
@@ -2099,7 +2105,7 @@
         // ==================== 用户参数持久化 ====================
         const STORAGE_KEY = 'tailorCV_userData';
 
-        // 保存用户输入到 localStorage
+        // 保存用户输入到 localStorage + 服务端（双写）
         function saveUserData() {
             const data = {
                 jdText: document.getElementById('jdText').value,
@@ -2107,25 +2113,49 @@
                 guidedData: collectGuidedData(),
                 timestamp: Date.now()
             };
+            // 保存文件信息（不含文件内容，浏览器不允许）
+            if (resumeFile.files.length) {
+                data.resumeFile = {
+                    name: resumeFile.files[0].name,
+                    size: resumeFile.files[0].size,
+                    type: resumeFile.files[0].type
+                };
+            }
             localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            // 同步到服务端（静默，不阻塞 UI）
+            fetch('/api/user_params', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            }).catch(() => {});
         }
 
-        // 从 localStorage 加载用户输入
+        // 从 localStorage 加载用户输入（localStorage 为空时从服务端兜底）
         function loadUserData() {
             const saved = localStorage.getItem(STORAGE_KEY);
-            if (!saved) return;
+            if (saved) {
+                applyUserData(JSON.parse(saved));
+            } else {
+                // localStorage 为空（清缓存后），从服务端恢复
+                fetch('/api/user_params').then(r => r.json()).then(data => {
+                    if (data && data.jdText) {
+                        applyUserData(data);
+                        // 回写到 localStorage
+                        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+                    }
+                }).catch(() => {});
+            }
+        }
 
+        // 应用用户数据到表单
+        function applyUserData(data) {
             try {
-                const data = JSON.parse(saved);
-                // 恢复 JD 文本
                 if (data.jdText) {
                     document.getElementById('jdText').value = data.jdText;
                 }
-                // 恢复引导模式数据
                 if (data.guidedData) {
                     restoreGuidedData(data.guidedData);
                 }
-                // 恢复模式（如果是引导模式）
                 if (data.currentMode === 'guided') {
                     document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
                     document.querySelector('.mode-tab[data-mode="guided"]').classList.add('active');
@@ -2133,8 +2163,20 @@
                     document.getElementById('guidedPanel').classList.add('active');
                     currentMode = 'guided';
                 }
+                if (data.resumeFile) {
+                    resumeName.textContent = data.resumeFile.name + '（请重新上传）';
+                    resumeInfo.classList.add('show');
+                    resumeInfo.style.color = '#e67e22';
+                }
+                // 恢复模板选择到 localStorage
+                if (data.selectedTemplateId) {
+                    localStorage.setItem('selectedTemplateId', data.selectedTemplateId);
+                }
+                if (data.templateMode) {
+                    localStorage.setItem('templateMode', data.templateMode);
+                }
             } catch (e) {
-                console.warn('加载保存的用户数据失败:', e);
+                console.warn('应用用户数据失败:', e);
             }
         }
 
@@ -2346,6 +2388,13 @@
                             iframe.srcdoc = data.html;
                         }
                         iframe.style.display = 'block';
+                        // 动态调整 iframe 高度以适应内容，避免双层滚动条
+                        setTimeout(() => {
+                            try {
+                                const h = iframe.contentDocument.documentElement.scrollHeight;
+                                iframe.style.height = Math.max(h, 300) + 'px';
+                            } catch(e) {}
+                        }, 100);
                     } else {
                         // 降级到占位符
                         iframe.style.display = 'none';
@@ -2444,9 +2493,10 @@
             // 更新当前显示
             updateTemplateCurrentInfo();
 
-            // 保存到 localStorage（防止刷新丢失）
+            // 保存到 localStorage + 服务端（防止刷新/清缓存丢失）
             localStorage.setItem('selectedTemplateId', templateId);
             localStorage.setItem('templateMode', 'selected');
+            saveUserData();  // 同步到服务端
             console.log(`📌 选择完成: templateMode='${templateMode}', selectedTemplateId='${selectedTemplateId}', selectedTemplateName='${selectedTemplateName}'`);
 
             // 选择后自动折叠
@@ -2478,6 +2528,7 @@
                 });
                 // 清除 localStorage 中的选择
                 localStorage.removeItem('selectedTemplateId');
+                saveUserData();  // 同步到服务端
             }
 
             // 更新当前显示
@@ -2708,12 +2759,13 @@
                 updateResumeInfo();
             }
         });
-        resumeFile.addEventListener('change', updateResumeInfo);
+        resumeFile.addEventListener('change', () => { updateResumeInfo(); saveUserData(); });
 
         function updateResumeInfo() {
             if (resumeFile.files.length) {
                 resumeName.textContent = resumeFile.files[0].name;
                 resumeInfo.classList.add('show');
+                resumeInfo.style.color = '';
             }
         }
 
@@ -3022,9 +3074,9 @@
                     console.log(`   隐藏字段值: '${hiddenTemplateId}'`);
                     console.log(`   ✅ 最终提交: templateMode='${actualTemplateMode}', template_id='${actualTemplateId}'`);
 
-                    // 增加超时机制（2分钟）
+                    // 增加超时机制（10分钟，Writer-Reviewer闭环需要更长处理时间）
                     const fileController = new AbortController();
-                    const fileTimeoutId = setTimeout(() => fileController.abort(), 300000); // 5分钟超时
+                    const fileTimeoutId = setTimeout(() => fileController.abort(), 600000); // 10分钟超时
 
                     try {
                         response = await fetch('/api/tailor/file', {
@@ -3054,9 +3106,9 @@
                     console.log(`   localStorage selectedTemplateId: '${storedTemplateId}'`);
                     console.log(`   ✅ 最终提交: templateMode='${actualTemplateMode}', template_id='${actualTemplateId}'`);
 
-                    // 增加超时机制（5分钟）
+                    // 增加超时机制（10分钟，Writer-Reviewer闭环需要更长处理时间）
                     const textController = new AbortController();
-                    const textTimeoutId = setTimeout(() => textController.abort(), 300000);
+                    const textTimeoutId = setTimeout(() => textController.abort(), 600000);
 
                     try {
                         response = await fetch('/api/tailor/text', {
@@ -3115,7 +3167,7 @@
             } catch (error) {
                 let errorMsg = error.message;
                 if (error.name === 'AbortError') {
-                    errorMsg = '请求超时（超过5分钟），AI处理可能较慢，请稍后重试';
+                    errorMsg = '请求超时（超过10分钟），AI处理可能较慢，请稍后重试';
                 } else if (error.name === 'TypeError' && error.message === 'Failed to fetch') {
                     errorMsg = '网络请求失败，可能原因：\n1. 服务器响应超时\n2. 网络连接问题\n3. 服务已停止';
                 }
@@ -3565,7 +3617,7 @@
                     closeLoginGuide();
                     updateUIForLoggedIn();
                     if (data.user.is_new_user) {
-                        alert('注册成功！您有 1 次免费体验机会');
+                        alert('注册成功！您有 3 次免费体验机会');
                     }
                 } else {
                     alert(data.error || '登录失败');

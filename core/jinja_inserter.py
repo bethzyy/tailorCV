@@ -429,6 +429,22 @@ class JinjaTagInserter:
             template = f'{{{{ {list_var}_{index}_name }}}}'
 
         self._replace_paragraph_text(para, template)
+
+        # 处理内容段落 → 合并到第一个，替换为 tailored 变量
+        if entry.content_paragraphs:
+            first_content_idx = entry.content_paragraphs[0]
+            if first_content_idx < len(doc.paragraphs):
+                content_para = doc.paragraphs[first_content_idx]
+                self._replace_paragraph_text(
+                    content_para,
+                    f'{{{{ {list_var}_{index}_tailored }}}}'
+                )
+                logger.debug(f"插入内容段落变量 (段落 {first_content_idx})")
+            # 清除剩余内容段落
+            for idx in entry.content_paragraphs[1:]:
+                if idx < len(doc.paragraphs):
+                    doc.paragraphs[idx].clear()
+
         logger.debug(f"插入简单条目变量 (段落 {entry.paragraph_index}, 索引 {index})")
 
     def _replace_paragraph_text(self, para: 'Paragraph', new_text: str):

@@ -19,6 +19,7 @@ import json
 import logging
 import re
 import threading
+from difflib import SequenceMatcher
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, Optional, Tuple, List, Callable, TYPE_CHECKING
 from pathlib import Path
@@ -127,6 +128,10 @@ class RewriteContentResult(StageResult):
     change_log: List[Dict[str, Any]] = field(default_factory=list)
     keyword_coverage: Dict[str, Any] = field(default_factory=dict)
     jd_keyword_coverage: Dict[str, Any] = field(default_factory=dict)  # JD关键词覆盖率验证结果
+    # Writer-Reviewer 闭环元数据
+    review_iterations: int = 0
+    review_scores: List[Dict[str, Any]] = field(default_factory=list)
+    review_feedback_summary: str = ""
 
 
 @dataclass
@@ -776,6 +781,20 @@ class ExpertTeamV2:
             'total_latency_ms': 0
         }
 
+        # Writer-Reviewer 闭环初始化
+        self._reviewer_providers = {}  # {model_id: provider_instance}
+        if config.WRITER_REVIEWER_ENABLED:
+            try:
+                self.prompts['review_content'] = self._load_prompt('review_content_prompt.txt')
+                self.prompts['revise_content'] = self._load_prompt('revise_content_prompt.txt')
+                self._init_reviewer_providers()
+                if self._reviewer_providers:
+                    logger.info(f"Writer-Reviewer 闭环已启用，审阅模型: {list(self._reviewer_providers.keys())}")
+                else:
+                    logger.warning("Writer-Reviewer 闭环启用但无可用审阅模型，降级为单次改写")
+            except FileNotFoundError as e:
+                logger.warning(f"Writer-Reviewer prompt 文件缺失，降级为单次改写: {e}")
+
     def _load_prompt(self, filename: str) -> str:
         """加载 Prompt 模板"""
         filepath = self.prompts_dir / filename
@@ -885,9 +904,11 @@ class ExpertTeamV2:
                         contents = []
                         for b in bullets:
                             if isinstance(b, dict):
-                                contents.append(b.get('content', ''))
-                            elif isinstance(b, str):
-                                contents.append(b)
+                                c = b.get('content', '')
+                                if c:
+                                    contents.append(c.strip())
+                            elif isinstance(b, str) and b.strip():
+                                contents.append(b.strip())
                         merged = '\n'.join(filter(None, contents))
                         if merged:
                             exp['tailored'] = merged
@@ -934,7 +955,8 @@ class ExpertTeamV2:
 
         return resume
 
-    def _build_jd_core_requirements(self, jd_analysis: DecodeJdResult) -> Dict[str, Any]:
+    def _build_jd_core_requirements(self, jd_analysis: DecodeJdResult,
+                                       match_result: MatchAnalysisResult = None) -> Dict[str, Any]:
         """
         从 JD 解析结果提取必须覆盖的核心要求
 
@@ -943,15 +965,28 @@ class ExpertTeamV2:
         2. 增强降级机制中生成 JD 定向内容
         3. 质量验证阶段计算覆盖率
         """
-        # 提取 must_have 技能
+        # 提取 must_have 技能（包含具体要求描述）
         must_have_skills = []
+        jd_specific_requirements = []
         if jd_analysis.must_have:
             skills_data = jd_analysis.must_have.get('skills', [])
             if isinstance(skills_data, list):
-                must_have_skills = [
-                    s.get('skill', s) if isinstance(s, dict) else s
-                    for s in skills_data
-                ]
+                for s in skills_data:
+                    if isinstance(s, dict):
+                        skill_name = s.get('skill', '')
+                        must_have_skills.append(skill_name)
+                        # 提取具体要求描述（不只是技能名）
+                        requirement_detail = skill_name
+                        if s.get('requirement'):
+                            requirement_detail = f"{skill_name}: {s['requirement']}"
+                        elif s.get('level'):
+                            requirement_detail = f"{skill_name}（{s['level']}）"
+                        elif s.get('experience'):
+                            requirement_detail = f"{skill_name}（{s['experience']}经验）"
+                        jd_specific_requirements.append(requirement_detail)
+                    else:
+                        must_have_skills.append(s)
+                        jd_specific_requirements.append(s)
 
         # 提取 must_have 经验要求
         must_have_experience = jd_analysis.must_have.get('experience', []) if jd_analysis.must_have else []
@@ -964,16 +999,24 @@ class ExpertTeamV2:
         if jd_analysis.must_have:
             core_abilities = jd_analysis.must_have.get('abilities', [])
 
+        # 提取改写强度
+        rewrite_intensity = 'L2'  # 默认
+        if match_result and hasattr(match_result, 'rewrite_intensity') and match_result.rewrite_intensity:
+            rewrite_intensity = match_result.rewrite_intensity
+
         result = {
             'job_title': jd_analysis.job_title,
             'must_have_skills': must_have_skills,
+            'jd_specific_requirements': jd_specific_requirements,
             'must_have_experience': must_have_experience,
             'top_keywords': top_keywords,
             'core_abilities': core_abilities,
+            'rewrite_intensity': rewrite_intensity,
             'target_coverage': 0.8  # 目标覆盖率 80%
         }
 
-        logger.info(f"📋 JD核心要求提取: 职位={jd_analysis.job_title}, 必备技能={must_have_skills}, 关键词={top_keywords}")
+        logger.info(f"📋 JD核心要求提取: 职位={jd_analysis.job_title}, 必备技能={must_have_skills}, "
+                    f"具体要求={jd_specific_requirements}, 改写强度={rewrite_intensity}")
         return result
 
     def _create_fallback_tailored_resume(self, parsed_resume: ParseResumeResult) -> Dict[str, Any]:
@@ -1384,10 +1427,369 @@ class ExpertTeamV2:
         logger.info(f"阶段2完成: match_score={result.match_score}")
         return result
 
+    # ==================== Writer-Reviewer 闭环方法 ====================
+
+    def _init_reviewer_providers(self):
+        """根据配置初始化审阅模型 provider 实例"""
+        model_list = [m.strip() for m in config.WRITER_REVIEWER_REVIEWER_MODELS.split(',') if m.strip()]
+
+        # 已知的 AntiGravity 模型
+        antigravity_models = {
+            'gpt-4o', 'gpt-4-turbo', 'claude-sonnet-4-5', 'claude-3-5-sonnet',
+            'gemini-2.5-pro', 'gemini-2.0-flash-exp', 'gemini-1.5-pro', 'gemini-1.5-flash'
+        }
+
+        for model_id in model_list:
+            provider = None
+            if model_id in antigravity_models:
+                from .providers.antigravity_provider import AntiGravityProvider
+                p = AntiGravityProvider()
+                if p.is_available():
+                    provider = p
+                else:
+                    logger.warning(f"AntiGravity 代理不可用，跳过审阅模型: {model_id}")
+            elif model_id.startswith('qwen') or model_id.startswith('kimi'):
+                from .providers.alibaba_provider import AlibabaProvider
+                p = AlibabaProvider()
+                if p.is_available():
+                    provider = p
+                else:
+                    logger.warning(f"阿里云不可用，跳过审阅模型: {model_id}")
+            else:
+                # 未知模型，尝试 AntiGravity
+                from .providers.antigravity_provider import AntiGravityProvider
+                p = AntiGravityProvider()
+                if p.is_available():
+                    provider = p
+                else:
+                    logger.warning(f"无法为审阅模型 {model_id} 找到可用 provider")
+
+            if provider:
+                self._reviewer_providers[model_id] = provider
+
+    def _review_tailored_resume(self, tailored_resume_json: str,
+                                original_resume: str,
+                                jd_requirements_json: str,
+                                provider, model_id: str) -> Optional[Dict]:
+        """调用单个审阅模型评估定制简历"""
+        prompt = self.prompts['review_content'].format(
+            tailored_resume=tailored_resume_json,
+            original_resume=original_resume,
+            jd_requirements=jd_requirements_json
+        )
+
+        response = provider.call(
+            prompt=prompt,
+            model_id=model_id,
+            max_tokens=4096,
+            temperature=0.3
+        )
+
+        if not response.success:
+            logger.warning(f"审阅模型 {model_id} 调用失败: {response.error_message}")
+            return None
+
+        json_str = self._extract_json(response.content)
+        if json_str:
+            try:
+                review = json.loads(json_str)
+                logger.info(f"审阅模型 {model_id} 完成: score={review.get('overall_score', '?')}, "
+                            f"converged={review.get('converged', False)}")
+                return review
+            except json.JSONDecodeError:
+                logger.warning(f"审阅模型 {model_id} 返回的 JSON 解析失败")
+        return None
+
+    def _aggregate_reviews(self, reviews: List[Dict]) -> Dict:
+        """合并多个审阅者的评审结果"""
+        if not reviews:
+            return {"converged": False, "overall_score": 0, "summary": "无审阅结果"}
+
+        dimension_names = ['jd_alignment', 'authenticity', 'keyword_coverage',
+                           'logical_flow', 'quantification', 'professional_tone']
+        aggregated_dimensions = {}
+
+        for dim in dimension_names:
+            scores = [r.get('dimensions', {}).get(dim, {}).get('score')
+                      for r in reviews
+                      if isinstance(r.get('dimensions', {}).get(dim), dict)]
+            if scores:
+                avg_score = round(sum(scores) / len(scores), 1)
+                issues = []
+                suggestions = []
+                for r in reviews:
+                    dim_data = r.get('dimensions', {}).get(dim, {})
+                    if isinstance(dim_data, dict):
+                        issues.extend(dim_data.get('issues', []))
+                        suggestions.extend(dim_data.get('suggestions', []))
+                aggregated_dimensions[dim] = {
+                    "score": avg_score,
+                    "issues": list(set(issues)),
+                    "suggestions": list(set(suggestions))
+                }
+
+        dim_scores = [d['score'] for d in aggregated_dimensions.values()]
+        overall_score = round(sum(dim_scores) / len(dim_scores)) if dim_scores else 0
+
+        # 去重 specific_revisions
+        seen = set()
+        all_revisions = []
+        for r in reviews:
+            for rev in r.get('specific_revisions', []):
+                key = (rev.get('section', ''), rev.get('item_index', -1), rev.get('reason', ''))
+                if key not in seen:
+                    seen.add(key)
+                    all_revisions.append(rev)
+
+        all_converged = all(r.get('converged', False) for r in reviews)
+        summaries = [r.get('summary', '') for r in reviews if r.get('summary')]
+
+        return {
+            "overall_score": overall_score,
+            "dimensions": aggregated_dimensions,
+            "specific_revisions": all_revisions,
+            "converged": all_converged,
+            "reviewer_count": len(reviews),
+            "summary": " | ".join(summaries) if summaries else ""
+        }
+
+    def _calculate_version_diff(self, version_a: Dict, version_b: Dict) -> float:
+        """计算两版简历的差异比例 (0.0 ~ 1.0)"""
+        text_a = json.dumps(version_a, ensure_ascii=False, sort_keys=True)
+        text_b = json.dumps(version_b, ensure_ascii=False, sort_keys=True)
+        if not text_a or not text_b:
+            return 1.0 if text_a != text_b else 0.0
+        return 1.0 - SequenceMatcher(None, text_a, text_b).ratio()
+
+    def _rewrite_with_review_loop(self, original_resume: str,
+                                   parsed_resume: ParseResumeResult,
+                                   match_result: MatchAnalysisResult,
+                                   jd_analysis: DecodeJdResult,
+                                   progress_callback=None) -> RewriteContentResult:
+        """执行 Writer-Reviewer 闭环改写"""
+        max_iterations = config.WRITER_REVIEWER_MAX_ITERATIONS
+        score_threshold = config.WRITER_REVIEWER_SCORE_THRESHOLD
+        min_diff_threshold = config.WRITER_REVIEWER_MIN_DIFF_THRESHOLD
+
+        # === 第 0 轮：初次改写 ===
+        if progress_callback:
+            progress_callback(3, "正在精心打磨你的简历...", 58)
+
+        result = self._rewrite_single_pass(original_resume, parsed_resume, match_result, jd_analysis)
+        if not result.success:
+            return result
+
+        current_tailored = result.tailored_resume
+        review_iterations = 0
+        review_scores = []
+
+        # 构造 JD 需求 JSON（供审阅模型使用）
+        jd_requirements_json = json.dumps({
+            'job_title': jd_analysis.job_title,
+            'must_have': jd_analysis.must_have,
+            'keyword_weights': jd_analysis.keyword_weights,
+            'nice_to_have': jd_analysis.nice_to_have,
+        }, ensure_ascii=False, indent=2)
+
+        # 计算每轮迭代占的进度区间
+        review_progress_start = 64
+        review_progress_end = 82
+        progress_per_iteration = (review_progress_end - review_progress_start) / max_iterations
+
+        for iteration in range(1, max_iterations + 1):
+            review_iterations = iteration
+            iter_start_pct = int(review_progress_start + progress_per_iteration * (iteration - 1))
+            iter_end_pct = int(review_progress_start + progress_per_iteration * iteration)
+
+            if progress_callback:
+                progress_callback(3, f"审阅优化第 {iteration}/{max_iterations} 轮...", iter_start_pct)
+
+            logger.info(f"=== Writer-Reviewer 循环 第 {iteration}/{max_iterations} 轮 ===")
+
+            # === 并行审阅 ===
+            tailored_json_str = json.dumps(current_tailored, ensure_ascii=False, indent=2)
+            logger.info(f"审阅请求: 发送给 {len(self._reviewer_providers)} 个审阅模型, "
+                        f"简历JSON长度: {len(tailored_json_str)} 字符")
+
+            reviews = []
+            with ThreadPoolExecutor(max_workers=len(self._reviewer_providers)) as executor:
+                futures = {}
+                for model_id, provider in self._reviewer_providers.items():
+                    future = executor.submit(
+                        self._review_tailored_resume,
+                        tailored_json_str, original_resume, jd_requirements_json,
+                        provider, model_id
+                    )
+                    futures[future] = model_id
+
+                for future in futures:
+                    model_id = futures[future]
+                    try:
+                        review = future.result(timeout=120)
+                        if review:
+                            reviews.append(review)
+                    except Exception as e:
+                        logger.warning(f"审阅模型 {model_id} 异常: {e}")
+
+            if not reviews:
+                logger.warning("所有审阅模型调用失败，停止循环")
+                break
+
+            logger.info(f"审阅完成: 成功 {len(reviews)}/{len(self._reviewer_providers)} 个")
+
+            # === 聚合反馈 ===
+            aggregated = self._aggregate_reviews(reviews)
+
+            # 输出各维度分数
+            dim_scores = aggregated.get('dimensions', {})
+            dim_log = ', '.join(f"{k}={v['score']}" for k, v in dim_scores.items())
+            logger.info(f"各维度分数: {dim_log}")
+
+            review_scores.append({
+                "iteration": iteration,
+                "overall_score": aggregated['overall_score'],
+                "reviewer_count": aggregated['reviewer_count'],
+                "converged": aggregated['converged'],
+                "revision_count": len(aggregated['specific_revisions'])
+            })
+            logger.info(f"聚合审阅: score={aggregated['overall_score']}, "
+                        f"converged={aggregated['converged']}, "
+                        f"revisions={len(aggregated['specific_revisions'])}")
+
+            # === 收敛检查 ===
+            logger.info(f"收敛检查: converged={aggregated['converged']}, "
+                        f"score={aggregated['overall_score']}/{score_threshold}, "
+                        f"revisions={len(aggregated['specific_revisions'])}")
+
+            if aggregated['converged']:
+                logger.info("所有审阅者认为已收敛，停止循环")
+                break
+
+            if aggregated['overall_score'] >= score_threshold:
+                logger.info(f"分数 {aggregated['overall_score']} >= 阈值 {score_threshold}，停止循环")
+                break
+
+            if not aggregated['specific_revisions']:
+                logger.info("无实质性修改建议，停止循环")
+                break
+
+            # === 作者修订 ===
+            feedback_json = json.dumps(aggregated, ensure_ascii=False, indent=2)
+            logger.info(f"准备修订: 反馈JSON长度={len(feedback_json)} 字符, "
+                        f"修改建议数={len(aggregated['specific_revisions'])}")
+            logger.info(f"修改建议摘要: {aggregated.get('summary', '无')[:200]}")
+
+            if progress_callback:
+                progress_callback(3, f"根据审阅意见修订中...", iter_start_pct + progress_per_iteration // 2)
+
+            feedback_json = json.dumps(aggregated, ensure_ascii=False, indent=2)
+
+            revise_prompt = self.prompts['revise_content'].format(
+                original_resume=original_resume,
+                current_tailored_resume=json.dumps(current_tailored, ensure_ascii=False, indent=2),
+                aggregated_feedback=feedback_json,
+                match_analysis=json.dumps({
+                    'match_score': match_result.match_score,
+                    'rewrite_intensity': match_result.rewrite_intensity,
+                    'strengths': match_result.strengths,
+                    'gaps': match_result.gaps,
+                    'rewrite_strategy': match_result.rewrite_strategy,
+                }, ensure_ascii=False, indent=2),
+                jd_requirements=jd_requirements_json
+            )
+
+            try:
+                logger.info(f"调用作者模型修订 (prompt长度={len(revise_prompt)} 字符)...")
+                response, model_id, tokens = self._call_model(
+                    revise_prompt, 'rewrite_content', max_tokens=6144, temperature=0.4
+                )
+                logger.info(f"修订完成: model={model_id}, tokens={tokens}")
+
+                json_str = self._extract_json(response)
+                if json_str:
+                    data = json.loads(json_str)
+                    new_tailored = self._safe_get_dict(data, 'tailored_resume')
+                    new_tailored = self._convert_tailored_format(new_tailored)
+
+                    # 检查版本差异
+                    diff = self._calculate_version_diff(current_tailored, new_tailored)
+                    logger.info(f"版本差异: {diff:.2%}")
+
+                    if diff < min_diff_threshold:
+                        logger.info(f"版本差异 {diff:.2%} < {min_diff_threshold:.2%}，停止循环")
+                        current_tailored = new_tailored
+                        break
+
+                    current_tailored = new_tailored
+                    result.change_log.extend(data.get('change_log', []))
+                else:
+                    logger.warning("修订版 JSON 解析失败，保留当前版本")
+                    break
+            except Exception as e:
+                logger.error(f"修订调用失败: {e}")
+                break
+
+        # === 构建最终结果 ===
+        result.tailored_resume = current_tailored
+        result.review_iterations = review_iterations
+        result.review_scores = review_scores
+        result.review_feedback_summary = review_scores[-1].get('summary', '') if review_scores else ""
+
+        # 重新验证 JD 关键词覆盖率
+        jd_core_requirements = self._build_jd_core_requirements(jd_analysis, match_result)
+        coverage_result = self._validate_jd_keyword_coverage(
+            current_tailored, jd_core_requirements['top_keywords']
+        )
+        result.jd_keyword_coverage = coverage_result
+
+        if progress_callback:
+            progress_callback(3, "简历内容定制完成", review_progress_end)
+
+        final_score = review_scores[-1]['overall_score'] if review_scores else 'N/A'
+        stop_reason = '初次改写无审阅' if review_iterations == 0 else '正常完成'
+        if review_scores and not review_scores[-1].get('converged') and review_iterations >= max_iterations:
+            stop_reason = f'达到最大迭代次数 {max_iterations}'
+        elif review_scores and review_scores[-1].get('converged'):
+            stop_reason = '审阅者认为已收敛'
+        elif review_scores and review_scores[-1]['overall_score'] >= score_threshold:
+            stop_reason = f'分数达标 ({review_scores[-1]["overall_score"]}>= {score_threshold})'
+        elif review_scores and not review_scores[-1].get('specific_revisions'):
+            stop_reason = '无修改建议'
+        elif review_scores:
+            stop_reason = f'版本差异过小 (<{min_diff_threshold})'
+
+        logger.info(f" Writer-Reviewer 闭环总结:")
+        logger.info(f"   迭代轮数: {review_iterations}")
+        logger.info(f"   最终分数: {final_score}")
+        logger.info(f"   停止原因: {stop_reason}")
+        logger.info(f"   JD关键词覆盖率: {coverage_result['coverage_rate']:.0%}")
+        logger.info(f"   各轮分数变化: {[s['overall_score'] for s in review_scores]}")
+
+        logger.info(f"Writer-Reviewer 循环完成: iterations={review_iterations}, final_score={final_score}")
+        return result
+
+    # ==================== 阶段3: 内容改写 ====================
+
     def rewrite_content(self, original_resume: str,
                         parsed_resume: ParseResumeResult,
                         match_result: MatchAnalysisResult,
-                        jd_analysis: DecodeJdResult) -> RewriteContentResult:
+                        jd_analysis: DecodeJdResult,
+                        progress_callback=None) -> RewriteContentResult:
+        """阶段3: 内容深度改写（支持 Writer-Reviewer 闭环）"""
+        logger.info("开始阶段3: 内容深度改写")
+
+        if self._reviewer_providers:
+            return self._rewrite_with_review_loop(
+                original_resume, parsed_resume, match_result, jd_analysis,
+                progress_callback=progress_callback
+            )
+
+        return self._rewrite_single_pass(original_resume, parsed_resume, match_result, jd_analysis)
+
+    def _rewrite_single_pass(self, original_resume: str,
+                             parsed_resume: ParseResumeResult,
+                             match_result: MatchAnalysisResult,
+                             jd_analysis: DecodeJdResult) -> RewriteContentResult:
         """阶段3: 内容深度改写"""
         logger.info("开始阶段3: 内容深度改写")
 
@@ -1397,10 +1799,13 @@ class ExpertTeamV2:
         logger.info(f"原始简历长度: {len(original_resume)} 字符")
 
         # 提取 JD 核心要求（用于强化约束）
-        jd_core_requirements = self._build_jd_core_requirements(jd_analysis)
+        jd_core_requirements = self._build_jd_core_requirements(jd_analysis, match_result)
         logger.info(f"📋 JD核心要求: {jd_core_requirements}")
 
+        rewrite_intensity = jd_core_requirements.get('rewrite_intensity', 'L2')
+
         prompt = self.prompts['rewrite_content'].format(
+            rewrite_intensity=rewrite_intensity,
             original_resume=original_resume,
             parsed_resume=json.dumps({
                 'basic_info': parsed_resume.basic_info,
@@ -1636,9 +2041,10 @@ class ExpertTeamV2:
             )
             parallel_progress_thread.start()
 
-            # 使用 ThreadPoolExecutor 并行执行
+            # 使用 ThreadPoolExecutor 并行执行（2秒错峰避免并发500错误）
             with ThreadPoolExecutor(max_workers=2) as executor:
                 future_parse = executor.submit(self.parse_resume, resume_content)
+                time.sleep(2)  # 错峰：智谱AI同一API key并发请求会返回500
                 future_decode = executor.submit(self.decode_jd, jd_content)
 
                 # 等待两个任务完成
@@ -1676,29 +2082,39 @@ class ExpertTeamV2:
             report_progress(2, "匹配度分析完成", 60)
 
             # 阶段3: 内容改写
-            stop_event = threading.Event()
-            thread = threading.Thread(
-                target=simulate_progress,
-                args=(3, [
-                    "正在精心打磨你的简历...",
-                    "正在优化表达方式...",
-                    "正在突出核心亮点...",
-                    "正在植入职位关键词..."
-                ], 60, 78, stop_event),
-                daemon=True
-            )
-            thread.start()
+            has_reviewers = bool(self._reviewer_providers)
+            if has_reviewers:
+                # Writer-Reviewer 闭环：进度由闭环内部管理 (58-82)
+                result.rewrite_result = self.rewrite_content(
+                    resume_content,
+                    result.parse_result, result.match_result, result.decode_result,
+                    progress_callback=lambda stage, msg, pct: report_progress(stage, msg, pct)
+                )
+            else:
+                stop_event = threading.Event()
+                thread = threading.Thread(
+                    target=simulate_progress,
+                    args=(3, [
+                        "正在精心打磨你的简历...",
+                        "正在优化表达方式...",
+                        "正在突出核心亮点...",
+                        "正在植入职位关键词..."
+                    ], 60, 78, stop_event),
+                    daemon=True
+                )
+                thread.start()
 
-            result.rewrite_result = self.rewrite_content(
-                resume_content,  # 传递原始简历作为主要参考
-                result.parse_result, result.match_result, result.decode_result
-            )
+                result.rewrite_result = self.rewrite_content(
+                    resume_content,
+                    result.parse_result, result.match_result, result.decode_result
+                )
 
-            stop_event.set()
-            thread.join(timeout=0.1)
-            report_progress(3, "简历内容定制完成", 80)
+                stop_event.set()
+                thread.join(timeout=0.1)
+                report_progress(3, "简历内容定制完成", 80 if not has_reviewers else 82)
 
             # 阶段4: 质量验证
+            s3_end = 82 if has_reviewers else 80
             stop_event = threading.Event()
             thread = threading.Thread(
                 target=simulate_progress,
@@ -1707,7 +2123,7 @@ class ExpertTeamV2:
                     "正在验证内容准确性...",
                     "正在生成专业建议...",
                     "即将完成..."
-                ], 80, 93, stop_event),
+                ], s3_end, 93, stop_event),
                 daemon=True
             )
             thread.start()

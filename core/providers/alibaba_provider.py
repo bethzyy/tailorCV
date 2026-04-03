@@ -53,7 +53,12 @@ class AlibabaProvider(BaseModelProvider):
         }
 
     def _load_api_key(self) -> str:
-        """从文件加载 API 密钥"""
+        """从文件加载 API 密钥
+
+        支持两种文件格式：
+        1. 纯 API key（单行）
+        2. key=value 格式（如 DASHSCOPE_API_KEY="sk-xxx"）
+        """
         # 1. 尝试从环境变量
         api_key = os.getenv('ALIBABA_API_KEY', '')
         if api_key:
@@ -63,7 +68,21 @@ class AlibabaProvider(BaseModelProvider):
         key_path = Path(self.API_KEY_PATH)
         if key_path.exists():
             try:
-                return key_path.read_text(encoding='utf-8').strip()
+                content = key_path.read_text(encoding='utf-8').strip()
+                # 尝试 key=value 格式解析
+                for line in content.splitlines():
+                    line = line.strip()
+                    if line.startswith('#') or not line:
+                        continue
+                    if '=' in line:
+                        key_name, _, key_value = line.partition('=')
+                        key_name = key_name.strip()
+                        key_value = key_value.strip().strip('"').strip("'")
+                        if key_name in ('DASHSCOPE_API_KEY', 'API_KEY', 'ALIBABA_API_KEY'):
+                            return key_value
+                # 纯 API key（整行就是 key）
+                if content and '=' not in content.splitlines()[0]:
+                    return content.splitlines()[0].strip().strip('"').strip("'")
             except Exception as e:
                 logger.warning(f"读取阿里云API密钥失败: {e}")
 

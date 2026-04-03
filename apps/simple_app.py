@@ -405,6 +405,26 @@ def create_app() -> Flask:
             'timestamp': datetime.now().isoformat()
         })
 
+    @app.route('/api/user_params', methods=['GET'])
+    def get_user_params():
+        """读取保存的用户参数（服务端持久化，重启不丢失）"""
+        params_file = Path('data/user_params.json')
+        if params_file.exists():
+            try:
+                return jsonify(json.loads(params_file.read_text(encoding='utf-8')))
+            except Exception:
+                return jsonify({})
+        return jsonify({})
+
+    @app.route('/api/user_params', methods=['POST'])
+    def save_user_params():
+        """保存用户参数到服务端"""
+        params = request.json
+        params_file = Path('data/user_params.json')
+        params_file.parent.mkdir(exist_ok=True)
+        params_file.write_text(json.dumps(params, ensure_ascii=False), encoding='utf-8')
+        return jsonify({'success': True})
+
     @app.route('/api/shutdown', methods=['POST'])
     def shutdown():
         """关闭服务（由主服务器调用）"""

@@ -110,6 +110,7 @@ MULTI_APP_PORT = 5002    # 多模型工具
 | 端点 | 方法 | 说明 |
 |------|------|------|
 | `/api/health` | GET | 健康检查 |
+| `/api/user_params` | GET/POST | 用户参数持久化（服务端兜底） |
 | `/api/payment/create` | POST | 创建支付订单 |
 | `/api/payment/providers` | GET | 获取可用支付方式 |
 | `/api/payment/notify/alipay` | POST | 支付宝回调 |
@@ -130,6 +131,7 @@ MULTI_APP_PORT = 5002    # 多模型工具
 
 | Date | Change |
 |------|--------|
+| 2026-04-04 | 模板渲染修复（tailored 内容变量化 + 换行拆段 + 求职意向识别）；登录引导页重设计；用户参数服务端持久化；GLM API 并发错峰；免费体验 3 次；Benchmark 测试套件 |
 | 2026-04-02 | 支付系统重构：provider 模式、支付宝当面付接入、微信支付预留、前端支付方式切换 |
 | 2026-03-18 | 模板管理功能：6个内置模板、模板选择器UI、模板API、预览图生成 |
 | 2026-03-17 | 五阶段进度优化：后台线程模拟进度更新，每1.5秒反馈一次，解决长时间无响应问题 |
@@ -138,4 +140,4 @@ MULTI_APP_PORT = 5002    # 多模型工具
 
 ---
 
-*Last updated: 2026-04-02*
+*Last updated: 2026-04-04*

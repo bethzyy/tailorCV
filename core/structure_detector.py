@@ -92,7 +92,7 @@ class StructureDetector:
 
     # 章节关键词映射
     SECTION_KEYWORDS = {
-        SectionType.SUMMARY: ['个人简介', '简介', '个人介绍', '个人总结', 'summary'],
+        SectionType.SUMMARY: ['个人简介', '简介', '个人介绍', '个人总结', '求职意向', 'summary'],
         SectionType.EDUCATION: ['教育背景', '教育经历', '学历', '院校背景', 'education'],
         SectionType.WORK: ['工作经历', '工作经验', '职业经历', '工作背景', 'work experience'],
         SectionType.PROJECT: ['项目经历', '项目经验', '项目背景', 'project'],

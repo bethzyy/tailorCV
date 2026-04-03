@@ -2,14 +2,25 @@
 .env
 .env.local
 *.env
+!.env.example
 
 # API Keys
 ZHIPU_API_KEY
 apikey*.txt
 
+# Certificates & Keys (NEVER commit private keys)
+*.pem
+*.key
+*.crt
+*.p12
+certs/
+
 # Database
 storage/*.db
 storage/*.sqlite
+
+# User data (runtime)
+data/
 storage/
 
 # Cache
@@ -49,3 +60,7 @@ tmp/
 # Output files
 output/
 downloads/
+
+# Test data (may contain real user data)
+test_*.json
+test_*.txt
