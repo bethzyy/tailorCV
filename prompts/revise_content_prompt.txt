@@ -56,7 +56,9 @@
     "education": [...],
     "work_experience": [...],
     "projects": [...],
-    "skills": "...",
+    "skills": [
+      {{"name": "技能名称", "tailored_description": "熟练程度 — 使用场景描述"}}
+    ],
     "awards": "...",
     "certificates": "...",
     "self_evaluation": "..."

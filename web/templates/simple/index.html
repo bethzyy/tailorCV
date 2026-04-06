@@ -1307,8 +1307,6 @@
             padding: 20px;
             max-width: 500px;
             width: 90%;
-            max-height: 80vh;
-            overflow-y: auto;
         }
 
         .modal-header {
@@ -1502,15 +1500,14 @@
 
                 <!-- 文件上传面板 -->
                 <div class="input-panel active" id="uploadPanel">
-                    <div class="upload-area" id="resumeUpload">
-                        <div class="upload-icon">📄</div>
-                        <div class="upload-text">拖拽简历文件到此处，或点击选择</div>
-                        <div class="upload-hint">支持 PDF、Word、TXT、Markdown 格式</div>
-                        <input type="file" id="resumeFile" name="resume" accept=".pdf,.docx,.doc,.txt,.md" style="display: none;">
-                    </div>
                     <div class="file-info" id="resumeInfo">
                         <span class="file-name" id="resumeName"></span>
                         <span class="file-remove" onclick="removeResume()">✕ 移除</span>
+                    </div>
+                    <div id="uploadTrigger" onclick="showResumeUploadModal()" style="padding:16px; border:2px dashed #ddd; border-radius:10px; text-align:center; cursor:pointer; transition:all 0.2s; color:#888; font-size:14px;"
+                         onmouseover="this.style.borderColor='#667eea';this.style.color='#667eea'"
+                         onmouseout="this.style.borderColor='#ddd';this.style.color='#888'">
+                        📄 点击上传简历文件
                     </div>
                 </div>
 
@@ -1726,10 +1723,11 @@
                         <button class="modal-close" onclick="hideTemplatePreview()">&times;</button>
                     </div>
                     <div class="modal-body" style="flex: 1; overflow-y: auto; min-height: 0;">
-                        <div id="previewTemplateContainer" style="width: 100%; height: 70vh; border-radius: 8px; margin-bottom: 15px; background: #fff; overflow: hidden; border: 1px solid #e2e8f0;">
+                        <div id="previewTemplateContainer" style="width: 100%; border-radius: 8px; margin-bottom: 15px; background: #fff; overflow: hidden; border: 1px solid #e2e8f0;">
                             <!-- HTML 预览 iframe -->
                             <iframe id="previewTemplateFrame"
-                                    style="width: 100%; height: 100%; border: none; display: none;">
+                                    scrolling="no"
+                                    style="width: 100%; border: none; display: none;">
                             </iframe>
                             <!-- 加载中提示 -->
                             <div id="previewLoading" style="text-align: center; padding: 60px; color: #666;">
@@ -1914,6 +1912,31 @@
         <footer>
             <p>© 2026 tailorCV - 基于 ZhipuAI GLM 智能定制</p>
         </footer>
+    </div>
+
+    <!-- ==================== 简历上传弹窗 ==================== -->
+    <div id="resumeUploadModal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width:420px; padding:32px 30px 24px;">
+            <button class="modal-close" onclick="closeResumeUploadModal()">&times;</button>
+            <h3 style="margin:0 0 20px; text-align:center; font-size:17px; color:#333;">上传简历文件</h3>
+            <div id="uploadDropZone" style="border:2px dashed #ddd; border-radius:12px; padding:32px 20px; text-align:center; cursor:pointer; transition:all 0.25s;"
+                 onclick="document.getElementById('resumeFile').click()"
+                 onmouseover="this.style.borderColor='#667eea';this.style.background='#f8f9ff'"
+                 onmouseout="this.style.borderColor='#ddd';this.style.background=''">
+                <div style="font-size:36px; margin-bottom:10px; color:#667eea;">📄</div>
+                <div style="color:#333; font-size:15px; margin-bottom:6px;">拖拽文件到这里，或点击选择</div>
+                <div style="color:#999; font-size:12px;">支持 PDF、Word、TXT、Markdown 格式，不超过 16MB</div>
+                <input type="file" id="resumeFile" name="resume" accept=".pdf,.docx,.doc,.txt,.md" style="display:none;">
+            </div>
+            <div id="resumeUploadModalFileInfo" style="display:none; margin-top:14px; padding:10px 14px; background:#f0f7ff; border-radius:8px; display:none; align-items:center; justify-content:space-between;">
+                <span style="color:#333; font-size:14px;" id="resumeUploadModalFileName"></span>
+                <span onclick="removeResume();closeResumeUploadModal()" style="color:#999; cursor:pointer; font-size:16px;" title="移除">&times;</span>
+            </div>
+            <div style="margin-top:14px; color:#bbb; font-size:12px; line-height:1.6;">
+                <div>1. 简历内容仅用于 AI 定制，不会上传到外部服务器</div>
+                <div>2. 建议 PDF 格式，解析效果最佳</div>
+            </div>
+        </div>
     </div>
 
     <!-- ==================== 登录弹窗 ==================== -->
@@ -2167,6 +2190,7 @@
                     resumeName.textContent = data.resumeFile.name + '（请重新上传）';
                     resumeInfo.classList.add('show');
                     resumeInfo.style.color = '#e67e22';
+                    document.getElementById('uploadTrigger').style.display = 'none';
                 }
                 // 恢复模板选择到 localStorage
                 if (data.selectedTemplateId) {
@@ -2388,13 +2412,17 @@
                             iframe.srcdoc = data.html;
                         }
                         iframe.style.display = 'block';
-                        // 动态调整 iframe 高度以适应内容，避免双层滚动条
-                        setTimeout(() => {
+                        // 动态调整 iframe 高度以适应内容，避免多层滚动条
+                        const previewContainer = document.getElementById('previewTemplateContainer');
+                        const adjustIframeHeight = () => {
                             try {
                                 const h = iframe.contentDocument.documentElement.scrollHeight;
                                 iframe.style.height = Math.max(h, 300) + 'px';
                             } catch(e) {}
-                        }, 100);
+                        };
+                        iframe.onload = adjustIframeHeight;
+                        setTimeout(adjustIframeHeight, 200);
+                        setTimeout(adjustIframeHeight, 800);
                     } else {
                         // 降级到占位符
                         iframe.style.display = 'none';
@@ -2738,22 +2766,25 @@
         });
 
         // 简历上传
-        const resumeUpload = document.getElementById('resumeUpload');
         const resumeFile = document.getElementById('resumeFile');
         const resumeInfo = document.getElementById('resumeInfo');
         const resumeName = document.getElementById('resumeName');
+        const uploadDropZone = document.getElementById('uploadDropZone');
 
-        resumeUpload.addEventListener('click', () => resumeFile.click());
-        resumeUpload.addEventListener('dragover', (e) => {
+        // 弹窗拖拽事件
+        uploadDropZone.addEventListener('dragover', (e) => {
             e.preventDefault();
-            resumeUpload.classList.add('dragover');
+            uploadDropZone.style.borderColor = '#667eea';
+            uploadDropZone.style.background = '#f0f3ff';
         });
-        resumeUpload.addEventListener('dragleave', () => {
-            resumeUpload.classList.remove('dragover');
+        uploadDropZone.addEventListener('dragleave', () => {
+            uploadDropZone.style.borderColor = '#ddd';
+            uploadDropZone.style.background = '';
         });
-        resumeUpload.addEventListener('drop', (e) => {
+        uploadDropZone.addEventListener('drop', (e) => {
             e.preventDefault();
-            resumeUpload.classList.remove('dragover');
+            uploadDropZone.style.borderColor = '#ddd';
+            uploadDropZone.style.background = '';
             if (e.dataTransfer.files.length) {
                 resumeFile.files = e.dataTransfer.files;
                 updateResumeInfo();
@@ -2761,17 +2792,41 @@
         });
         resumeFile.addEventListener('change', () => { updateResumeInfo(); saveUserData(); });
 
+        function showResumeUploadModal() {
+            document.getElementById('resumeUploadModal').style.display = 'flex';
+        }
+        function closeResumeUploadModal() {
+            document.getElementById('resumeUploadModal').style.display = 'none';
+        }
+
         function updateResumeInfo() {
             if (resumeFile.files.length) {
-                resumeName.textContent = resumeFile.files[0].name;
+                const name = resumeFile.files[0].name;
+                resumeName.textContent = name;
                 resumeInfo.classList.add('show');
                 resumeInfo.style.color = '';
+                // 隐藏主界面中的上传触发器
+                document.getElementById('uploadTrigger').style.display = 'none';
+                // 更新弹窗中的文件名显示
+                const modalInfo = document.getElementById('resumeUploadModalFileInfo');
+                document.getElementById('resumeUploadModalFileName').textContent = '✅ ' + name;
+                modalInfo.style.display = 'flex';
+                // 隐藏拖拽区域
+                uploadDropZone.style.display = 'none';
+                // 自动关闭弹窗
+                setTimeout(() => closeResumeUploadModal(), 600);
             }
         }
 
         function removeResume() {
             resumeFile.value = '';
             resumeInfo.classList.remove('show');
+            // 恢复主界面中的上传触发器
+            document.getElementById('uploadTrigger').style.display = '';
+            // 恢复弹窗状态
+            const modalInfo = document.getElementById('resumeUploadModalFileInfo');
+            modalInfo.style.display = 'none';
+            uploadDropZone.style.display = '';
         }
 
         // 引导输入

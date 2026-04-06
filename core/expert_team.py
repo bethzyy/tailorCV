@@ -19,6 +19,7 @@ import json
 import logging
 import re
 import threading
+import time
 from difflib import SequenceMatcher
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, Optional, Tuple, List, Callable, TYPE_CHECKING
@@ -879,6 +880,76 @@ class ExpertTeamV2:
         value = data.get(key, default)
         return value if isinstance(value, list) else default
 
+    def _protect_time_fields(self, tailored_resume: Dict[str, Any],
+                              parsed_resume: ParseResumeResult) -> int:
+        """
+        保护时间字段：AI 改写可能错误修改 work_experience/projects 的 time 字段。
+        将 AI 返回的 time 与原始解析结果对比，不一致时强制还原。
+        返回被修正的条目数。
+        """
+        fixed_count = 0
+
+        # 构建原始时间映射（按 index 对应）
+        original_work_times = {}
+        for i, exp in enumerate(parsed_resume.work_experience or []):
+            t = exp.get('time', '') if isinstance(exp, dict) else ''
+            if t:
+                original_work_times[i] = t
+
+        original_project_times = {}
+        for i, proj in enumerate(parsed_resume.projects or []):
+            t = proj.get('time', '') if isinstance(proj, dict) else ''
+            if t:
+                original_project_times[i] = t
+
+        # 修正 work_experience 的 time
+        work_exp = tailored_resume.get('work_experience', [])
+        if isinstance(work_exp, list):
+            for i, exp in enumerate(work_exp):
+                if isinstance(exp, dict) and i in original_work_times:
+                    ai_time = exp.get('time', '')
+                    original_time = original_work_times[i]
+                    if ai_time and ai_time != original_time:
+                        logger.warning(f"⏰ 时间字段保护: work_experience[{i}] time 被AI修改 "
+                                       f"'{original_time}' -> '{ai_time}'，已还原")
+                        exp['time'] = original_time
+                        fixed_count += 1
+
+        # 修正 projects 的 time
+        projects = tailored_resume.get('projects', [])
+        if isinstance(projects, list):
+            for i, proj in enumerate(projects):
+                if isinstance(proj, dict) and i in original_project_times:
+                    ai_time = proj.get('time', '')
+                    original_time = original_project_times[i]
+                    if ai_time and ai_time != original_time:
+                        logger.warning(f"⏰ 时间字段保护: projects[{i}] time 被AI修改 "
+                                       f"'{original_time}' -> '{ai_time}'，已还原")
+                        proj['time'] = original_time
+                        fixed_count += 1
+
+        # 修正 education 的 time
+        education = tailored_resume.get('education', [])
+        if isinstance(education, list):
+            original_edu_times = {}
+            for i, edu in enumerate(parsed_resume.education or []):
+                t = edu.get('time', '') if isinstance(edu, dict) else ''
+                if t:
+                    original_edu_times[i] = t
+            for i, edu in enumerate(education):
+                if isinstance(edu, dict) and i in original_edu_times:
+                    ai_time = edu.get('time', '')
+                    original_time = original_edu_times[i]
+                    if ai_time and ai_time != original_time:
+                        logger.warning(f"⏰ 时间字段保护: education[{i}] time 被AI修改 "
+                                       f"'{original_time}' -> '{ai_time}'，已还原")
+                        edu['time'] = original_time
+                        fixed_count += 1
+
+        if fixed_count > 0:
+            logger.info(f"⏰ 时间字段保护: 共修正 {fixed_count} 个时间字段")
+        return fixed_count
+
     def _convert_tailored_format(self, resume: Dict[str, Any]) -> Dict[str, Any]:
         """
         转换 AI 返回的嵌套格式为扁平格式
@@ -952,6 +1023,35 @@ class ExpertTeamV2:
             if parts:
                 resume['summary'] = '\n'.join(parts)
                 logger.info(f"📊 格式转换: summary dict -> string ({len(resume['summary'])} 字符)")
+
+        # 处理 skills: 嵌套 dict -> 扁平列表
+        # AI 可能返回: {"ordered_by_jd_relevance": [...], "other_skills": [...]}
+        # 也可能返回: 纯字符串（来自 revise prompt）
+        # 代码期望: [{"name": "Python", "tailored_description": "精通 — 5年经验"}, ...]
+        skills = resume.get('skills')
+        if isinstance(skills, dict) and not isinstance(skills, list):
+            skill_list = []
+            for key in ['ordered_by_jd_relevance', 'other_skills', 'items', 'technical']:
+                items = skills.get(key, [])
+                if isinstance(items, list):
+                    for item in items:
+                        if isinstance(item, dict):
+                            skill_name = item.get('skill', item.get('name', ''))
+                            level = item.get('level', '')
+                            context = item.get('context', '')
+                            description = f"{level} — {context}" if level and context else (level or context or '')
+                            skill_list.append({'name': skill_name, 'tailored_description': description.strip()})
+                        elif isinstance(item, str) and item.strip():
+                            skill_list.append({'name': item.strip(), 'tailored_description': ''})
+            if skill_list:
+                resume['skills'] = skill_list
+                logger.info(f"📊 格式转换: skills dict -> list ({len(skill_list)} 项技能)")
+        elif isinstance(skills, str) and skills.strip():
+            # 纯字符串格式：按换行拆分
+            lines = [l.strip() for l in skills.strip().split('\n') if l.strip()]
+            if lines:
+                resume['skills'] = [{'name': line, 'tailored_description': ''} for line in lines]
+                logger.info(f"📊 格式转换: skills string -> list ({len(lines)} 项技能)")
 
         return resume
 
@@ -1565,7 +1665,8 @@ class ExpertTeamV2:
                                    parsed_resume: ParseResumeResult,
                                    match_result: MatchAnalysisResult,
                                    jd_analysis: DecodeJdResult,
-                                   progress_callback=None) -> RewriteContentResult:
+                                   progress_callback=None,
+                                   jd_content: str = '') -> RewriteContentResult:
         """执行 Writer-Reviewer 闭环改写"""
         max_iterations = config.WRITER_REVIEWER_MAX_ITERATIONS
         score_threshold = config.WRITER_REVIEWER_SCORE_THRESHOLD
@@ -1575,7 +1676,7 @@ class ExpertTeamV2:
         if progress_callback:
             progress_callback(3, "正在精心打磨你的简历...", 58)
 
-        result = self._rewrite_single_pass(original_resume, parsed_resume, match_result, jd_analysis)
+        result = self._rewrite_single_pass(original_resume, parsed_resume, match_result, jd_analysis, jd_content)
         if not result.success:
             return result
 
@@ -1709,6 +1810,8 @@ class ExpertTeamV2:
                 if json_str:
                     data = json.loads(json_str)
                     new_tailored = self._safe_get_dict(data, 'tailored_resume')
+                    # 时间字段保护：修订版也可能错误修改日期
+                    self._protect_time_fields(new_tailored, parsed_resume)
                     new_tailored = self._convert_tailored_format(new_tailored)
 
                     # 检查版本差异
@@ -1774,22 +1877,25 @@ class ExpertTeamV2:
                         parsed_resume: ParseResumeResult,
                         match_result: MatchAnalysisResult,
                         jd_analysis: DecodeJdResult,
-                        progress_callback=None) -> RewriteContentResult:
+                        progress_callback=None,
+                        jd_content: str = '') -> RewriteContentResult:
         """阶段3: 内容深度改写（支持 Writer-Reviewer 闭环）"""
         logger.info("开始阶段3: 内容深度改写")
 
         if self._reviewer_providers:
             return self._rewrite_with_review_loop(
                 original_resume, parsed_resume, match_result, jd_analysis,
-                progress_callback=progress_callback
+                progress_callback=progress_callback,
+                jd_content=jd_content
             )
 
-        return self._rewrite_single_pass(original_resume, parsed_resume, match_result, jd_analysis)
+        return self._rewrite_single_pass(original_resume, parsed_resume, match_result, jd_analysis, jd_content)
 
     def _rewrite_single_pass(self, original_resume: str,
                              parsed_resume: ParseResumeResult,
                              match_result: MatchAnalysisResult,
-                             jd_analysis: DecodeJdResult) -> RewriteContentResult:
+                             jd_analysis: DecodeJdResult,
+                             jd_content: str = '') -> RewriteContentResult:
         """阶段3: 内容深度改写"""
         logger.info("开始阶段3: 内容深度改写")
 
@@ -1800,12 +1906,17 @@ class ExpertTeamV2:
 
         # 提取 JD 核心要求（用于强化约束）
         jd_core_requirements = self._build_jd_core_requirements(jd_analysis, match_result)
-        logger.info(f"📋 JD核心要求: {jd_core_requirements}")
+        logger.info(f"📋 JD核心要求: job_title={jd_core_requirements.get('job_title')}, "
+                    f"必备技能={jd_core_requirements.get('must_have_skills')}, "
+                    f"关键词数={len(jd_core_requirements.get('top_keywords', []))}, "
+                    f"改写强度={jd_core_requirements.get('rewrite_intensity')}")
+        logger.info(f"📋 原始JD文本长度: {len(jd_content)} 字符")
 
         rewrite_intensity = jd_core_requirements.get('rewrite_intensity', 'L2')
 
         prompt = self.prompts['rewrite_content'].format(
             rewrite_intensity=rewrite_intensity,
+            jd_content=jd_content or '（未提供原始JD）',
             original_resume=original_resume,
             parsed_resume=json.dumps({
                 'basic_info': parsed_resume.basic_info,
@@ -1844,9 +1955,27 @@ class ExpertTeamV2:
             jd_core_requirements=json.dumps(jd_core_requirements, ensure_ascii=False, indent=2)
         )
 
-        response, model_id, tokens = self._call_model(
-            prompt, 'rewrite_content', max_tokens=6144, temperature=0.5
-        )
+        logger.info(f"📝 rewrite prompt 长度: {len(prompt)} 字符 (含原始JD {len(jd_content)} 字符)")
+
+        try:
+            response, model_id, tokens = self._call_model(
+                prompt, 'rewrite_content', max_tokens=6144, temperature=0.5
+            )
+        except RuntimeError as e:
+            logger.error(f"阶段3模型调用失败，使用降级方案: {e}")
+            result = RewriteContentResult()
+            result.success = False
+            result.error = f"模型调用失败: {e}"
+            result.tailored_resume = self._create_enhanced_fallback_tailored_resume(
+                parsed_resume, jd_analysis, match_result
+            )
+            result.tailored_resume = self._convert_tailored_format(result.tailored_resume)
+            coverage_result = self._validate_jd_keyword_coverage(
+                result.tailored_resume,
+                jd_core_requirements['top_keywords']
+            )
+            result.jd_keyword_coverage = coverage_result
+            return result
 
         result = RewriteContentResult()
         result.raw_response = response
@@ -1861,6 +1990,8 @@ class ExpertTeamV2:
                 logger.info(f"📝 阶段3 data keys: {list(data.keys())}")
                 result.tailored_resume = self._safe_get_dict(data, 'tailored_resume')
                 logger.info(f"📝 阶段3 tailored_resume keys: {list(result.tailored_resume.keys()) if result.tailored_resume else '空'}")
+                # 时间字段保护：AI 可能错误修改日期，强制还原
+                self._protect_time_fields(result.tailored_resume, parsed_resume)
                 # 格式转换：将 AI 返回的嵌套格式转为扁平格式
                 result.tailored_resume = self._convert_tailored_format(result.tailored_resume)
                 result.change_log = self._safe_get_list(data, 'change_log')
@@ -2054,6 +2185,18 @@ class ExpertTeamV2:
             parallel_stop_event.set()
             parallel_progress_thread.join(timeout=0.1)
 
+            # decode_jd 结果验证
+            jd_ok = result.decode_result.success
+            jd_title = result.decode_result.job_title or ''
+            jd_kw_count = len(result.decode_result.keyword_weights or {})
+            logger.info(f"📋 decode_jd 结果: success={jd_ok}, job_title='{jd_title}', keyword_count={jd_kw_count}")
+            if not jd_ok:
+                logger.warning(f"⚠️ decode_jd 失败: {result.decode_result.error}，将使用原始JD文本作为兜底")
+            if not jd_title:
+                logger.warning(f"⚠️ decode_jd 未提取到职位名称，JD解析可能不完整")
+            if jd_kw_count == 0:
+                logger.warning(f"⚠️ decode_jd 未提取到关键词权重，JD解析可能不完整")
+
             # 低置信度警告
             if result.parse_result.parsing_confidence < 0.7:
                 logger.warning(f"⚠️ 简历解析置信度较低 ({result.parse_result.parsing_confidence:.2f})，定制质量可能受影响")
@@ -2088,7 +2231,8 @@ class ExpertTeamV2:
                 result.rewrite_result = self.rewrite_content(
                     resume_content,
                     result.parse_result, result.match_result, result.decode_result,
-                    progress_callback=lambda stage, msg, pct: report_progress(stage, msg, pct)
+                    progress_callback=lambda stage, msg, pct: report_progress(stage, msg, pct),
+                    jd_content=jd_content
                 )
             else:
                 stop_event = threading.Event()
@@ -2106,7 +2250,8 @@ class ExpertTeamV2:
 
                 result.rewrite_result = self.rewrite_content(
                     resume_content,
-                    result.parse_result, result.match_result, result.decode_result
+                    result.parse_result, result.match_result, result.decode_result,
+                    jd_content=jd_content
                 )
 
                 stop_event.set()
@@ -2197,8 +2342,20 @@ class ExpertTeamV2:
             logger.info(f"五阶段定制完成: tokens={result.total_tokens}, quality_score={result.quality_result.overall_score}")
 
         except Exception as e:
-            logger.error(f"五阶段定制失败: {e}")
-            result.tailored_resume = {'error': str(e)}
+            import traceback as _tb
+            full_traceback = _tb.format_exc()
+            logger.error(f"五阶段定制失败: {e}\n{full_traceback}")
+            # 写入文件确保不丢失
+            try:
+                with open('storage/pipeline_error.log', 'a', encoding='utf-8') as f:
+                    f.write(f"\n{'='*60}\n")
+                    f.write(f"时间: {__import__('datetime').datetime.now()}\n")
+                    f.write(f"异常类型: {type(e).__name__}\n")
+                    f.write(f"异常消息: {str(e)}\n")
+                    f.write(f"Traceback:\n{full_traceback}\n")
+            except Exception:
+                pass
+            result.tailored_resume = {'error': str(e), 'error_type': type(e).__name__, 'traceback': full_traceback}
             result.evidence_report = {'error': str(e)}
             result.optimization_summary = {'error': str(e)}
 

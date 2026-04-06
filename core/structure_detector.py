@@ -96,9 +96,9 @@ class StructureDetector:
         SectionType.EDUCATION: ['教育背景', '教育经历', '学历', '院校背景', 'education'],
         SectionType.WORK: ['工作经历', '工作经验', '职业经历', '工作背景', 'work experience'],
         SectionType.PROJECT: ['项目经历', '项目经验', '项目背景', 'project'],
-        SectionType.SKILLS: ['专业技能', '技能特长', '技术栈', '掌握技能', '核心技能', 'skills'],
+        SectionType.SKILLS: ['专业技能', '技能特长', '技术栈', '掌握技能', '核心技能', '核心能力', 'skills'],
         SectionType.AWARDS: ['奖项荣誉', '获奖情况', '荣誉证书', '所获荣誉', 'awards'],
-        SectionType.CERTIFICATES: ['证书资质', '资格证书', '执业资格', '专业证书', 'certificates'],
+        SectionType.CERTIFICATES: ['证书资质', '资格证书', '执业资格', '专业证书', '证书与语言', 'certificates'],
         SectionType.SELF_EVALUATION: ['自我评价', '个人评价', '自我介绍', 'self evaluation'],
     }
 
@@ -108,6 +108,9 @@ class StructureDetector:
         r'(\d{4}[.\-/]\d{1,2}[至~\-–到]*至今)|'
         r'(\d{4}年\d{1,2}月[至~\-–到]*(至今|\d{4}年\d{1,2}月))'
     )
+
+    # 编号列表正则（如 "1. 项目名 —— 角色描述"）
+    NUMBERED_LIST_PATTERN = re.compile(r'^(\d+)\.\s+(.+)')
 
     # 联系方式正则
     PHONE_PATTERN = re.compile(r'1[3-9]\d{9}')
@@ -220,15 +223,16 @@ class StructureDetector:
             if detected_type != SectionType.UNKNOWN:
                 # 保存上一个章节
                 if current_section:
-                    current_section.content_end = i - 1
+                    current_section.content_end = max(i - 1, current_section.content_start)
                     sections.append(current_section)
 
                 # 创建新章节
+                content_start = min(i + 1, len(paragraphs) - 1)
                 current_section = SectionInfo(
                     section_type=detected_type,
                     title=text,
                     paragraph_index=i,
-                    content_start=i + 1,
+                    content_start=content_start,
                     content_end=len(paragraphs) - 1,  # 默认到文档末尾
                     is_dynamic=detected_type in [
                         SectionType.EDUCATION,
@@ -239,8 +243,9 @@ class StructureDetector:
                 self.detection_stats['sections_detected'] += 1
                 logger.debug(f"检测到章节: {text} (类型: {detected_type.value}, 段落 {i})")
 
-        # 添加最后一个章节
+        # 添加最后一个章节（确保 content_end >= content_start）
         if current_section:
+            current_section.content_end = max(current_section.content_end, current_section.content_start)
             sections.append(current_section)
 
         return sections
@@ -257,6 +262,10 @@ class StructureDetector:
             SectionType: 检测到的类型，或 UNKNOWN
         """
         text_lower = text.lower()
+
+        # 跳过包含 Jinja2 语法的段落（预处理后的模板变量）
+        if '{{' in text or '{%' in text:
+            return SectionType.UNKNOWN
 
         for section_type, keywords in self.SECTION_KEYWORDS.items():
             for kw in keywords:
@@ -297,15 +306,22 @@ class StructureDetector:
 
                 # 检测时间开头的行（新条目标志）
                 time_match = self.TIME_PATTERN.match(text)
+                # 检测编号列表开头的行（如 "1. 项目名 —— 描述"）
+                numbered_match = self.NUMBERED_LIST_PATTERN.match(text) if not time_match else None
 
-                if time_match:
+                if time_match or numbered_match:
                     # 保存上一个条目
                     if current_entry:
                         entries.append(current_entry)
 
                     # 解析新条目
-                    time_str = time_match.group(0)
-                    rest = text[time_match.end():].strip()
+                    if time_match:
+                        time_str = time_match.group(0)
+                        rest = text[time_match.end():].strip()
+                    else:
+                        # 编号列表格式: "1. 项目名 —— 描述"
+                        time_str = ''
+                        rest = numbered_match.group(2).strip()
 
                     # 尝试分离组织和角色
                     org, role = self._parse_entry_header(rest)
@@ -342,7 +358,7 @@ class StructureDetector:
             Tuple[str, str]: (组织, 角色)
         """
         # 常见分隔符
-        separators = ['|', '｜', '/', '  ', '\t']
+        separators = ['|', '｜', '/', '  ', '\t', '——', '—']
 
         for sep in separators:
             if sep in text:

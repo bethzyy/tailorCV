@@ -304,6 +304,18 @@ def create_app() -> Flask:
                     "time": "2021-2022",
                     "tailored": "• 设计并实现基于机器学习的推荐算法\n• 日均处理百万级用户请求",
                     "content": "智能推荐系统的设计与实现"
+                },
+                {
+                    "name": "行业热点聚合与智能简报系统",
+                    "role": "原型设计",
+                    "time": "2022-2023",
+                    "tailored": "• 构建自动化信息采集pipeline\n• 实现结构化简报自动生成",
+                },
+                {
+                    "name": "时令养生食谱生成器",
+                    "role": "全栈开发",
+                    "time": "2023-2024",
+                    "tailored": "• 搭建垂直领域知识库\n• 集成LLM实现智能问答",
                 }
             ],
             "skills": [
@@ -694,12 +706,76 @@ def create_app() -> Flask:
             task_status[session_id]['progress'] = 20
             task_status[session_id]['message'] = '正在分析JD需求...'
 
+            # 提前提取模板参数（缓存快速路径需要）
+            template_id = request.form.get('template_id', '') or request.form.get('templateId', '')
+            template_mode = request.form.get('template_mode', '') or request.form.get('templateMode', 'auto')
+
             # 检查是否强制跳过缓存（用户点击"开始定制简历"时默认跳过）
             no_cache = request.form.get('no_cache', 'true').lower() == 'true'
 
             cached_result = cache_manager.get(parsed_resume.raw_text, jd_content)
-            # 检查缓存是否包含必要字段（旧缓存可能缺少 tailored_resume）
-            # 只有 no_cache=False 时才使用缓存
+            cached_tailored = None
+            cached_analysis = None
+            cached_evidence = None
+            cached_quality_score = 0
+            cached_optimization = {}
+            if cached_result and cached_result.get('tailored_resume'):
+                cached_tailored = cached_result['tailored_resume']
+                cached_analysis = cached_result.get('analysis', {})
+                cached_evidence = cached_result.get('evidence_report', {})
+                cached_quality_score = cached_result.get('quality_score', 0)
+                cached_optimization = cached_result.get('optimization_summary', {})
+
+            # 快速路径：JD+简历不变，用户切换了模板 → 复用缓存 AI 内容，只重新渲染
+            if cached_tailored and template_mode == 'selected' and template_id:
+                logger.info(f"快速路径: 复用缓存 tailored_resume + 新模板 {template_id}")
+                task_status[session_id]['progress'] = 80
+                task_status[session_id]['message'] = '正在渲染模板...'
+
+                tailored_resume = convert_tailored_format(cached_tailored)
+                analysis_data = cached_analysis
+                is_v2 = True
+                evidence_report = cached_evidence
+
+                # 直接跳到模板渲染（与正常流程共享渲染逻辑）
+                style_preserved = False
+                used_template_id = None
+                selected_template = template_manager.get_template(template_id)
+                if not selected_template:
+                    task_status[session_id]['status'] = 'failed'
+                    task_status[session_id]['message'] = f'选定的模板不存在: {template_id}'
+                    return jsonify({'error': f'选定的模板不存在: {template_id}', 'error_code': 'TEMPLATE_NOT_FOUND'}), 400
+
+                try:
+                    word_bytes = template_processor.render(template_id, tailored_resume, parsed_resume.style_metadata)
+                    used_template_id = template_id
+                    style_preserved = True
+                    template_manager.increment_use_count(template_id)
+                    logger.info(f"快速路径渲染成功: {selected_template.get('name', template_id)}")
+                except Exception as e:
+                    logger.error(f"快速路径渲染失败: {e}", exc_info=True)
+                    task_status[session_id]['status'] = 'failed'
+                    task_status[session_id]['message'] = f'模板渲染失败: {str(e)}'
+                    return jsonify({'error': f'模板渲染失败: {str(e)}', 'error_code': 'TEMPLATE_RENDER_FAILED'}), 500
+
+                # 构建返回结果（与正常流程一致）
+                result = {
+                    'tailored_resume': tailored_resume,
+                    'analysis': analysis_data,
+                    'quality_score': cached_quality_score,
+                    'optimization_summary': cached_optimization,
+                    'style_preserved': style_preserved,
+                    'used_template_id': used_template_id,
+                    'pipeline_version': 'v2',
+                    'cache_hit': True,
+                }
+
+                task_status[session_id]['progress'] = 100
+                task_status[session_id]['status'] = 'completed'
+                save_tailored_file(word_bytes, session_id)
+                return jsonify(result)
+
+            # 完整缓存命中（非模板切换场景）
             if not no_cache and cached_result and cached_result.get('tailored_resume'):
                 logger.info(f"命中缓存且包含 tailored_resume: session={session_id}")
                 task_status[session_id]['progress'] = 100
@@ -735,9 +811,6 @@ def create_app() -> Flask:
             task_status[session_id]['message'] = '正在生成文档...'
 
             style = request.form.get('style', 'original')
-            # 参数兼容性：支持多种命名方式
-            template_id = request.form.get('template_id', '') or request.form.get('templateId', '')
-            template_mode = request.form.get('template_mode', '') or request.form.get('templateMode', 'auto')  # auto/selected/original
             style_preserved = False
             used_template_id = None
 
@@ -770,7 +843,7 @@ def create_app() -> Flask:
                     used_template_id = template_id
                     style_preserved = True
                     template_manager.increment_use_count(template_id)
-                    logger.info(f"✅ 模板渲染成功: {selected_template['name']} ({template_id})")
+                    logger.info(f"✅ 模板渲染成功: {selected_template.get('name', template_id)} ({template_id})")
                 except Exception as e:
                     logger.error(f"❌ 选定模板渲染失败: {e}", exc_info=True)
                     task_status[session_id]['status'] = 'failed'
@@ -786,17 +859,23 @@ def create_app() -> Flask:
                         original_doc,
                         tailored_resume,
                         parsed_resume.style_metadata,
-                        resume_file.filename
+                        resume_file.filename,
+                        preprocess_result=template_result,
+                        original_content=resume_content
                     )
                     style_preserved = used_template
                     if used_template:
                         used_template_id = template_result.template_id
                 except Exception as e:
                     logger.warning(f"模板渲染失败: {e}")
-                    word_bytes = generator.generate_bytes(
-                        tailored_resume,
-                        style_metadata=parsed_resume.style_metadata
-                    )
+                    try:
+                        word_bytes = generator.generate_bytes(
+                            tailored_resume,
+                            style_metadata=parsed_resume.style_metadata
+                        )
+                    except Exception as e2:
+                        logger.error(f"降级生成器也失败: {e2}", exc_info=True)
+                        raise
             else:
                 # 使用默认模板或生成器
                 default_template = template_manager.get_default_template()
@@ -810,18 +889,26 @@ def create_app() -> Flask:
                         used_template_id = default_template['template_id']
                         style_preserved = True
                         template_manager.increment_use_count(default_template['template_id'])
-                        logger.info(f"使用默认模板: {default_template['name']}")
+                        logger.info(f"使用默认模板: {default_template.get('name', '默认模板')}")
                     except Exception as e:
                         logger.warning(f"默认模板渲染失败: {e}")
+                        try:
+                            word_bytes = generator.generate_bytes(
+                                tailored_resume,
+                                style_metadata=parsed_resume.style_metadata
+                            )
+                        except Exception as e2:
+                            logger.error(f"降级生成器也失败: {e2}", exc_info=True)
+                            raise
+                else:
+                    try:
                         word_bytes = generator.generate_bytes(
                             tailored_resume,
                             style_metadata=parsed_resume.style_metadata
                         )
-                else:
-                    word_bytes = generator.generate_bytes(
-                        tailored_resume,
-                        style_metadata=parsed_resume.style_metadata
-                    )
+                    except Exception as e2:
+                        logger.error(f"无模板生成失败: {e2}", exc_info=True)
+                        raise
 
             task_status[session_id]['progress'] = 100
             task_status[session_id]['status'] = 'completed'
@@ -906,8 +993,11 @@ def create_app() -> Flask:
             return jsonify(result)
 
         except Exception as e:
-            logger.error(f"文件定制失败: {e}", exc_info=True)
+            import traceback as tb_module
+            full_tb = tb_module.format_exc()
+            logger.error(f"文件定制失败: {e}\n{full_tb}")
             error_str = str(e)
+            error_type = type(e).__name__
             # 更详细的错误分类
             if "429" in error_str or "rate" in error_str.lower() or "限制" in error_str or "并发" in error_str:
                 return jsonify({'error': 'API调用频率超限，请等待1-2分钟后重试'}), 429
@@ -917,8 +1007,12 @@ def create_app() -> Flask:
                 return jsonify({'error': 'AI处理超时，请稍后重试'}), 504
             elif "connection" in error_str.lower():
                 return jsonify({'error': 'AI服务连接失败，请检查网络'}), 503
-            logger.error(f"文件定制详细错误类型: {type(e).__name__}, 消息: {error_str}")
-            return jsonify({'error': f'处理失败: {str(e)}'}), 500
+            logger.error(f"文件定制详细错误类型: {error_type}, 消息: {error_str}")
+            return jsonify({
+                'error': f'处理失败: {error_str}',
+                'error_type': error_type,
+                'traceback': full_tb
+            }), 500
 
     @app.route('/api/tailor/text', methods=['POST'])
     def tailor_text():
@@ -1037,12 +1131,20 @@ def create_app() -> Flask:
                         used_template_id = default_template['template_id']
                         style_preserved = True
                         template_manager.increment_use_count(default_template['template_id'])
-                        logger.info(f"引导模式使用默认模板: {default_template['name']}")
+                        logger.info(f"引导模式使用默认模板: {default_template.get('name', '默认模板')}")
                     except Exception as e:
                         logger.warning(f"默认模板渲染失败: {e}")
-                        word_bytes = generator.generate_bytes(tailored_resume)
+                        try:
+                            word_bytes = generator.generate_bytes(tailored_resume)
+                        except Exception as e2:
+                            logger.error(f"降级生成器也失败: {e2}", exc_info=True)
+                            raise
                 else:
-                    word_bytes = generator.generate_bytes(tailored_resume)
+                    try:
+                        word_bytes = generator.generate_bytes(tailored_resume)
+                    except Exception as e2:
+                        logger.error(f"无模板生成失败: {e2}", exc_info=True)
+                        raise
 
             task_status[session_id]['progress'] = 100
             task_status[session_id]['status'] = 'completed'
@@ -1125,8 +1227,11 @@ def create_app() -> Flask:
             return jsonify(result)
 
         except Exception as e:
-            logger.error(f"文本定制失败: {e}", exc_info=True)
+            import traceback as tb_module
+            full_tb = tb_module.format_exc()
+            logger.error(f"文本定制失败: {e}\n{full_tb}")
             error_str = str(e)
+            error_type = type(e).__name__
             # 更详细的错误分类
             if "429" in error_str or "rate" in error_str.lower() or "限制" in error_str or "并发" in error_str:
                 return jsonify({'error': 'API调用频率超限，请等待1-2分钟后重试'}), 429
@@ -1136,8 +1241,12 @@ def create_app() -> Flask:
                 return jsonify({'error': 'AI处理超时，请稍后重试'}), 504
             elif "connection" in error_str.lower():
                 return jsonify({'error': 'AI服务连接失败，请检查网络'}), 503
-            logger.error(f"文本定制详细错误类型: {type(e).__name__}, 消息: {error_str}")
-            return jsonify({'error': f'处理失败: {str(e)}'}), 500
+            logger.error(f"文本定制详细错误类型: {error_type}, 消息: {error_str}")
+            return jsonify({
+                'error': f'处理失败: {error_str}',
+                'error_type': error_type,
+                'traceback': full_tb
+            }), 500
 
     @app.route('/api/tailor/form', methods=['POST'])
     def tailor_form():
@@ -1269,11 +1378,18 @@ def create_app() -> Flask:
             return jsonify(result)
 
         except Exception as e:
-            logger.error(f"表单定制失败: {e}", exc_info=True)
+            import traceback as tb_module
+            full_tb = tb_module.format_exc()
+            logger.error(f"表单定制失败: {e}\n{full_tb}")
             error_str = str(e)
+            error_type = type(e).__name__
             if "resume_analysis" in error_str or "{" in error_str:
                 return jsonify({'error': 'AI响应解析失败，请重试'}), 500
-            return jsonify({'error': str(e)}), 500
+            return jsonify({
+                'error': f'处理失败: {error_str}',
+                'error_type': error_type,
+                'traceback': full_tb
+            }), 500
 
     @app.route('/api/status/<task_id>', methods=['GET'])
     def get_status(task_id: str):
@@ -1474,25 +1590,16 @@ def create_app() -> Flask:
             return jsonify({'error': '模板文件路径不存在', 'success': False}), 404
 
         try:
-            # 判断模板来源：提取/上传的模板直接展示原始内容，内置模板用示例数据渲染
-            source = template.get('source', '')
-            is_builtin = source == 'builtin'
+            # 所有模板统一用示例数据渲染，避免显示原始 Jinja2 标签
+            sample_data = get_sample_resume_data()
+            logger.info(f"📝 使用示例数据渲染模板预览: {template_id}")
 
-            if is_builtin:
-                # 内置模板：用示例数据渲染，展示模板效果
-                sample_data = get_sample_resume_data()
-                logger.info(f"📝 内置模板，使用示例数据渲染")
-                try:
-                    logger.info(f"🎨 尝试渲染模板: {template_id}")
-                    word_bytes = template_processor.render(template_id, sample_data)
-                    logger.info(f"✅ 模板渲染成功，字节数: {len(word_bytes)}")
-                except Exception as render_error:
-                    logger.warning(f"❌ 模板渲染失败: {render_error}，降级到原始文件")
-                    with open(file_path, 'rb') as f:
-                        word_bytes = f.read()
-            else:
-                # 提取/上传模板：直接展示原始 docx 内容
-                logger.info(f"📄 提取/上传模板，直接展示原始内容: {file_path}")
+            try:
+                logger.info(f"🎨 尝试渲染模板: {template_id}")
+                word_bytes = template_processor.render(template_id, sample_data)
+                logger.info(f"✅ 模板渲染成功，字节数: {len(word_bytes)}")
+            except Exception as render_error:
+                logger.warning(f"❌ 模板渲染失败: {render_error}，降级到原始文件")
                 with open(file_path, 'rb') as f:
                     word_bytes = f.read()
 

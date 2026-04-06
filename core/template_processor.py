@@ -249,7 +249,9 @@ class TemplateProcessor:
 
     def render_with_fallback(self, doc: 'Document', context: Dict[str, Any],
                             style_metadata: StyleMetadata,
-                            original_filename: str = "") -> Tuple[bytes, bool]:
+                            original_filename: str = "",
+                            preprocess_result=None,
+                            original_content: bytes = None) -> Tuple[bytes, bool]:
         """
         带降级的渲染
 
@@ -260,14 +262,17 @@ class TemplateProcessor:
             context: 渲染上下文
             style_metadata: 样式元数据
             original_filename: 原始文件名
+            preprocess_result: 已有的预处理结果（避免重复预处理）
+            original_content: 原始文件字节（用于生成一致的 template_id）
 
         Returns:
             Tuple[bytes, bool]: (文档字节流, 是否使用了模板)
         """
-        # 尝试预处理
-        preprocess_result = self.preprocess(doc, original_filename)
+        # 使用已有的预处理结果，或重新预处理
+        if preprocess_result is None:
+            preprocess_result = self.preprocess(doc, original_filename, original_content=original_content)
 
-        if preprocess_result.success and preprocess_result.metadata.structure_confidence >= 0.5:
+        if preprocess_result.success and preprocess_result.metadata.structure_confidence >= 0.2:
             # 模板提取成功，使用模板渲染
             try:
                 word_bytes = self.render(
@@ -375,6 +380,24 @@ class TemplateProcessor:
         """
         if not section_data:
             return []
+
+        # 兜底：skills 可能是 dict 格式（AI 返回 ordered_by_jd_relevance/other_skills）
+        if section_type == 'skills' and isinstance(section_data, dict):
+            skill_list = []
+            for key in ['ordered_by_jd_relevance', 'other_skills', 'items', 'technical']:
+                items = section_data.get(key, [])
+                if isinstance(items, list):
+                    for item in items:
+                        if isinstance(item, dict):
+                            name = item.get('skill', item.get('name', ''))
+                            desc = item.get('context', item.get('tailored_description', item.get('description', '')))
+                            level = item.get('level', '')
+                            full_desc = f"{level} — {desc}" if level and desc else (level or desc or '')
+                            skill_list.append({'name': name, 'tailored_description': full_desc})
+                        elif isinstance(item, str) and item.strip():
+                            skill_list.append({'name': item.strip(), 'tailored_description': ''})
+            if skill_list:
+                section_data = skill_list
 
         # 确保是列表
         if not isinstance(section_data, list):

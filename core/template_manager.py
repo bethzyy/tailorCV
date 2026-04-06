@@ -334,7 +334,7 @@ class TemplateManager:
         # 检查是否已存在相同模板
         existing = db.get_template_by_hash(content_hash)
         if existing:
-            return existing['template_id'], f"已存在相同模板: {existing['name']}"
+            return existing['template_id'], f"已存在相同模板: {existing.get('name', '未知模板')}"
 
         try:
             # 解析文档
@@ -432,7 +432,7 @@ class TemplateManager:
         # 检查是否已存在相同模板
         existing = db.get_template_by_hash(content_hash)
         if existing:
-            return existing['template_id'], f"已存在相同模板: {existing['name']}"
+            return existing['template_id'], f"已存在相同模板: {existing.get('name', '未知模板')}"
 
         try:
             import io as io_module

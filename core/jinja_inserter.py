@@ -328,8 +328,8 @@ class JinjaTagInserter:
         first_content_idx = content_paras[0]
         para = doc.paragraphs[first_content_idx]
 
-        # 使用条件包装
-        template_text = f'{{%p if {var_name} %}}{{{{ {var_name} }}}}{{%p endif %}}'
+        # 使用简单变量替换（不使用 {%p %} 条件标签，避免 XML runs 拆分导致 docxtpl 解析失败）
+        template_text = f'{{{{ {var_name} }}}}'
         self._replace_paragraph_text(para, template_text)
 
         # 清除其他内容段落
@@ -387,7 +387,7 @@ class JinjaTagInserter:
         if section.section_type == SectionType.WORK:
             template_text = f'{{{{ {list_var}_0_time }}}}  {{{{ {list_var}_0_company }}}}  |  {{{{ {list_var}_0_position }}}}'
         elif section.section_type == SectionType.PROJECT:
-            template_text = f'{{{{ {list_var}_0_time }}}}  {{{{ {list_var}_0_name }}}}  |  {{{{ {list_var}_0_role }}}}'
+            template_text = f'1. {{{{ {list_var}_0_time }}}}  {{{{ {list_var}_0_name }}}}  |  {{{{ {list_var}_0_role }}}}'
         elif section.section_type == SectionType.EDUCATION:
             template_text = f'{{{{ {list_var}_0_time }}}}  {{{{ {list_var}_0_school }}}}  {{{{ {list_var}_0_major }}}}'
         else:
@@ -396,6 +396,29 @@ class JinjaTagInserter:
         if insert_idx < len(doc.paragraphs):
             para = doc.paragraphs[insert_idx]
             self._replace_paragraph_text(para, template_text)
+
+            # 替换下一个内容段落为 tailored 变量
+            next_idx = insert_idx + 1
+            while next_idx < len(doc.paragraphs):
+                next_para = doc.paragraphs[next_idx]
+                if next_para.text.strip():
+                    self._replace_paragraph_text(
+                        next_para,
+                        f'{{{{ {list_var}_0_tailored }}}}'
+                    )
+                    # 清除后续内容段落直到空行或下一个条目
+                    clear_idx = next_idx + 1
+                    while clear_idx < len(doc.paragraphs):
+                        cp = doc.paragraphs[clear_idx]
+                        if not cp.text.strip():
+                            break
+                        if re.match(r'^\d+\.', cp.text.strip()):
+                            break
+                        cp.clear()
+                        clear_idx += 1
+                    logger.debug(f"简单条目插入内容变量 (段落 {next_idx})")
+                    break
+                next_idx += 1
 
         logger.debug(f"添加简单模板条目: {list_var}")
 
@@ -414,11 +437,27 @@ class JinjaTagInserter:
                 f'{{{{ {list_var}_{index}_position }}}}'
             )
         elif entry.entry_type == SectionType.PROJECT:
-            template = (
-                f'{{{{ {list_var}_{index}_time }}}}  '
-                f'{{{{ {list_var}_{index}_name }}}}  |  '
-                f'{{{{ {list_var}_{index}_role }}}}'
-            )
+            if entry.time:
+                template = (
+                    f'{index + 1}. {{{{ {list_var}_{index}_time }}}}  '
+                    f'{{{{ {list_var}_{index}_name }}}}  |  '
+                    f'{{{{ {list_var}_{index}_role }}}}'
+                )
+            else:
+                # 无时间字段，保留编号 + 名称 + 分隔符 + 角色
+                # 从原始段落文本检测分隔符（_parse_entry_header 已拆分，需看原文）
+                original_text = para.text
+                if '——' in original_text:
+                    sep = ' —— '
+                elif '—' in original_text:
+                    sep = ' — '
+                else:
+                    sep = ' | '
+                template = (
+                    f'{index + 1}. {{{{ {list_var}_{index}_name }}}}'
+                    f'{sep}'
+                    f'{{{{ {list_var}_{index}_role }}}}'
+                )
         elif entry.entry_type == SectionType.EDUCATION:
             template = (
                 f'{{{{ {list_var}_{index}_time }}}}  '
@@ -444,6 +483,29 @@ class JinjaTagInserter:
             for idx in entry.content_paragraphs[1:]:
                 if idx < len(doc.paragraphs):
                     doc.paragraphs[idx].clear()
+        else:
+            # 兜底：content_paragraphs 为空时，向前扫描找到内容段落
+            next_idx = entry.paragraph_index + 1
+            while next_idx < len(doc.paragraphs):
+                next_para = doc.paragraphs[next_idx]
+                if next_para.text.strip():
+                    self._replace_paragraph_text(
+                        next_para,
+                        f'{{{{ {list_var}_{index}_tailored }}}}'
+                    )
+                    # 清除后续内容段落直到空行或下一个条目
+                    clear_idx = next_idx + 1
+                    while clear_idx < len(doc.paragraphs):
+                        cp = doc.paragraphs[clear_idx]
+                        if not cp.text.strip():
+                            break
+                        if re.match(r'^\d+\.', cp.text.strip()):
+                            break
+                        cp.clear()
+                        clear_idx += 1
+                    logger.debug(f"兜底插入内容段落变量 (段落 {next_idx})")
+                    break
+                next_idx += 1
 
         logger.debug(f"插入简单条目变量 (段落 {entry.paragraph_index}, 索引 {index})")
 
