@@ -335,7 +335,7 @@ class ResumeGenerator:
 
         self._add_section_title(doc, '项目经历', style_metadata)
 
-        for proj in projects:
+        for idx, proj in enumerate(projects, 1):
             # 标题行
             p = doc.add_paragraph()
 
@@ -346,7 +346,7 @@ class ResumeGenerator:
 
             name = proj.get('name', '')
             if name:
-                run = p.add_run(name)
+                run = p.add_run(f'{idx}. {name}')
                 run.bold = True
 
             role = proj.get('role', '')

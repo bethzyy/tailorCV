@@ -104,9 +104,9 @@ def clear_all_caches(is_development: bool):
         try:
             from core.cache_manager import CacheManager
             cm = CacheManager()
-            biz_count = cm.clear_expired()
+            biz_count = cm.clear_all()
             if biz_count > 0:
-                logger.info(f"  cache/: 已清理 {biz_count} 个过期文件")
+                logger.info(f"  cache/: 已清理 {biz_count} 个缓存文件（全量）")
         except Exception as e:
             logger.warning(f"  cache/: 清理失败 {e}")
 

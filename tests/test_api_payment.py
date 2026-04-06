@@ -84,7 +84,7 @@ class TestPaymentLogic:
         # 验证配额更新
         info = get_quota_display(user_id)
         assert info['plan_type'] == 'pack5'
-        assert info['remaining'] == 6  # 1 (free) + 5 (pack5)
+        assert info['remaining'] == 8  # 3 (free) + 5 (pack5)
 
     def test_query_order(self, test_user):
         from core.payment import create_payment, query_payment

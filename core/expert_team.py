@@ -1053,7 +1053,97 @@ class ExpertTeamV2:
                 resume['skills'] = [{'name': line, 'tailored_description': ''} for line in lines]
                 logger.info(f"📊 格式转换: skills string -> list ({len(lines)} 项技能)")
 
+        # 清洗 tailored 内容中的结构性标记和重复信息
+        self._sanitize_tailored_content(resume)
+
         return resume
+
+    def _sanitize_tailored_content(self, resume: Dict[str, Any]) -> int:
+        """
+        清洗 tailored 字段中的结构性标记和重复信息
+
+        AI 可能输出 【关键行动】、【成果】、**Situation:** 等结构性标记，
+        以及在 tailored 中重复 time/company 等已有字段的信息。
+        此方法在格式转换后调用，清洗这些不需要的内容。
+
+        Returns:
+            int: 清洗的字段数量
+        """
+        sanitized = 0
+
+        for section_key in ['work_experience', 'projects', 'education']:
+            items = resume.get(section_key, [])
+            if not isinstance(items, list):
+                continue
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                tailored = item.get('tailored', '')
+                if not tailored:
+                    continue
+
+                original = tailored
+
+                # 1. 移除 【xxx】 标记（保留标记后的内容）
+                tailored = re.sub(r'【[^】]*】\s*', '', tailored)
+
+                # 2. 移除 [xxx] 标记（保留内容）
+                tailored = re.sub(r'\[[^\]]*\]\s*', '', tailored)
+
+                # 3. 移除 **xxx:** 或 *xxx:* 粗体/斜体标记行（整行删除）
+                tailored = re.sub(r'\*{1,2}[^*]+\*{1,2}\s*[:：]\s*\n?', '', tailored)
+
+                # 4. 清理多余空行（连续3+换行→2个换行）
+                tailored = re.sub(r'\n{3,}', '\n\n', tailored)
+
+                # 5. 移除行首重复的时间信息（字符串开头或行首）
+                time_val = item.get('time', '')
+                if time_val:
+                    # 尝试多种时间前缀格式
+                    prefixes_to_check = [time_val]
+                    for sep_char in ['-', '–', '~', '至', '—']:
+                        if sep_char in time_val:
+                            prefixes_to_check.append(time_val.split(sep_char)[0].strip())
+                    for t_prefix in prefixes_to_check:
+                        if not t_prefix:
+                            continue
+                        # 字符串开头
+                        if tailored.startswith(t_prefix):
+                            tailored = tailored[len(t_prefix):].lstrip(' ,，、:：')
+                            break
+                        # 行首（多行内容中某行以时间开头）
+                        escaped = re.escape(t_prefix)
+                        tailored = re.sub(
+                            r'\n' + escaped + r'\s*',
+                            '\n', tailored, count=1
+                        )
+
+                # 6. 移除行首重复的公司/组织名
+                org_val = item.get('company', '') or item.get('school', '') or item.get('name', '')
+                if org_val and len(org_val) >= 2:
+                    for org_prefix in [org_val, org_val + ' ']:
+                        if tailored.startswith(org_prefix):
+                            tailored = tailored[len(org_prefix):].lstrip(' ,，、:：')
+                            break
+
+                if tailored != original:
+                    item['tailored'] = tailored.strip()
+                    sanitized += 1
+                    logger.info(f"🧹 清洗 tailored ({section_key}): 移除结构性标记或重复信息")
+
+        # 清洗 summary
+        summary = resume.get('summary', '')
+        if summary and isinstance(summary, str):
+            original = summary
+            summary = re.sub(r'【[^】]*】\s*', '', summary)
+            summary = re.sub(r'\*{1,2}[^*]+\*{1,2}\s*[:：]\s*\n?', '', summary)
+            summary = re.sub(r'\n{3,}', '\n\n', summary)
+            if summary != original:
+                resume['summary'] = summary.strip()
+                sanitized += 1
+                logger.info(f"🧹 清洗 summary: 移除结构性标记")
+
+        return sanitized
 
     def _build_jd_core_requirements(self, jd_analysis: DecodeJdResult,
                                        match_result: MatchAnalysisResult = None) -> Dict[str, Any]:

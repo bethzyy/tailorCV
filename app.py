@@ -337,7 +337,9 @@ def tailor_file():
                     original_doc,
                     generation.tailored_resume,
                     parsed_resume.style_metadata,
-                    resume_file.filename
+                    resume_file.filename,
+                    preprocess_result=template_result,
+                    original_content=resume_content
                 )
                 style_preserved = used_template
                 logger.info(f"文档生成完成，使用模板: {used_template}")

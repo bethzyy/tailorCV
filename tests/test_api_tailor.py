@@ -31,9 +31,10 @@ class TestTailorFileQuota:
         if user_id is None:
             pytest.skip("User creation failed")
 
-        # 使用完配额
+        # 使用完配额（免费套餐 3 次）
         from core.database import db
-        db.record_usage(user_id, session_id='test_session')
+        for i in range(3):
+            db.record_usage(user_id, session_id=f'test_quota_{i}')
 
         import io
         data = {

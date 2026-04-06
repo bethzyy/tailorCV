@@ -451,6 +451,23 @@ def create_app() -> Flask:
         threading.Thread(target=do_shutdown, daemon=True).start()
         return jsonify({'status': 'shutting_down'})
 
+    @app.route('/api/cache/clear', methods=['POST'])
+    def api_cache_clear():
+        """手动清除所有缓存"""
+        try:
+            count = cache_manager.clear_all()
+            # 同时清除 preprocessed 模板缓存
+            preprocessed_dir = config.BASE_DIR / 'templates' / 'preprocessed'
+            if preprocessed_dir.exists():
+                for f in preprocessed_dir.glob('*.docx'):
+                    f.unlink()
+                logger.info(f"  templates/preprocessed/: 已清理所有预处理模板")
+            logger.info(f"手动清缓存: {count} 个文件")
+            return jsonify({'success': True, 'cleared': count})
+        except Exception as e:
+            logger.error(f"清缓存失败: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
     # ==================== 认证 API ====================
 
     @app.route('/api/auth/send-code', methods=['POST'])
@@ -727,7 +744,8 @@ def create_app() -> Flask:
                 cached_optimization = cached_result.get('optimization_summary', {})
 
             # 快速路径：JD+简历不变，用户切换了模板 → 复用缓存 AI 内容，只重新渲染
-            if cached_tailored and template_mode == 'selected' and template_id:
+            # 注意：必须检查 no_cache，否则代码/prompt 更新后仍返回旧缓存
+            if not no_cache and cached_tailored and template_mode == 'selected' and template_id:
                 logger.info(f"快速路径: 复用缓存 tailored_resume + 新模板 {template_id}")
                 task_status[session_id]['progress'] = 80
                 task_status[session_id]['message'] = '正在渲染模板...'

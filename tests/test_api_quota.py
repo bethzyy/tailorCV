@@ -30,7 +30,9 @@ class TestQuotaLogic:
         client, user_id = test_user
         if user_id is None:
             pytest.skip("User creation failed")
-        db.record_usage(user_id, session_id='test_1')
+        # 免费套餐有 3 次配额，需用完 3 次才耗尽
+        for i in range(3):
+            db.record_usage(user_id, session_id=f'test_exhaust_{i}')
 
         can_use, info = check_quota(user_id)
         assert can_use is False
@@ -46,7 +48,7 @@ class TestQuotaLogic:
         can_use, info = check_quota(user_id)
         assert can_use is True
         assert info['plan_type'] == 'pack5'
-        assert info['quota_remaining'] == 6  # 1 (free) + 5 (pack5)
+        assert info['quota_remaining'] == 8  # 3 (free) + 5 (pack5)
 
     def test_get_quota_display(self, test_user):
         from core.quota import get_quota_display
@@ -55,5 +57,5 @@ class TestQuotaLogic:
             pytest.skip("User creation failed")
         info = get_quota_display(user_id)
         assert info['plan_type'] == 'free'
-        assert info['remaining'] == 1
+        assert info['remaining'] == 3
         assert info['plan_name'] == '免费体验'

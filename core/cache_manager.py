@@ -42,9 +42,29 @@ class CacheManager:
             'evictions': 0
         }
 
+    def _get_code_version_hash(self) -> str:
+        """
+        计算关键文件的版本指纹
+
+        当 prompt 或核心处理逻辑变更时，版本指纹自动变化，
+        导致缓存 key 变化，旧缓存自然失效。
+        """
+        version_files = [
+            'prompts/rewrite_content_prompt.txt',
+            'prompts/revise_content_prompt.txt',
+            'core/expert_team.py',
+            'core/cache_manager.py',
+        ]
+        h = hashlib.md5()
+        for f in version_files:
+            path = config.BASE_DIR / f
+            if path.exists():
+                h.update(path.read_bytes())
+        return h.hexdigest()[:8]
+
     def get_cache_key(self, resume_content: str, jd_content: str) -> str:
         """
-        生成缓存键
+        生成缓存键（包含代码版本指纹）
 
         Args:
             resume_content: 简历内容
@@ -53,7 +73,7 @@ class CacheManager:
         Returns:
             str: MD5 哈希键
         """
-        combined = resume_content + jd_content
+        combined = resume_content + jd_content + self._get_code_version_hash()
         return hashlib.md5(combined.encode('utf-8')).hexdigest()
 
     def get(self, resume_content: str, jd_content: str) -> Optional[Dict[str, Any]]:

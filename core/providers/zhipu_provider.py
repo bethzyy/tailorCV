@@ -8,6 +8,7 @@
 import os
 import time
 import logging
+import traceback
 from typing import Dict, Any, Optional
 
 from .base_provider import BaseModelProvider, ModelResponse
@@ -140,7 +141,7 @@ class ZhipuProvider(BaseModelProvider):
 
             except Exception as e:
                 last_error = e
-                logger.warning(f"智谱AI调用失败 (model={model_id}, attempt={attempt+1}): {e}")
+                logger.warning(f"智谱AI调用失败 (model={model_id}, attempt={attempt+1}): {e}\n{traceback.format_exc()}")
 
                 # 配额错误不重试
                 if self._is_quota_error(e):
