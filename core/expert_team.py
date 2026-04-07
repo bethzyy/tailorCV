@@ -1831,18 +1831,8 @@ class ExpertTeamV2:
         result.review_iterations = review_iterations
         result.review_scores = review_scores
         result.review_feedback_summary = review_scores[-1].get('summary', '') if review_scores else ""
-        result.review_stop_reason = stop_reason
 
-        # 重新验证 JD 关键词覆盖率
-        jd_core_requirements = self._build_jd_core_requirements(jd_analysis, match_result)
-        coverage_result = self._validate_jd_keyword_coverage(
-            current_tailored, jd_core_requirements['top_keywords']
-        )
-        result.jd_keyword_coverage = coverage_result
-
-        if progress_callback:
-            progress_callback(3, "简历内容定制完成", review_progress_end)
-
+        # 计算停止原因（必须在赋值给 result 之前）
         final_score = review_scores[-1]['overall_score'] if review_scores else 'N/A'
         stop_reason = '初次改写无审阅' if review_iterations == 0 else '正常完成'
         if review_scores and not review_scores[-1].get('converged') and review_iterations >= max_iterations:
@@ -1855,6 +1845,18 @@ class ExpertTeamV2:
             stop_reason = '无修改建议'
         elif review_scores:
             stop_reason = f'版本差异过小 (<{min_diff_threshold})'
+
+        result.review_stop_reason = stop_reason
+
+        # 重新验证 JD 关键词覆盖率
+        jd_core_requirements = self._build_jd_core_requirements(jd_analysis, match_result)
+        coverage_result = self._validate_jd_keyword_coverage(
+            current_tailored, jd_core_requirements['top_keywords']
+        )
+        result.jd_keyword_coverage = coverage_result
+
+        if progress_callback:
+            progress_callback(3, "简历内容定制完成", review_progress_end)
 
         logger.info(f" Writer-Reviewer 闭环总结:")
         logger.info(f"   迭代轮数: {review_iterations}")
