@@ -173,8 +173,8 @@ def create_app() -> Flask:
             if request.form.get('providers'):
                 try:
                     provider_ids = json.loads(request.form.get('providers'))
-                except:
-                    pass
+                except (json.JSONDecodeError, TypeError):
+                    logger.warning(f"providers 参数 JSON 解析失败: {request.form.get('providers')[:100]}")
 
             session_id = str(uuid.uuid4())
             task_status[session_id] = {

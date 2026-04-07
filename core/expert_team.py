@@ -2371,8 +2371,8 @@ class ExpertTeamV2:
                     f.write(f"异常类型: {type(e).__name__}\n")
                     f.write(f"异常消息: {str(e)}\n")
                     f.write(f"Traceback:\n{full_traceback}\n")
-            except Exception:
-                pass
+            except Exception as log_err:
+                logger.error(f"写入 pipeline_error.log 失败: {log_err}")
             result.tailored_resume = {'error': str(e), 'error_type': type(e).__name__, 'traceback': full_traceback}
             result.evidence_report = {'error': str(e)}
             result.optimization_summary = {'error': str(e)}

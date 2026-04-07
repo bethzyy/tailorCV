@@ -35,6 +35,9 @@ class CacheManager:
         # 缓存过期时间（天）
         self.expiry_days = config.HISTORY_RETENTION_DAYS
 
+        # 缓存容量上限（文件数量），超过时淘汰最旧的
+        self.max_entries = 200
+
         # 统计信息
         self.stats = {
             'hits': 0,
@@ -142,6 +145,9 @@ class CacheManager:
 
             logger.info(f"缓存已保存: {cache_key}")
 
+            # 容量检查：超过上限时淘汰最旧的条目
+            self._evict_if_needed()
+
         except Exception as e:
             logger.warning(f"缓存保存失败: {e}")
 
@@ -192,6 +198,35 @@ class CacheManager:
 
         logger.info(f"清理过期缓存: {cleared} 个")
         return cleared
+
+    def _evict_if_needed(self) -> int:
+        """
+        检查缓存数量，超过上限时按修改时间淘汰最旧的条目。
+
+        Returns:
+            int: 淘汰的条目数
+        """
+        cache_files = list(self.cache_dir.glob("*.json"))
+        if len(cache_files) <= self.max_entries:
+            return 0
+
+        # 按修改时间排序，最旧的在前
+        cache_files.sort(key=lambda f: f.stat().st_mtime)
+        to_remove = len(cache_files) - self.max_entries
+        evicted = 0
+
+        for f in cache_files[:to_remove]:
+            try:
+                f.unlink()
+                evicted += 1
+                self.stats['evictions'] += 1
+            except Exception as e:
+                logger.warning(f"缓存淘汰失败 {f}: {e}")
+
+        if evicted > 0:
+            logger.info(f"缓存容量淘汰: 删除 {evicted} 个最旧条目，当前 {len(cache_files) - evicted}/{self.max_entries}")
+
+        return evicted
 
     def clear_all(self) -> int:
         """
