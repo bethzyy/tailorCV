@@ -109,6 +109,19 @@ class StructureDetector:
         r'(\d{4}年\d{1,2}月[至~\-–到]*(至今|\d{4}年\d{1,2}月))'
     )
 
+    # 时间在末尾的条目格式正则（如 "公司名 | 职位 | 2006.3 – 2025.12"）
+    # 匹配以 | 分隔、最后一个字段是时间的格式
+    TRAILING_TIME_PATTERN = re.compile(
+        r'^(.+?)\s*\|\s*(.+?)\s*\|\s*'
+        r'('
+        r'\d{4}[.\-/年]\d{1,2}[.\-/月]?\d{0,2}\s*[至~\-–到]\s*\d{0,4}[.\-/年]?\d{0,2}[.\-/月]?\d{0,2}'
+        r'|\d{4}[.\-/]\d{1,2}\s*[至~\-–到]\s*至今'
+        r'|\d{4}年\d{1,2}月\s*[至~\-–到]\s*(?:至今|\d{4}年\d{1,2}月)'
+        r'|\d{4}\s*[至~\-–到]\s*\d{4}'
+        r')'
+        r'\s*$'
+    )
+
     # 编号列表正则（如 "1. 项目名 —— 角色描述"）
     NUMBERED_LIST_PATTERN = re.compile(r'^(\d+)\.\s+(.+)')
 
@@ -306,10 +319,12 @@ class StructureDetector:
 
                 # 检测时间开头的行（新条目标志）
                 time_match = self.TIME_PATTERN.match(text)
+                # 检测时间在末尾的行（如 "公司 | 职位 | 2006.3 – 2025.12"）
+                trailing_match = self.TRAILING_TIME_PATTERN.match(text) if not time_match else None
                 # 检测编号列表开头的行（如 "1. 项目名 —— 描述"）
-                numbered_match = self.NUMBERED_LIST_PATTERN.match(text) if not time_match else None
+                numbered_match = self.NUMBERED_LIST_PATTERN.match(text) if not time_match and not trailing_match else None
 
-                if time_match or numbered_match:
+                if time_match or trailing_match or numbered_match:
                     # 保存上一个条目
                     if current_entry:
                         entries.append(current_entry)
@@ -318,13 +333,17 @@ class StructureDetector:
                     if time_match:
                         time_str = time_match.group(0)
                         rest = text[time_match.end():].strip()
+                        org, role = self._parse_entry_header(rest)
+                    elif trailing_match:
+                        # 时间在末尾格式: "公司 | 职位 | 时间"
+                        time_str = trailing_match.group(3).strip()
+                        org = trailing_match.group(1).strip()
+                        role = trailing_match.group(2).strip()
                     else:
                         # 编号列表格式: "1. 项目名 —— 描述"
                         time_str = ''
                         rest = numbered_match.group(2).strip()
-
-                    # 尝试分离组织和角色
-                    org, role = self._parse_entry_header(rest)
+                        org, role = self._parse_entry_header(rest)
 
                     current_entry = EntryInfo(
                         entry_type=section.section_type,

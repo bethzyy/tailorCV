@@ -16,6 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 from .multi_model_manager import MultiModelManager, MultiModelResult
 from .providers.base_provider import ModelResponse
 from .config import config
+from . import response_parser
 
 logger = logging.getLogger(__name__)
 
@@ -451,51 +452,23 @@ class MultiExpertTeam:
 
     def _extract_balanced_json(self, text: str) -> Optional[str]:
         """使用栈匹配提取平衡的JSON"""
-        stack = []
-        start_idx = None
-
-        for i, char in enumerate(text):
-            if char == '{':
-                if not stack:
-                    start_idx = i
-                stack.append(char)
-            elif char == '}':
-                if stack:
-                    stack.pop()
-                    if not stack and start_idx is not None:
-                        return text[start_idx:i+1]
-
-        return None
+        return response_parser.extract_balanced_json(text)
 
     def _safe_get_dict(self, data: dict, key: str) -> dict:
         """安全获取字典字段"""
-        value = data.get(key, {})
-        if isinstance(value, dict):
-            return value
-        return {}
+        return response_parser.safe_get_dict(data, key, default={})
 
     def _validate_analysis_result(self, result: AnalysisResult) -> None:
         """验证分析结果"""
-        if not result.matching_strategy:
-            result.matching_strategy = {}
-        if 'match_score' not in result.matching_strategy:
-            result.matching_strategy['match_score'] = 50
-        if 'match_level' not in result.matching_strategy:
-            result.matching_strategy['match_level'] = '未知'
-        if 'strengths' not in result.matching_strategy:
-            result.matching_strategy['strengths'] = []
-        if 'gaps' not in result.matching_strategy:
-            result.matching_strategy['gaps'] = []
+        result.matching_strategy = response_parser.validate_analysis_fields(
+            result.matching_strategy
+        )
 
     def _validate_generation_result(self, result: GenerationResult) -> None:
         """验证生成结果"""
-        if not result.tailored_resume:
-            result.tailored_resume = {}
-
-        required_fields = ['basic_info', 'education', 'work_experience', 'skills']
-        for field in required_fields:
-            if field not in result.tailored_resume:
-                result.tailored_resume[field] = [] if field != 'basic_info' else {}
+        result.tailored_resume = response_parser.validate_generation_fields(
+            result.tailored_resume
+        )
 
     def _create_fallback_analysis_result(self, response: str) -> AnalysisResult:
         """创建兜底分析结果"""

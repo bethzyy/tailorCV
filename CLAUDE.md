@@ -33,8 +33,9 @@ core/
 ├── database.py         # SQLite 持久化
 ├── model_manager.py    # 单模型管理（GLM-4.6）
 ├── multi_model_manager.py  # 多模型管理（智谱+阿里云）
-├── expert_team.py      # 单模型专家团队
+├── expert_team.py      # 单模型专家团队（含 Writer-Reviewer 闭环）
 ├── multi_expert_team.py    # 多模型专家团队
+├── response_parser.py  # JSON 解析工具（从 expert_team 提取的公共模块）
 ├── resume_parser.py    # 简历解析器
 ├── resume_generator.py # 简历生成器
 ├── evidence_tracker.py # 依据追踪器
@@ -47,8 +48,10 @@ core/
 │   ├── alipay.py         # 支付宝当面付
 │   └── wechat.py         # 微信支付（预留）
 └── providers/          # AI 提供商适配器
+    ├── base_provider.py    # Provider 抽象基类
     ├── zhipu_provider.py   # 智谱AI
-    └── alibaba_provider.py # 阿里云
+    ├── alibaba_provider.py # 阿里云（Qwen）
+    └── antigravity_provider.py  # AntiGravity 代理（GPT/Claude/Gemini）
 ```
 
 ### 应用入口
@@ -85,6 +88,18 @@ HUB_APP_PORT = 5000      # 工具选择器
 SIMPLE_APP_PORT = 5001   # 简版工具
 MULTI_APP_PORT = 5002    # 多模型工具
 ```
+
+### Writer-Reviewer 闭环配置 (core/config.py)
+
+```python
+WRITER_REVIEWER_ENABLED = False          # 是否启用审稿闭环（.env 覆盖为 true）
+WRITER_REVIEWER_MAX_ITERATIONS = 3       # 最大审稿轮数
+WRITER_REVIEWER_SCORE_THRESHOLD = 85.0   # 分数达标阈值
+WRITER_REVIEWER_MIN_DIFF_THRESHOLD = 0.05  # 版本差异阈值（低于此值停止）
+WRITER_REVIEWER_REVIEWER_MODELS = 'qwen3.5-plus'  # 审阅模型
+```
+
+审稿过程日志：`storage/pipeline.log`（grep `WRITER_REVIEWER_SUMMARY`）
 
 ## 技术栈
 
@@ -131,6 +146,7 @@ MULTI_APP_PORT = 5002    # 多模型工具
 
 | Date | Change |
 |------|--------|
+| 2026-04-07 | Writer-Reviewer 审稿日志持久化（review_loop 入库 + pipeline.log）；全局异常友好化（error_id + 中文文案）；response_parser 公共模块提取；结构检测增强（末尾时间格式）；支付宝回调验签实现 |
 | 2026-04-04 | 模板渲染修复（tailored 内容变量化 + 换行拆段 + 求职意向识别）；登录引导页重设计；用户参数服务端持久化；GLM API 并发错峰；免费体验 3 次；Benchmark 测试套件 |
 | 2026-04-02 | 支付系统重构：provider 模式、支付宝当面付接入、微信支付预留、前端支付方式切换 |
 | 2026-03-18 | 模板管理功能：6个内置模板、模板选择器UI、模板API、预览图生成 |
@@ -140,4 +156,4 @@ MULTI_APP_PORT = 5002    # 多模型工具
 
 ---
 
-*Last updated: 2026-04-04*
+*Last updated: 2026-04-07*

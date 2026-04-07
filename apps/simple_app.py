@@ -52,6 +52,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# 文件日志：记录完整流水线过程（特别是 Writer-Reviewer 闭环）
+_pipeline_log = logging.FileHandler('storage/pipeline.log', encoding='utf-8', mode='a')
+_pipeline_log.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+logging.getLogger().addHandler(_pipeline_log)
+
 
 def create_app() -> Flask:
     """创建简版工具 Flask 应用"""
@@ -94,8 +99,26 @@ def create_app() -> Flask:
     # 全局异常处理器 - 防止未捕获的异常导致进程崩溃
     @app.errorhandler(Exception)
     def handle_exception(e):
-        logger.error(f"❌ 未捕获的全局异常: {e}", exc_info=True)
-        return jsonify({'error': str(e), 'success': False}), 500
+        import uuid
+        error_id = uuid.uuid4().hex[:8]
+        logger.error(f"[{error_id}] 未捕获的全局异常: {e}", exc_info=True)
+
+        # 已知异常类型 → 友好文案
+        friendly_errors = {
+            ValueError: '请求参数无效',
+            TypeError: '请求数据类型错误',
+            KeyError: '缺少必要的请求数据',
+            RuntimeError: '服务处理异常，请稍后重试',
+            FileNotFoundError: '请求的资源不存在',
+            PermissionError: '权限不足',
+        }
+        user_msg = friendly_errors.get(type(e), '服务器内部错误，请稍后重试')
+
+        return jsonify({
+            'error': user_msg,
+            'success': False,
+            'error_id': error_id,
+        }), 500
 
     # 初始化组件
     provider = ZhipuProvider()
@@ -998,7 +1021,7 @@ def create_app() -> Flask:
                 'tailored_resume': tailored_resume,
                 'jd_content': jd_content,
                 'evidence_report': evidence_report if isinstance(evidence_report, dict) else evidence_report.to_dict(),
-                'optimization_summary': {'style_preserved': style_preserved, 'pipeline_version': 'v2' if is_v2 else 'v1'},
+                'optimization_summary': {'style_preserved': style_preserved, 'pipeline_version': 'v2' if is_v2 else 'v1', **pipeline_result.get('optimization_summary', {})},
                 'model_used': model_manager.current_model,
                 'tokens_used': 0,
                 'processing_time_ms': processing_time_ms
@@ -1232,7 +1255,7 @@ def create_app() -> Flask:
                 'tailored_resume': tailored_resume,
                 'jd_content': jd_content,
                 'evidence_report': evidence_report if isinstance(evidence_report, dict) else evidence_report.to_dict(),
-                'optimization_summary': {'input_mode': 'text', 'pipeline_version': 'v2' if is_v2 else 'v1'},
+                'optimization_summary': {'input_mode': 'text', 'pipeline_version': 'v2' if is_v2 else 'v1', **pipeline_result.get('optimization_summary', {})},
                 'model_used': model_manager.current_model,
                 'tokens_used': 0,
                 'processing_time_ms': processing_time_ms
@@ -1383,7 +1406,7 @@ def create_app() -> Flask:
                 'tailored_resume': tailored_resume,
                 'jd_content': jd_content,
                 'evidence_report': evidence_report if isinstance(evidence_report, dict) else evidence_report.to_dict(),
-                'optimization_summary': {'input_mode': 'guided', 'pipeline_version': 'v2' if is_v2 else 'v1'},
+                'optimization_summary': {'input_mode': 'guided', 'pipeline_version': 'v2' if is_v2 else 'v1', **pipeline_result.get('optimization_summary', {})},
                 'model_used': model_manager.current_model,
                 'tokens_used': 0,
                 'processing_time_ms': processing_time_ms

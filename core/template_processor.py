@@ -684,22 +684,3 @@ class TemplateProcessor:
             else:
                 result[full_key] = value
         return result
-        """
-        清理旧模板文件
-
-        Args:
-            max_age_days: 最大保留天数
-        """
-        import time
-
-        current_time = time.time()
-        max_age_seconds = max_age_days * 24 * 60 * 60
-
-        for template_file in self.template_dir.glob('*.docx'):
-            file_age = current_time - template_file.stat().st_mtime
-            if file_age > max_age_seconds:
-                try:
-                    template_file.unlink()
-                    logger.info(f"清理旧模板: {template_file.name}")
-                except Exception as e:
-                    logger.warning(f"清理模板失败: {e}")

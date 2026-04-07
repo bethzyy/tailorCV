@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 
 from .config import config
 from .match_scorer import MatchScorer, MatchScoreResult
+from . import response_parser
 
 if TYPE_CHECKING:
     from .model_manager import ModelManager
@@ -133,6 +134,7 @@ class RewriteContentResult(StageResult):
     review_iterations: int = 0
     review_scores: List[Dict[str, Any]] = field(default_factory=list)
     review_feedback_summary: str = ""
+    review_stop_reason: str = ""
 
 
 @dataclass
@@ -407,121 +409,32 @@ class ExpertTeam:
 
     def _extract_balanced_json(self, text: str) -> Optional[str]:
         """使用栈匹配提取平衡的JSON"""
-        stack = []
-        start_idx = None
-
-        for i, char in enumerate(text):
-            if char == '{':
-                if not stack:
-                    start_idx = i
-                stack.append(char)
-            elif char == '}':
-                if stack:
-                    stack.pop()
-                    if not stack and start_idx is not None:
-                        return text[start_idx:i+1]
-
-        # 如果没有找到完整的JSON，尝试补全
-        return self._try_complete_json(text)
+        result = response_parser.extract_balanced_json(text)
+        if result is None:
+            return self._try_complete_json(text)
+        return result
 
     def _try_complete_json(self, text: str) -> Optional[str]:
-        """尝试补全不完整的JSON（缺少外层{}）
-
-        处理多种前导字符情况：
-        - 空格、换行符、制表符开头
-        - 以 "key": 开头但缺少外层 {}
-        - 以 } 结尾但缺少开头 {
-        """
-        # 先去除前导空白，保留原始内容
-        trimmed = text.strip()
-
-        if not trimmed:
-            return None
-
-        # 情况1：以 " 开头但不是 { 开头 → 缺少外层 {}
-        if trimmed.startswith('"') and not trimmed.startswith('{'):
-            completed = '{' + trimmed + '}'
-            try:
-                json.loads(completed)
-                logger.info("成功补全JSON（添加外层{}）")
-                return completed
-            except json.JSONDecodeError as e:
-                logger.debug(f"补全尝试1失败: {e}")
-                # 继续尝试其他方案
-
-        # 情况2：以 } 结尾但缺少开头 {
-        if trimmed.endswith('}') and not trimmed.startswith('{'):
-            completed = '{' + trimmed
-            try:
-                json.loads(completed)
-                logger.info("成功补全JSON（添加开头{）")
-                return completed
-            except json.JSONDecodeError as e:
-                logger.debug(f"补全尝试2失败: {e}")
-
-        # 情况3：尝试查找第一个 " 和最后一个 } 之间的内容
-        first_quote = trimmed.find('"')
-        last_brace = trimmed.rfind('}')
-        if first_quote != -1 and last_brace != -1 and first_quote < last_brace:
-            inner = trimmed[first_quote:last_brace+1]
-            completed = '{' + inner + '}'
-            try:
-                json.loads(completed)
-                logger.info("成功补全JSON（提取内部内容）")
-                return completed
-            except json.JSONDecodeError as e:
-                logger.debug(f"补全尝试3失败: {e}")
-
-        return None
+        """尝试补全不完整的JSON（缺少外层{}）"""
+        return response_parser.try_complete_json(text)
 
     def _repair_json(self, json_str: str) -> Optional[str]:
         """尝试修复常见的JSON错误"""
-        repaired = json_str
-
-        # 1. 修复末尾多余的逗号
-        repaired = re.sub(r',\s*}', '}', repaired)
-        repaired = re.sub(r',\s*]', ']', repaired)
-
-        # 2. 修复缺失的引号（只对未加引号的键）
-        # 使用负向前瞻确保键名前面没有引号
-        repaired = re.sub(r'(?<!")(\b\w+\b)(?=\s*:)', r'"\1"', repaired)
-
-        # 3. 修复单引号（仅当整个字符串用单引号时）
-        # 避免破坏已经是双引号的内容
-
-        return repaired if repaired != json_str else None
+        return response_parser.repair_json(json_str)
 
     def _safe_get_dict(self, data: dict, key: str) -> dict:
         """安全获取字典字段"""
-        value = data.get(key, {})
-        if isinstance(value, dict):
-            return value
-        elif isinstance(value, list):
-            return {key: value}
-        else:
-            return {}
+        return response_parser.safe_get_dict(data, key, default={}, convert_list=True)
 
     def _safe_get_list(self, data: dict, key: str) -> list:
         """安全获取列表字段"""
-        value = data.get(key, [])
-        if isinstance(value, list):
-            return value
-        else:
-            return []
+        return response_parser.safe_get_list(data, key, default=[])
 
     def _validate_analysis_result(self, result: AnalysisResult) -> None:
         """验证分析结果的关键字段"""
-        # 确保matching_strategy有基本字段
-        if not result.matching_strategy:
-            result.matching_strategy = {}
-        if 'match_score' not in result.matching_strategy:
-            result.matching_strategy['match_score'] = 50
-        if 'match_level' not in result.matching_strategy:
-            result.matching_strategy['match_level'] = '未知'
-        if 'strengths' not in result.matching_strategy:
-            result.matching_strategy['strengths'] = []
-        if 'gaps' not in result.matching_strategy:
-            result.matching_strategy['gaps'] = []
+        result.matching_strategy = response_parser.validate_analysis_fields(
+            result.matching_strategy
+        )
 
     def _create_fallback_analysis_result(self, response: str) -> AnalysisResult:
         """创建兜底分析结果"""
@@ -660,14 +573,9 @@ class ExpertTeam:
 
     def _validate_generation_result(self, result: GenerationResult) -> None:
         """验证生成结果的关键字段"""
-        # 确保tailored_resume有基本结构
-        if not result.tailored_resume:
-            result.tailored_resume = {}
-
-        required_fields = ['basic_info', 'education', 'work_experience', 'skills']
-        for field in required_fields:
-            if field not in result.tailored_resume:
-                result.tailored_resume[field] = [] if field != 'basic_info' else {}
+        result.tailored_resume = response_parser.validate_generation_fields(
+            result.tailored_resume
+        )
 
         # 确保evidence_report有基本结构
         if not result.evidence_report:
@@ -868,17 +776,11 @@ class ExpertTeamV2:
 
     def _safe_get_dict(self, data: dict, key: str, default=None) -> dict:
         """安全获取字典字段"""
-        if default is None:
-            default = {}
-        value = data.get(key, default)
-        return value if isinstance(value, dict) else default
+        return response_parser.safe_get_dict(data, key, default=default)
 
     def _safe_get_list(self, data: dict, key: str, default=None) -> list:
         """安全获取列表字段"""
-        if default is None:
-            default = []
-        value = data.get(key, default)
-        return value if isinstance(value, list) else default
+        return response_parser.safe_get_list(data, key, default=default)
 
     def _protect_time_fields(self, tailored_resume: Dict[str, Any],
                               parsed_resume: ParseResumeResult) -> int:
@@ -1841,7 +1743,9 @@ class ExpertTeamV2:
                 "overall_score": aggregated['overall_score'],
                 "reviewer_count": aggregated['reviewer_count'],
                 "converged": aggregated['converged'],
-                "revision_count": len(aggregated['specific_revisions'])
+                "revision_count": len(aggregated['specific_revisions']),
+                "summary": aggregated.get('summary', '')[:300],
+                "dimension_scores": {k: v['score'] for k, v in dim_scores.items()}
             })
             logger.info(f"聚合审阅: score={aggregated['overall_score']}, "
                         f"converged={aggregated['converged']}, "
@@ -1927,6 +1831,7 @@ class ExpertTeamV2:
         result.review_iterations = review_iterations
         result.review_scores = review_scores
         result.review_feedback_summary = review_scores[-1].get('summary', '') if review_scores else ""
+        result.review_stop_reason = stop_reason
 
         # 重新验证 JD 关键词覆盖率
         jd_core_requirements = self._build_jd_core_requirements(jd_analysis, match_result)
@@ -1959,6 +1864,16 @@ class ExpertTeamV2:
         logger.info(f"   各轮分数变化: {[s['overall_score'] for s in review_scores]}")
 
         logger.info(f"Writer-Reviewer 循环完成: iterations={review_iterations}, final_score={final_score}")
+
+        # 结构化审阅日志（便于从日志文件中 grep 解析）
+        review_log = json.dumps({
+            'iterations': review_iterations,
+            'stop_reason': stop_reason,
+            'final_score': final_score,
+            'score_progression': [s['overall_score'] for s in review_scores],
+            'config': {'max_iterations': max_iterations, 'score_threshold': score_threshold}
+        }, ensure_ascii=False)
+        logger.info(f"WRITER_REVIEWER_SUMMARY: {review_log}")
         return result
 
     # ==================== 阶段3: 内容改写 ====================
@@ -2414,6 +2329,19 @@ class ExpertTeamV2:
                 'keyword_coverage': result.quality_result.keyword_coverage.get('coverage_rate', 0),
                 'recruiter_feedback': result.quality_result.recruiter_feedback
             }
+
+            # 合并 Writer-Reviewer 闭环数据
+            if result.rewrite_result and result.rewrite_result.review_iterations > 0:
+                result.optimization_summary['review_loop'] = {
+                    'iterations': result.rewrite_result.review_iterations,
+                    'stop_reason': result.rewrite_result.review_stop_reason,
+                    'final_score': result.rewrite_result.review_scores[-1]['overall_score'] if result.rewrite_result.review_scores else 'N/A',
+                    'score_progression': [s['overall_score'] for s in result.rewrite_result.review_scores],
+                    'iteration_details': result.rewrite_result.review_scores,
+                    'feedback_summary': result.rewrite_result.review_feedback_summary,
+                }
+            else:
+                result.optimization_summary['review_loop'] = None
 
             # 分析信息
             result.analysis = {
