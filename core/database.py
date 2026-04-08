@@ -437,6 +437,39 @@ class Database:
             cursor.execute('DELETE FROM history WHERE session_id = ?', (session_id,))
             return cursor.rowcount > 0
 
+    def update_history(self, session_id: str, data: Dict[str, Any]) -> bool:
+        """
+        更新指定会话的历史记录（用户编辑简历后调用）
+
+        Args:
+            session_id: 会话ID
+            data: 要更新的字段
+
+        Returns:
+            bool: 是否更新成功
+        """
+        fields = []
+        values = []
+        for key in ('tailored_resume', 'optimization_summary'):
+            if key in data:
+                fields.append(f"{key} = ?")
+                val = data[key]
+                if isinstance(val, (dict, list)):
+                    val = json.dumps(val, ensure_ascii=False)
+                values.append(val)
+
+        if not fields:
+            return False
+
+        values.append(session_id)
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f"UPDATE history SET {', '.join(fields)} WHERE session_id = ?",
+                values
+            )
+            return cursor.rowcount > 0
+
     # ==================== 缓存管理 ====================
 
     def save_config(self, key: str, value: str) -> bool:

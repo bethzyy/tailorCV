@@ -1,0 +1,44 @@
+{
+  "basic_info": {
+    "name": "张三",
+    "phone": "13800138000",
+    "email": "zhangsan@example.com"
+  },
+  "education": [
+    {
+      "time": "2016-2020",
+      "school": "清华大学",
+      "major": "计算机科学与技术",
+      "degree": "本科"
+    }
+  ],
+  "work_experience": [
+    {
+      "time": "2020-2023",
+      "company": "字节跳动",
+      "position": "后端工程师",
+      "description": "负责用户增长平台的API开发和微服务架构设计\n使用Python和Go语言，日均处理请求量超过1000万\n参与数据库优化，查询性能提升40%"
+    },
+    {
+      "time": "2019-2020",
+      "company": "美团",
+      "position": "后端开发实习生",
+      "description": "参与订单系统的后端开发\n使用Python和MySQL实现订单状态机\n负责API接口开发和数据库设计"
+    }
+  ],
+  "projects": [
+    {
+      "time": "2021-2023",
+      "name": "用户增长数据平台",
+      "role": "核心开发者",
+      "description": "负责数据采集管道的设计和实现\n支持日处理10亿级数据流"
+    },
+    {
+      "time": "2020-2021",
+      "name": "微服务网关系统",
+      "role": "主要开发者",
+      "description": "基于Flask开发统一API网关\n支持动态路由、限流熔断和服务发现"
+    }
+  ],
+  "skills": ["Python", "Go", "MySQL", "Redis", "Docker", "Kubernetes", "REST API"]
+}

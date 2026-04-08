@@ -1,0 +1,12 @@
+{
+  "min_keyword_coverage": 0.5,
+  "required_keywords": ["React", "前端", "TypeScript"],
+  "forbidden_keywords": ["精通"],
+  "min_jd_alignment_fields": 3,
+  "fidelity_checks": {
+    "name_unchanged": "李四",
+    "phone_unchanged": "13900139000",
+    "education_count_unchanged": 1,
+    "work_experience_count_unchanged": 1
+  }
+}

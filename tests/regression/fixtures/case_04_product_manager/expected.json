@@ -1,0 +1,12 @@
+{
+  "min_keyword_coverage": 0.4,
+  "required_keywords": ["产品", "数据", "用户"],
+  "forbidden_keywords": ["精通"],
+  "min_jd_alignment_fields": 2,
+  "fidelity_checks": {
+    "name_unchanged": "赵六",
+    "phone_unchanged": "13600136000",
+    "education_count_unchanged": 1,
+    "work_experience_count_unchanged": 2
+  }
+}

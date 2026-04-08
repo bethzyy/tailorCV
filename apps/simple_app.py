@@ -308,7 +308,7 @@ def create_app() -> Flask:
                     "degree": "硕士",
                     "major": "计算机科学与技术",
                     "time": "2016-2019",
-                    "tailored": "北京大学 | 计算机科学与技术 | 硕士 | 2016-2019"
+                    "tailored": "GPA 3.8/4.0，专业排名前5%\n主修课程：数据结构与算法、机器学习、分布式系统\n获国家奖学金、优秀毕业生称号"
                 }
             ],
             "work_experience": [
@@ -316,7 +316,7 @@ def create_app() -> Flask:
                     "company": "科技有限公司",
                     "position": "高级软件工程师",
                     "time": "2019-至今",
-                    "tailored": "• 主导核心系统架构设计，提升系统性能30%\n• 带领5人团队完成多个重点项目\n• 负责技术选型和代码审查",
+                    "tailored": "主导核心系统架构设计，提升系统性能30%\n带领5人团队完成多个重点项目\n负责技术选型和代码审查",
                     "content": "主导核心系统架构设计，带领团队完成项目开发"
                 }
             ],
@@ -325,20 +325,20 @@ def create_app() -> Flask:
                     "name": "智能推荐系统",
                     "role": "技术负责人",
                     "time": "2021-2022",
-                    "tailored": "• 设计并实现基于机器学习的推荐算法\n• 日均处理百万级用户请求",
+                    "tailored": "设计并实现基于机器学习的推荐算法\n日均处理百万级用户请求",
                     "content": "智能推荐系统的设计与实现"
                 },
                 {
                     "name": "行业热点聚合与智能简报系统",
                     "role": "原型设计",
                     "time": "2022-2023",
-                    "tailored": "• 构建自动化信息采集pipeline\n• 实现结构化简报自动生成",
+                    "tailored": "构建自动化信息采集pipeline\n实现结构化简报自动生成",
                 },
                 {
                     "name": "时令养生食谱生成器",
                     "role": "全栈开发",
                     "time": "2023-2024",
-                    "tailored": "• 搭建垂直领域知识库\n• 集成LLM实现智能问答",
+                    "tailored": "搭建垂直领域知识库\n集成LLM实现智能问答",
                 }
             ],
             "skills": [
@@ -1608,6 +1608,116 @@ def create_app() -> Flask:
             download_name=f"{template['name']}.docx"
         )
 
+    @app.route('/api/templates/<template_id>/editable', methods=['GET'])
+    def get_template_editable(template_id: str):
+        """获取模板的可编辑文本内容（非 Jinja2 变量部分）"""
+        template = template_manager.get_template(template_id)
+        if not template:
+            return jsonify({'error': '模板不存在'}), 404
+
+        file_path = template.get('file_path', '')
+        if not file_path or not Path(file_path).exists():
+            return jsonify({'error': '模板文件不存在'}), 404
+
+        try:
+            from docx import Document as DocxDocument
+            doc = DocxDocument(file_path)
+            paragraphs = []
+            for i, para in enumerate(doc.paragraphs):
+                text = para.text.strip()
+                if not text:
+                    paragraphs.append({'index': i, 'text': '', 'editable': False})
+                    continue
+                # 判断是否包含 Jinja2 变量
+                has_jinja = '{%' in text or '{{' in text
+                paragraphs.append({
+                    'index': i,
+                    'text': text,
+                    'editable': not has_jinja,  # 纯文本可编辑，Jinja2 标签不可编辑
+                    'is_jinja': has_jinja
+                })
+
+            return jsonify({
+                'template_id': template_id,
+                'template_name': template.get('name', ''),
+                'paragraphs': paragraphs
+            })
+        except Exception as e:
+            logger.error(f"获取模板可编辑内容失败: {e}", exc_info=True)
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/templates/<template_id>/save-edited', methods=['POST'])
+    def save_edited_template(template_id: str):
+        """保存用户编辑后的模板为新模板"""
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({'error': '未提供数据'}), 400
+
+            edited_paragraphs = data.get('paragraphs', [])  # [{index, text}]
+            new_name = data.get('name', '')
+
+            if not edited_paragraphs:
+                return jsonify({'error': '未提供编辑内容'}), 400
+
+            template = template_manager.get_template(template_id)
+            if not template:
+                return jsonify({'error': '源模板不存在'}), 404
+
+            file_path = template.get('file_path', '')
+            if not file_path or not Path(file_path).exists():
+                return jsonify({'error': '源模板文件不存在'}), 404
+
+            from docx import Document as DocxDocument
+            doc = DocxDocument(file_path)
+
+            # 应用编辑
+            edits_map = {p['index']: p['text'] for p in edited_paragraphs if 'index' in p}
+            for i, para in enumerate(doc.paragraphs):
+                if i in edits_map:
+                    # 保留原有格式的 run 结构，只替换文本
+                    if para.runs:
+                        # 将文本分配给第一个 run，清空其余
+                        para.runs[0].text = edits_map[i]
+                        for run in para.runs[1:]:
+                            run.text = ''
+                    else:
+                        para.text = edits_map[i]
+
+            # 保存为新模板
+            new_id = str(uuid.uuid4())[:12]
+            new_path = str(Path(file_path).parent / f"{new_id}.docx")
+            doc.save(new_path)
+
+            # 注册为用户自定义模板（直接写入数据库）
+            db.save_template({
+                'template_id': new_id,
+                'name': new_name or f"{template.get('name', '模板')}_编辑版",
+                'source': 'user_edited',
+                'file_path': new_path,
+                'content_hash': '',
+                'structure_confidence': template.get('structure_confidence', 0.5),
+                'sections': template.get('sections', []),
+                'variables': template.get('variables', []),
+                'description': f'基于 {template.get("name", "")} 编辑',
+                'tags': [],
+                'preview_image': '',
+                'is_default': False,
+                'use_count': 0
+            })
+
+            logger.info(f"模板编辑保存成功: {template_id} -> {new_id} ({new_name})")
+
+            return jsonify({
+                'success': True,
+                'template_id': new_id,
+                'name': new_name or f"{template.get('name', '模板')}_编辑版"
+            })
+
+        except Exception as e:
+            logger.error(f"保存编辑模板失败: {e}", exc_info=True)
+            return jsonify({'error': str(e)}), 500
+
     @app.route('/api/templates/<template_id>/preview/html', methods=['GET'])
     @limiter.exempt
     def get_template_html_preview(template_id: str):
@@ -1808,6 +1918,74 @@ def create_app() -> Flask:
 
         except Exception as e:
             logger.error(f"检查兼容性失败: {e}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/resume/update', methods=['POST'])
+    def resume_update():
+        """用户编辑简历后，重新渲染 DOCX 并更新历史记录"""
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({'error': '未提供数据'}), 400
+
+            session_id = data.get('session_id', '')
+            tailored_resume = data.get('tailored_resume')
+            template_id = data.get('template_id')
+
+            if not session_id:
+                return jsonify({'error': '缺少 session_id'}), 400
+            if not tailored_resume:
+                return jsonify({'error': '缺少 tailored_resume'}), 400
+
+            # 查找原始历史记录（获取 original_resume 和 jd_content）
+            history = db.get_history(session_id)
+            if not history:
+                return jsonify({'error': '未找到该会话记录'}), 404
+
+            # 重新渲染 DOCX
+            if template_id:
+                try:
+                    word_bytes = template_processor.render(template_id, tailored_resume, None)
+                except Exception as e:
+                    logger.error(f"简历编辑后模板渲染失败: {e}", exc_info=True)
+                    return jsonify({'error': f'模板渲染失败: {str(e)}'}), 500
+            else:
+                # 无模板时使用默认模板或生成器
+                default_template = template_manager.get_default_template()
+                if default_template:
+                    try:
+                        word_bytes = template_processor.render(
+                            default_template['template_id'], tailored_resume, None
+                        )
+                    except Exception as e:
+                        logger.warning(f"简历编辑后默认模板失败，降级到生成器: {e}")
+                        word_bytes = generator.generate_bytes(tailored_resume)
+                else:
+                    word_bytes = generator.generate_bytes(tailored_resume)
+
+            # 更新历史记录
+            db.update_history(session_id, {
+                'tailored_resume': tailored_resume,
+                'optimization_summary': {
+                    **(history.get('optimization_summary') or {}),
+                    'user_edited': True,
+                    'edited_at': datetime.now().isoformat()
+                }
+            })
+
+            # 更新磁盘上的 DOCX 文件
+            save_tailored_file(word_bytes, session_id)
+
+            logger.info(f"简历编辑保存成功: session={session_id}")
+
+            return jsonify({
+                'success': True,
+                'session_id': session_id,
+                'tailored_word': base64.b64encode(word_bytes).decode('utf-8'),
+            })
+
+        except Exception as e:
+            logger.error(f"简历编辑保存失败: {e}", exc_info=True)
             return jsonify({'error': str(e)}), 500
 
     @app.route('/api/templates/recommend', methods=['POST'])

@@ -1,0 +1,12 @@
+{
+  "min_keyword_coverage": 0.4,
+  "required_keywords": ["Python", "后端", "架构"],
+  "forbidden_keywords": ["精通"],
+  "min_jd_alignment_fields": 3,
+  "fidelity_checks": {
+    "name_unchanged": "张三",
+    "phone_unchanged": "13800138000",
+    "education_count_unchanged": 1,
+    "work_experience_count_unchanged": 1
+  }
+}

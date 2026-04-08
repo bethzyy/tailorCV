@@ -1,0 +1,16 @@
+{
+  "min_keyword_coverage": 0.35,
+  "required_keywords": ["Java", "后端", "MySQL"],
+  "forbidden_keywords": ["精通", "架构师", "5年"],
+  "min_jd_alignment_fields": 2,
+  "fidelity_checks": {
+    "name_unchanged": "王五",
+    "phone_unchanged": "13700137000",
+    "education_count_unchanged": 1,
+    "work_experience_count_unchanged": 1
+  },
+  "special_rules": {
+    "no_fabricated_work": "不应编造正式工作经历，实习经历可合理扩写",
+    "no_fabricated_years": "不应虚增工作年限"
+  }
+}

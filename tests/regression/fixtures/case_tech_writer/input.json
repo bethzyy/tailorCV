@@ -1,0 +1,5 @@
+{
+  "resume_text": "张三\n13800138000\nzhangsan@example.com\n\n教育背景\n2016-2020 清华大学 计算机科学与技术 本科\n\n工作经历\n2020-2023 字节跳动 后端工程师\n- 负责用户增长平台的API开发和微服务架构设计\n- 使用Python和Go语言，日均处理请求量超过1000万\n- 参与数据库优化，查询性能提升40%\n\n项目经历\n2021 用户增长数据平台\n- 负责数据采集管道的设计和实现\n- 支持日处理10亿级数据流\n\n专业技能\nPython、Go、MySQL、Redis、Docker、Kubernetes、REST API",
+  "jd_text": "职位：高级Python后端工程师\n\n公司：字节跳动\n\n薪资：30-50K\n\n岗位职责：\n1. 负责核心业务系统的架构设计和开发\n2. 优化系统性能，确保高可用性和可扩展性\n3. 参与技术方案评审和代码审查\n\n任职要求：\n1. 3年以上Python后端开发经验\n2. 熟练掌握（Django/Flask/FastAPI）等Web框架\n3. 熟悉（MySQL/PostgreSQL/Redis）等数据库\n4. 有微服务架构和容器化部署经验\n5. 良好的沟通能力和团队协作精神\n\n加分项：\n- 有大规模分布式系统经验\n- 熟悉Kubernetes和云原生技术\n- 有技术博客或开源贡献",
+  "scenario": "tech_writer"
+}

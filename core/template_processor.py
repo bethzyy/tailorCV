@@ -161,7 +161,11 @@ class TemplateProcessor:
             tagged_doc, metadata = self.inserter.insert_tags(doc, structure, template_id)
             metadata.original_filename = original_filename
 
-            # 6. 保存模板
+            # 6. AI 校验（可选，检查提取质量）
+            if config.TEMPLATE_AI_VALIDATE_ENABLED:
+                self._ai_validate_structure(doc, structure, template_id)
+
+            # 7. 保存模板
             tagged_doc.save(str(template_path))
 
             self.stats['preprocessed'] += 1
@@ -444,6 +448,8 @@ class TemplateProcessor:
                 continue
 
             lines = text.split('\n')
+            # 清理行首 bullet 字符（防止 DOCX 原生 bullet + 内容 bullet = 双 bullet）
+            lines = [re.sub(r'^[•\-\*]\s*', '', line) for line in lines]
             # 只有多行时才拆分
             if len(lines) <= 1:
                 continue
@@ -684,3 +690,89 @@ class TemplateProcessor:
             else:
                 result[full_key] = value
         return result
+
+    def _ai_validate_structure(self, doc: 'Document', structure: 'StructureMap',
+                               template_id: str) -> None:
+        """
+        使用 AI 校验模板提取结构质量。
+
+        异步检查，失败不阻塞主流程。仅记录警告日志。
+        """
+        try:
+            import json as json_module
+            from .model_manager import ModelManager
+            from .providers.zhipu_provider import ZhipuProvider
+
+            # 构建结构快照
+            paragraphs_text = [p.text for p in doc.paragraphs]
+            structure_snapshot = {
+                'confidence': structure.confidence,
+                'name_index': structure.name_paragraph_index,
+                'contact_index': structure.contact_paragraph_index,
+                'sections': [
+                    {
+                        'type': s.section_type.value,
+                        'title': s.title,
+                        'paragraph_index': s.paragraph_index,
+                        'content_range': [s.content_start, s.content_end],
+                        'content_preview': paragraphs_text[s.content_start:s.content_end + 1][:5] if s.content_end < len(paragraphs_text) else []
+                    }
+                    for s in structure.sections
+                ],
+                'entries': [
+                    {
+                        'type': e.entry_type.value,
+                        'time': e.time,
+                        'organization': e.organization,
+                        'role': e.role,
+                        'content_count': len(e.content_paragraphs),
+                        'content_preview': [paragraphs_text[i] for i in e.content_paragraphs[:3] if i < len(paragraphs_text)]
+                    }
+                    for e in structure.entries
+                ],
+                'total_paragraphs': len(paragraphs_text),
+            }
+
+            # 读取 prompt 模板
+            prompt_path = config.BASE_DIR / 'prompts' / 'template_validate_prompt.txt'
+            if not prompt_path.exists():
+                logger.warning(f"AI 校验 prompt 文件不存在: {prompt_path}")
+                return
+
+            prompt_template = prompt_path.read_text(encoding='utf-8')
+            prompt = prompt_template.replace('{{structure_json}}', json_module.dumps(structure_snapshot, ensure_ascii=False, indent=2))
+
+            # 调用轻量模型
+            provider = ZhipuProvider()
+            manager = ModelManager(provider)
+            response = manager.call(
+                prompt=prompt,
+                task_type='validate',
+                max_tokens=2048,
+                temperature=0.3
+            )
+
+            if response.success:
+                # 解析 AI 响应
+                content = response.content.strip()
+                # 提取 JSON
+                json_match = re.search(r'\{[\s\S]*\}', content)
+                if json_match:
+                    validation = json_module.loads(json_match.group())
+                    issues = validation.get('issues', [])
+                    score = validation.get('overall_score', 0)
+
+                    if issues:
+                        logger.warning(f"AI 模板校验发现 {len(issues)} 个问题 (模板={template_id}, 得分={score}):")
+                        for issue in issues:
+                            logger.warning(f"  - [{issue.get('issue_type')}] {issue.get('section')}.{issue.get('field')}: {issue.get('description')}")
+                    else:
+                        logger.info(f"AI 模板校验通过 (模板={template_id}, 得分={score}): {validation.get('summary', '')}")
+                else:
+                    logger.warning(f"AI 模板校验响应无法解析 (模板={template_id}): {content[:200]}")
+            else:
+                logger.warning(f"AI 模板校验调用失败 (模板={template_id}): {response.error_message}")
+
+        except Exception as e:
+            # AI 校验失败不阻塞主流程
+            logger.warning(f"AI 模板校验异常 (模板={template_id}): {e}")

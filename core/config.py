@@ -186,6 +186,10 @@ class Config:
     WRITER_REVIEWER_MIN_DIFF_THRESHOLD = float(os.getenv('WRITER_REVIEWER_MIN_DIFF_THRESHOLD', '0.05'))
     WRITER_REVIEWER_REVIEWER_MODELS = os.getenv('WRITER_REVIEWER_REVIEWER_MODELS', 'qwen3.5-plus')
 
+    # ==================== AI 模板校验配置 ====================
+    TEMPLATE_AI_VALIDATE_ENABLED = os.getenv('TEMPLATE_AI_VALIDATE_ENABLED', 'true').lower() == 'true'
+    TEMPLATE_AI_VALIDATE_MODEL = os.getenv('TEMPLATE_AI_VALIDATE_MODEL', 'glm-4-flash')
+
     # ==================== 端口配置 ====================
     SIMPLE_APP_PORT = int(os.getenv('SIMPLE_APP_PORT', 6003))
     MULTI_APP_PORT = int(os.getenv('MULTI_APP_PORT', 5002))
