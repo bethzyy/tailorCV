@@ -161,9 +161,12 @@ class TemplateProcessor:
             tagged_doc, metadata = self.inserter.insert_tags(doc, structure, template_id)
             metadata.original_filename = original_filename
 
-            # 6. AI 校验（可选，检查提取质量）
+            # 6. AI 校验（异步，不阻塞主流程）
             if config.TEMPLATE_AI_VALIDATE_ENABLED:
-                self._ai_validate_structure(doc, structure, template_id)
+                import threading
+                t = threading.Thread(target=self._ai_validate_structure,
+                                    args=(doc, structure, template_id), daemon=True)
+                t.start()
 
             # 7. 保存模板
             tagged_doc.save(str(template_path))

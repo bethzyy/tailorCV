@@ -164,7 +164,7 @@ class TestElementReferences:
     def test_querySelector_id_targets_exist(self, html_file):
         html = html_file.read_text(encoding='utf-8')
         html_ids = set(re.findall(r'id="([^"]+)"', html))
-        refs = re.findall(r"querySelector\(['\"]#([^'\"]+)['\"]\)", html)
+        refs = re.findall(r"querySelector\(['\"]#([^'\"'\s]+)['\"]\)", html)
         refs = [r for r in refs if not _is_dynamic_ref(r)]
         missing = [r for r in refs if r not in html_ids]
         assert not missing, (

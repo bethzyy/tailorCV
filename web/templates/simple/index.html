@@ -4,1394 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>tailorCV 简版工具 - 智能简历定制</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-
-        .container {
-            max-width: 900px;
-            margin: 0 auto;
-        }
-
-        /* Header - Flex布局 */
-        header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 25px 0 30px;
-            color: white;
-        }
-
-        .header-title h1 {
-            font-size: 2em;
-            margin-bottom: 5px;
-        }
-
-        .header-title p {
-            font-size: 1em;
-            opacity: 0.9;
-        }
-
-        .model-badge {
-            display: inline-block;
-            padding: 4px 10px;
-            background: rgba(255, 255, 255, 0.25);
-            border-radius: 15px;
-            font-size: 12px;
-            margin-left: 8px;
-        }
-
-        .nav-links {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-
-        .nav-link {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            padding: 10px 20px;
-            background: rgba(255, 255, 255, 0.25);
-            color: white;
-            text-decoration: none;
-            border-radius: 25px;
-            font-size: 14px;
-            transition: all 0.3s;
-            white-space: nowrap;
-        }
-
-        .nav-link:hover {
-            background: rgba(255, 255, 255, 0.35);
-        }
-
-        .shutdown-btn {
-            padding: 10px 20px;
-            background: rgba(255, 100, 100, 0.3);
-            color: white;
-            text-decoration: none;
-            border-radius: 25px;
-            font-size: 14px;
-            transition: all 0.3s;
-            border: none;
-            cursor: pointer;
-            white-space: nowrap;
-        }
-
-        .shutdown-btn:hover {
-            background: rgba(255, 100, 100, 0.5);
-        }
-
-        .main-card {
-            background: white;
-            border-radius: 16px;
-            padding: 30px 35px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-        }
-
-        /* 进度指示器 */
-        .progress-indicator {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 30px;
-            padding: 15px 0;
-            border-bottom: 1px solid #eee;
-        }
-
-        .progress-step {
-            display: flex;
-            align-items: center;
-            color: #999;
-            font-size: 14px;
-        }
-
-        .progress-step.active {
-            color: #667eea;
-            font-weight: 600;
-        }
-
-        .progress-step.completed {
-            color: #4caf50;
-        }
-
-        .step-number {
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            border: 2px solid currentColor;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-right: 8px;
-            font-size: 13px;
-        }
-
-        .progress-step.completed .step-number {
-            background: #4caf50;
-            border-color: #4caf50;
-            color: white;
-        }
-
-        .progress-step.active .step-number {
-            background: #667eea;
-            border-color: #667eea;
-            color: white;
-        }
-
-        .progress-arrow {
-            color: #ddd;
-            margin: 0 20px;
-            font-size: 20px;
-        }
-
-        /* 区域样式 */
-        .section {
-            margin-bottom: 25px;
-        }
-
-        .section-header {
-            display: flex;
-            align-items: center;
-            margin-bottom: 15px;
-        }
-
-        .section-number {
-            width: 26px;
-            height: 26px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            font-size: 14px;
-            margin-right: 10px;
-        }
-
-        .section-title {
-            font-size: 16px;
-            font-weight: 600;
-            color: #333;
-        }
-
-        /* JD输入区域 - 支持拖拽 */
-        .jd-input-area {
-            position: relative;
-        }
-
-        .jd-textarea {
-            width: 100%;
-            min-height: 180px;
-            padding: 15px;
-            padding-bottom: 40px;
-            border: 2px solid #e0e0e0;
-            border-radius: 10px;
-            font-size: 14px;
-            resize: vertical;
-            transition: all 0.3s;
-            line-height: 1.6;
-        }
-
-        .jd-textarea:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        .jd-textarea.dragover {
-            border-color: #667eea;
-            background: #f8f9ff;
-        }
-
-        .jd-hint {
-            position: absolute;
-            bottom: 12px;
-            left: 15px;
-            font-size: 12px;
-            color: #999;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-
-        /* 输入方式切换 */
-        .input-mode-tabs {
-            display: flex;
-            background: #f5f5f5;
-            border-radius: 8px;
-            padding: 4px;
-            margin-bottom: 15px;
-        }
-
-        .mode-tab {
-            flex: 1;
-            padding: 10px 20px;
-            text-align: center;
-            cursor: pointer;
-            border-radius: 6px;
-            font-size: 14px;
-            color: #666;
-            transition: all 0.3s;
-            border: none;
-            background: transparent;
-        }
-
-        .mode-tab:hover {
-            color: #333;
-        }
-
-        .mode-tab.active {
-            background: white;
-            color: #667eea;
-            font-weight: 600;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        }
-
-        .mode-icon {
-            margin-right: 6px;
-        }
-
-        .input-panel {
-            display: none;
-        }
-
-        .input-panel.active {
-            display: block;
-        }
-
-        /* 文件上传区域 */
-        .upload-area {
-            border: 2px dashed #ddd;
-            border-radius: 10px;
-            padding: 35px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        .upload-area:hover, .upload-area.dragover {
-            border-color: #667eea;
-            background: #f8f9ff;
-        }
-
-        .upload-icon {
-            font-size: 40px;
-            color: #667eea;
-            margin-bottom: 12px;
-        }
-
-        .upload-text {
-            color: #666;
-            font-size: 15px;
-        }
-
-        .upload-hint {
-            color: #999;
-            font-size: 13px;
-            margin-top: 8px;
-        }
-
-        .file-info {
-            display: none;
-            background: #f0f3ff;
-            padding: 10px 15px;
-            border-radius: 8px;
-            margin-top: 10px;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .file-info.show {
-            display: flex;
-        }
-
-        .file-name {
-            color: #333;
-            font-weight: 500;
-            font-size: 14px;
-        }
-
-        .file-remove {
-            color: #e53935;
-            cursor: pointer;
-            font-size: 13px;
-        }
-
-        /* 引导输入表单 */
-        .guided-form {
-            max-height: 350px;
-            overflow-y: auto;
-            padding-right: 8px;
-        }
-
-        .form-section {
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid #eee;
-        }
-
-        .form-section:last-child {
-            border-bottom: none;
-        }
-
-        .form-section-title {
-            font-size: 14px;
-            font-weight: 600;
-            color: #667eea;
-            margin-bottom: 12px;
-        }
-
-        .form-row {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-            gap: 12px;
-            margin-bottom: 10px;
-        }
-
-        .form-group {
-            margin-bottom: 10px;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 4px;
-            font-weight: 500;
-            color: #555;
-            font-size: 13px;
-        }
-
-        .form-group label .required {
-            color: #e53935;
-        }
-
-        .form-group input,
-        .form-group select,
-        .form-group textarea {
-            width: 100%;
-            padding: 8px 10px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            font-size: 13px;
-        }
-
-        .form-group input:focus,
-        .form-group select:focus,
-        .form-group textarea:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        .form-group textarea {
-            resize: vertical;
-            min-height: 60px;
-        }
-
-        .entry-item {
-            background: #f8f9ff;
-            border-radius: 8px;
-            padding: 12px;
-            margin-bottom: 8px;
-            position: relative;
-        }
-
-        .entry-remove {
-            position: absolute;
-            top: 8px;
-            right: 10px;
-            color: #e53935;
-            cursor: pointer;
-            font-size: 12px;
-        }
-
-        .btn-add {
-            padding: 8px 16px;
-            background: #f0f3ff;
-            border: 1px dashed #667eea;
-            color: #667eea;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 13px;
-            width: 100%;
-        }
-
-        .btn-add:hover {
-            background: #e8edff;
-        }
-
-        /* 按钮区域 */
-        .btn-group {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 10px;
-            margin-top: 25px;
-        }
-
-        .btn {
-            padding: 14px 50px;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
-        }
-
-        .btn-primary:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .btn-reset {
-            background: transparent;
-            border: none;
-            color: #999;
-            font-size: 13px;
-            cursor: pointer;
-            padding: 5px 10px;
-        }
-
-        .btn-reset:hover {
-            color: #666;
-            text-decoration: underline;
-        }
-
-        /* 进度条 */
-        .progress-container {
-            display: none;
-            margin-top: 25px;
-        }
-
-        .progress-container.show {
-            display: block;
-        }
-
-        /* 五阶段步骤指示器 */
-        .progress-steps {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 20px;
-            position: relative;
-        }
-
-        .progress-steps::before {
-            content: '';
-            position: absolute;
-            top: 15px;
-            left: 10%;
-            right: 10%;
-            height: 2px;
-            background: #e0e0e0;
-            z-index: 0;
-        }
-
-        .progress-step {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            position: relative;
-            z-index: 1;
-        }
-
-        .step-icon {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            background: #e0e0e0;
-            color: #999;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-            font-weight: bold;
-            transition: all 0.3s;
-        }
-
-        .step-label {
-            margin-top: 6px;
-            font-size: 12px;
-            color: #999;
-            transition: all 0.3s;
-        }
-
-        .progress-step.active .step-icon {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-
-        .progress-step.active .step-label {
-            color: #667eea;
-            font-weight: 500;
-        }
-
-        .progress-step.completed .step-icon {
-            background: #4caf50;
-            color: white;
-        }
-
-        .progress-step.completed .step-label {
-            color: #4caf50;
-        }
-
-        .progress-bar {
-            height: 18px;
-            background: #f0f0f0;
-            border-radius: 9px;
-            overflow: hidden;
-        }
-
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            width: 0%;
-            transition: width 0.3s;
-        }
-
-        .progress-text {
-            color: #666;
-            font-size: 14px;
-            flex: 1;
-        }
-
-        .progress-info-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: 8px;
-            padding: 0 10px;
-        }
-
-        .progress-time {
-            color: #888;
-            font-size: 13px;
-            font-weight: 500;
-        }
-
-        .tips-carousel {
-            display: flex;
-            align-items: flex-start;
-            gap: 10px;
-            margin-top: 16px;
-            padding: 12px 16px;
-            background: linear-gradient(135deg, #f0f4ff 0%, #fef3e8 100%);
-            border-radius: 10px;
-            border: 1px solid #e8ecf4;
-        }
-
-        .tips-icon {
-            font-size: 20px;
-            flex-shrink: 0;
-        }
-
-        .tips-content {
-            color: #555;
-            font-size: 13px;
-            line-height: 1.6;
-        }
-
-        .tips-title {
-            font-weight: 600;
-            color: #333;
-            margin-bottom: 4px;
-        }
-
-        /* 结果显示 */
-        .result-container {
-            display: none;
-            margin-top: 25px;
-            padding-top: 25px;
-            border-top: 1px solid #eee;
-        }
-
-        .result-container.show {
-            display: block;
-        }
-
-        .result-card {
-            background: #f8f9ff;
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 15px;
-        }
-
-        .result-title {
-            font-size: 16px;
-            font-weight: 600;
-            color: #333;
-            margin-bottom: 15px;
-        }
-
-        .match-score {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-
-        .score-circle {
-            width: 70px;
-            height: 70px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 22px;
-            font-weight: bold;
-            transition: background 0.3s ease;
-        }
-
-        .score-circle.low {
-            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
-        }
-
-        .score-circle.medium {
-            background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
-        }
-
-        .score-circle.high {
-            background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
-        }
-
-        .score-info h3 {
-            font-size: 18px;
-            color: #333;
-        }
-
-        .score-info p {
-            color: #666;
-            margin-top: 4px;
-            font-size: 14px;
-        }
-
-        .strengths-gaps {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-            margin-top: 15px;
-        }
-
-        .strengths, .gaps {
-            padding: 12px;
-            border-radius: 8px;
-        }
-
-        .strengths {
-            background: #e8f5e9;
-        }
-
-        .gaps {
-            background: #fff3e0;
-        }
-
-        .strengths h4, .gaps h4 {
-            margin-bottom: 8px;
-            font-size: 14px;
-        }
-
-        .strengths h4 {
-            color: #2e7d32;
-        }
-
-        .gaps h4 {
-            color: #e65100;
-        }
-
-        .strengths ul, .gaps ul {
-            list-style: none;
-            padding-left: 0;
-        }
-
-        .strengths li, .gaps li {
-            padding: 4px 0;
-            font-size: 13px;
-        }
-
-        .evidence-stats {
-            display: flex;
-            gap: 25px;
-            margin-bottom: 10px;
-        }
-
-        .evidence-stat {
-            text-align: center;
-        }
-
-        .evidence-stat-value {
-            font-size: 24px;
-            font-weight: bold;
-            color: #667eea;
-        }
-
-        .evidence-stat-label {
-            color: #666;
-            font-size: 13px;
-        }
-
-        /* 模板状态显示 */
-        .template-status {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 12px;
-            border-radius: 8px;
-            font-size: 13px;
-            margin-bottom: 10px;
-        }
-
-        .template-status.success {
-            background: #e8f5e9;
-            color: #2e7d32;
-        }
-
-        .template-status.warning {
-            background: #fff3e0;
-            color: #e65100;
-        }
-
-        .template-status.info {
-            background: #e3f2fd;
-            color: #1565c0;
-        }
-
-        .template-status-icon {
-            font-size: 16px;
-        }
-
-        .download-buttons {
-            display: flex;
-            justify-content: center;
-            gap: 15px;
-            margin-top: 15px;
-            flex-wrap: wrap;
-        }
-
-        .btn-download {
-            padding: 12px 25px;
-            background: white;
-            border: 2px solid #667eea;
-            color: #667eea;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s;
-            text-decoration: none;
-            font-size: 14px;
-        }
-
-        .btn-download:hover {
-            background: #667eea;
-            color: white;
-        }
-
-        .btn-retry {
-            background: #f5f5f5;
-            border: 2px solid #ddd;
-            color: #666;
-        }
-
-        .btn-retry:hover {
-            background: #eee;
-            border-color: #ccc;
-            color: #333;
-        }
-
-        /* 简历预览卡片 */
-        .resume-preview-card {
-            background: white;
-            border-radius: 12px;
-            margin-bottom: 15px;
-            overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-        }
-
-        .preview-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 15px 20px;
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-
-        .preview-header:hover {
-            background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
-        }
-
-        .preview-title {
-            font-size: 16px;
-            font-weight: 600;
-            color: #333;
-        }
-
-        .preview-toggle {
-            color: #667eea;
-            font-size: 13px;
-        }
-
-        .preview-content {
-            padding: 20px;
-            display: none;
-            border-top: 1px solid #eee;
-            max-height: 500px;
-            overflow-y: auto;
-        }
-
-        .preview-content.show {
-            display: block;
-        }
-
-        .preview-section {
-            margin-bottom: 20px;
-        }
-
-        .preview-section:last-child {
-            margin-bottom: 0;
-        }
-
-        .preview-section-title {
-            font-size: 15px;
-            font-weight: 600;
-            color: #667eea;
-            margin-bottom: 10px;
-            padding-bottom: 5px;
-            border-bottom: 2px solid #667eea;
-            display: inline-block;
-        }
-
-        .preview-item {
-            margin-bottom: 15px;
-            padding-left: 10px;
-            border-left: 3px solid #e9ecef;
-        }
-
-        .preview-item:last-child {
-            margin-bottom: 0;
-        }
-
-        .preview-item-header {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 5px;
-        }
-
-        .preview-item-title {
-            font-weight: 600;
-            color: #333;
-        }
-
-        .preview-item-time {
-            color: #888;
-            font-size: 13px;
-        }
-
-        .preview-item-subtitle {
-            color: #666;
-            font-size: 14px;
-            margin-bottom: 8px;
-        }
-
-        .preview-item-content {
-            color: #555;
-            font-size: 14px;
-            line-height: 1.6;
-            white-space: pre-wrap;
-        }
-
-        .preview-tags {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-
-        .preview-tag {
-            display: inline-block;
-            padding: 4px 10px;
-            background: #f0f4ff;
-            color: #667eea;
-            border-radius: 15px;
-            font-size: 12px;
-        }
-
-        .preview-empty {
-            color: #999;
-            font-size: 14px;
-            padding: 10px;
-            text-align: center;
-        }
-
-        footer {
-            text-align: center;
-            padding: 25px 0;
-            color: white;
-            opacity: 0.8;
-            font-size: 14px;
-        }
-
-        /* 滚动条样式 */
-        .guided-form::-webkit-scrollbar {
-            width: 5px;
-        }
-
-        .guided-form::-webkit-scrollbar-track {
-            background: #f1f1f1;
-            border-radius: 3px;
-        }
-
-        .guided-form::-webkit-scrollbar-thumb {
-            background: #c1c1c1;
-            border-radius: 3px;
-        }
-
-        /* 模板选择器样式 */
-        .template-selector {
-            background: #f8f9ff;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            overflow: hidden;
-        }
-
-        /* 折叠状态 - 只显示头部 */
-        .template-selector.collapsed .template-selector-body {
-            display: none;
-        }
-
-        .template-selector-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px 15px;
-            cursor: pointer;
-            user-select: none;
-            transition: background 0.2s;
-        }
-
-        .template-selector-header:hover {
-            background: #eef1ff;
-        }
-
-        .template-selector-title {
-            font-size: 14px;
-            font-weight: 600;
-            color: #333;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .template-current-info {
-            font-size: 13px;
-            color: #666;
-            font-weight: normal;
-        }
-
-        .template-current-info .template-name-current {
-            color: #667eea;
-            font-weight: 500;
-        }
-
-        .template-expand-icon {
-            font-size: 12px;
-            color: #999;
-            transition: transform 0.2s;
-        }
-
-        .template-selector.collapsed .template-expand-icon {
-            transform: rotate(0deg);
-        }
-
-        .template-selector:not(.collapsed) .template-expand-icon {
-            transform: rotate(180deg);
-        }
-
-        .template-selector-body {
-            padding: 0 15px 15px 15px;
-            border-top: 1px solid #e0e5f0;
-        }
-
-        .template-selector-actions {
-            display: flex;
-            gap: 8px;
-        }
-
-        .template-action-btn {
-            padding: 5px 10px;
-            font-size: 12px;
-            border: 1px solid #ddd;
-            background: white;
-            border-radius: 5px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .template-action-btn:hover {
-            background: #f0f0f0;
-        }
-
-        .template-filter-tabs {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 12px;
-        }
-
-        .template-filter-tab {
-            padding: 4px 12px;
-            font-size: 12px;
-            border: none;
-            background: #e0e0e0;
-            border-radius: 15px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .template-filter-tab.active {
-            background: #667eea;
-            color: white;
-        }
-
-        .template-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-            gap: 12px;
-            max-height: 220px;
-            overflow-y: auto;
-            padding-right: 5px;
-            padding-top: 10px;
-        }
-
-        .template-expand-icon {
-            font-size: 10px;
-            color: #999;
-            transition: transform 0.2s;
-        }
-
-        .template-selector.collapsed .template-expand-icon {
-            transform: rotate(0deg);
-        }
-
-        .template-selector:not(.collapsed) .template-expand-icon {
-            transform: rotate(180deg);
-        }
-
-        .template-card {
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            padding: 10px;
-            cursor: pointer;
-            transition: all 0.2s;
-            background: white;
-            position: relative;
-        }
-
-        .template-card:hover {
-            border-color: #667eea;
-            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
-        }
-
-        .template-card.selected {
-            border-color: #667eea;
-            background: #f0f4ff;
-        }
-
-        .template-card.selected::after {
-            content: '✓';
-            position: absolute;
-            top: 5px;
-            right: 5px;
-            background: #667eea;
-            color: white;
-            width: 18px;
-            height: 18px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 11px;
-        }
-
-        .template-card-actions {
-            position: absolute;
-            bottom: 5px;
-            right: 5px;
-            display: flex;
-            gap: 4px;
-            opacity: 0;
-            transition: opacity 0.2s;
-        }
-
-        .template-card:hover .template-card-actions {
-            opacity: 1;
-        }
-
-        .template-action-icon {
-            width: 22px;
-            height: 22px;
-            border-radius: 4px;
-            background: rgba(255,255,255,0.9);
-            border: 1px solid #ddd;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 11px;
-            cursor: pointer;
-        }
-
-        .template-action-icon:hover {
-            background: #667eea;
-            color: white;
-            border-color: #667eea;
-        }
-
-        .template-preview {
-            width: 100%;
-            height: 80px;
-            background: #f5f5f5;
-            border-radius: 5px;
-            margin-bottom: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-        }
-
-        .template-preview img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-
-        .template-preview-placeholder {
-            font-size: 28px;
-            color: #667eea;
-            font-weight: bold;
-        }
-
-        .template-name {
-            font-size: 12px;
-            font-weight: 500;
-            color: #333;
-            margin-bottom: 4px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .template-tags {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 3px;
-        }
-
-        .template-tag {
-            font-size: 10px;
-            padding: 1px 5px;
-            background: #e8ecf3;
-            color: #666;
-            border-radius: 8px;
-        }
-
-        .template-default-badge {
-            position: absolute;
-            top: 5px;
-            left: 5px;
-            background: #4caf50;
-            color: white;
-            font-size: 9px;
-            padding: 2px 5px;
-            border-radius: 3px;
-        }
-
-        .template-source-badge {
-            position: absolute;
-            bottom: 5px;
-            right: 5px;
-            font-size: 9px;
-            padding: 2px 5px;
-            border-radius: 3px;
-        }
-
-        .template-source-badge.builtin {
-            background: #e3f2fd;
-            color: #1976d2;
-        }
-
-        .template-source-badge.uploaded {
-            background: #fff3e0;
-            color: #f57c00;
-        }
-
-        .template-source-badge.extracted {
-            background: #e8f5e9;
-            color: #388e3c;
-        }
-
-        .template-empty {
-            text-align: center;
-            padding: 20px;
-            color: #999;
-            font-size: 13px;
-        }
-
-        .template-mode-selector {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 12px;
-        }
-
-        .template-mode-option {
-            flex: 1;
-            padding: 8px;
-            text-align: center;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 12px;
-            transition: all 0.2s;
-        }
-
-        .template-mode-option:hover {
-            background: #f5f5f5;
-        }
-
-        .template-mode-option.active {
-            border-color: #667eea;
-            background: #f0f4ff;
-        }
-
-        .template-mode-option input {
-            margin-right: 5px;
-        }
-
-        /* 模态框样式 */
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .modal-overlay.show {
-            display: flex;
-        }
-
-        .modal-content {
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            max-width: 500px;
-            width: 90%;
-        }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-        }
-
-        .modal-title {
-            font-size: 16px;
-            font-weight: 600;
-        }
-
-        .modal-close {
-            background: none;
-            border: none;
-            font-size: 20px;
-            cursor: pointer;
-            color: #999;
-        }
-
-        .modal-body {
-            margin-bottom: 15px;
-        }
-
-        .modal-footer {
-            display: flex;
-            justify-content: flex-end;
-            gap: 10px;
-        }
-
-        .modal-btn {
-            padding: 8px 16px;
-            border-radius: 6px;
-            font-size: 13px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .modal-btn-cancel {
-            background: #f5f5f5;
-            border: 1px solid #ddd;
-        }
-
-        .modal-btn-confirm {
-            background: #667eea;
-            color: white;
-            border: none;
-        }
-
-        /* 响应式 */
-        @media (max-width: 600px) {
-            header {
-                flex-direction: column;
-                text-align: center;
-                gap: 15px;
-            }
-
-            .header-title h1 {
-                font-size: 1.6em;
-            }
-
-            .progress-indicator {
-                flex-wrap: wrap;
-                gap: 10px;
-            }
-
-            .progress-arrow {
-                display: none;
-            }
-
-            .progress-step {
-                font-size: 12px;
-            }
-
-            .strengths-gaps {
-                grid-template-columns: 1fr;
-            }
-
-            .download-buttons {
-                flex-direction: column;
-            }
-        }
-    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/notion-theme.css">
 </head>
 <body>
     <div class="container">
@@ -1402,7 +18,7 @@
             </div>
             <div class="nav-links">
                 <!-- 用户状态（登录后显示） -->
-                <span id="userQuotaBadge" style="display:none; padding:6px 14px; background:rgba(255,255,255,0.2); border-radius:20px; color:white; font-size:13px;">
+                <span id="userQuotaBadge" style="display:none; padding:6px 14px; background:#f2f9ff; border-radius:9999px; color:#097fe8; font-size:13px;">
                     剩余 <strong id="quotaDisplay">0</strong> 次
                 </span>
                 <button id="userCenterBtn" style="display:none;" class="nav-link" onclick="showUserCenter()">👤 我的</button>
@@ -1412,9 +28,9 @@
         </header>
 
         <!-- 未登录引导（fixed 覆盖整个视口） -->
-        <div id="loginGuide" style="position:fixed; top:0; left:0; width:100vw; height:100vh; background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); z-index:1000; display:flex; align-items:center; justify-content:center;">
-            <div style="background:white; border-radius:20px; padding:40px 36px 32px; max-width:360px; width:90%; box-shadow:0 20px 60px rgba(0,0,0,0.3); text-align:center;">
-                <div style="width:56px; height:56px; background:linear-gradient(135deg,#667eea,#764ba2); border-radius:14px; margin:0 auto 20px; display:flex; align-items:center; justify-content:center; font-size:26px;">
+        <div id="loginGuide" style="position:fixed; top:0; left:0; width:100vw; height:100vh; background:#f6f5f4; z-index:1000; display:flex; align-items:center; justify-content:center;">
+            <div style="background:white; border-radius:16px; padding:40px 36px 32px; max-width:360px; width:90%; box-shadow:0 20px 60px rgba(0,0,0,0.3); text-align:center;">
+                <div style="width:56px; height:56px; background:#0075de; border-radius:14px; margin:0 auto 20px; display:flex; align-items:center; justify-content:center; font-size:26px;">
                     📄
                 </div>
                 <h2 style="color:#1a1a2e; margin:0 0 8px; font-size:20px; font-weight:700;">tailorCV</h2>
@@ -1423,9 +39,9 @@
                     <span style="color:#bbb; font-size:12px;">零编造 · 有据可查 · 新用户免费 3 次</span>
                 </p>
                 <button onclick="showLoginModal()"
-                    style="width:100%; padding:12px 0; background:linear-gradient(135deg,#667eea,#764ba2); color:white; border:none; border-radius:12px; font-size:15px; font-weight:500; cursor:pointer; box-shadow:0 4px 14px rgba(102,126,234,0.35); transition:transform 0.15s,box-shadow 0.15s;"
-                    onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(102,126,234,0.45)'"
-                    onmouseout="this.style.transform='';this.style.boxShadow='0 4px 14px rgba(102,126,234,0.35)'">
+                    style="width:100%; padding:12px 0; background:#0075de; color:white; border:none; border-radius:4px; font-size:15px; font-weight:500; cursor:pointer; box-shadow:0 2px 8px rgba(0,117,222,0.15); transition:transform 0.15s,box-shadow 0.15s;"
+                    onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 4px 14px rgba(0,117,222,0.25)'"
+                    onmouseout="this.style.transform='';this.style.boxShadow='0 2px 8px rgba(0,117,222,0.15)'">
                     📧 邮箱登录 / 注册
                 </button>
                 <a href="javascript:void(0)" onclick="closeLoginGuide()"
@@ -1505,7 +121,7 @@
                         <span class="file-remove" onclick="removeResume()">✕ 移除</span>
                     </div>
                     <div id="uploadTrigger" onclick="showResumeUploadModal()" style="padding:16px; border:2px dashed #ddd; border-radius:10px; text-align:center; cursor:pointer; transition:all 0.2s; color:#888; font-size:14px;"
-                         onmouseover="this.style.borderColor='#667eea';this.style.color='#667eea'"
+                         onmouseover="this.style.borderColor='#0075de';this.style.color='#0075de'"
                          onmouseout="this.style.borderColor='#ddd';this.style.color='#888'">
                         📄 点击上传简历文件
                     </div>
@@ -1735,7 +351,7 @@
                                 <span>正在加载预览...</span>
                             </div>
                             <!-- 降级占位符 -->
-                            <div class="preview-placeholder" style="display: none; flex-direction: column; align-items: center; justify-content: center; height: 400px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                            <div class="preview-placeholder" style="display: none; flex-direction: column; align-items: center; justify-content: center; height: 400px; background: #0075de; color: white;">
                                 <span class="preview-placeholder-letter" style="font-size: 72px; font-weight: bold; opacity: 0.9;">A</span>
                                 <span class="preview-placeholder-name" style="font-size: 18px; margin-top: 10px;">模板名称</span>
                             </div>
@@ -1770,6 +386,22 @@
                         <div id="templateEditContent" style="font-size:12px; color:#999;">加载中...</div>
                     </div>
                 </div>
+            </div>
+
+            <!-- 输出格式选择 -->
+            <div style="margin-bottom:16px; padding:12px 16px; background:#f8f9fa; border-radius:8px; border:1px solid #e5e7eb;">
+                <div style="font-size:12px; color:#666; margin-bottom:8px; font-weight:500;">输出格式</div>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px;">
+                        <input type="radio" name="outputFormat" value="word" checked style="accent-color:#0075de;" onchange="toggleTemplateSelectorState()">
+                        <span>Word（保留原简历样式）</span>
+                    </label>
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px;">
+                        <input type="radio" name="outputFormat" value="ats_pdf" style="accent-color:#0075de;" onchange="toggleTemplateSelectorState()">
+                        <span>ATS 优化 PDF（海外投递推荐）</span>
+                    </label>
+                </div>
+                <div style="font-size:11px; color:#999; margin-top:4px;">ATS PDF 采用单列布局+标准 section headers，兼容 Greenhouse/Lever/Ashby 等招聘系统</div>
             </div>
 
             <!-- 提交按钮 -->
@@ -1872,6 +504,30 @@
                     </div>
                 </div>
 
+                <!-- Writer-Reviewer 审阅反馈 -->
+                <div class="result-card" id="reviewFeedbackCard" style="display: none;">
+                    <div class="result-title">审阅反馈 (Writer-Reviewer)</div>
+                    <p style="color: #666; margin-bottom: 10px; font-size: 13px;">
+                        AI 审阅者对定制简历的评审意见与修订记录
+                    </p>
+                    <div style="display: flex; gap: 15px; margin-bottom: 12px;">
+                        <div style="background: #e8f4fd; padding: 8px 14px; border-radius: 8px; text-align: center;">
+                            <div style="font-size: 18px; font-weight: bold; color: #0075de;" id="reviewIterations">0</div>
+                            <div style="font-size: 11px; color: #666;">审阅轮次</div>
+                        </div>
+                        <div style="background: #e8f8e8; padding: 8px 14px; border-radius: 8px; text-align: center;">
+                            <div style="font-size: 18px; font-weight: bold; color: #27ae60;" id="reviewFinalScore">-</div>
+                            <div style="font-size: 11px; color: #666;">最终评分</div>
+                        </div>
+                        <div style="background: #fff3e0; padding: 8px 14px; border-radius: 8px; text-align: center; flex: 1;">
+                            <div style="font-size: 13px; color: #e67e22;" id="reviewStopReason">-</div>
+                            <div style="font-size: 11px; color: #666;">停止原因</div>
+                        </div>
+                    </div>
+                    <div id="reviewFeedbackSummary" style="margin-top: 10px; padding: 10px; background: #f0f7ff; border-radius: 8px; font-size: 13px; color: #555; display: none;"></div>
+                    <div id="reviewScoresList" style="font-size: 13px;"></div>
+                </div>
+
                 <!-- 模板状态显示 -->
                 <div class="result-card" id="templateStatusCard" style="display: none;">
                     <div class="template-status" id="templateStatus">
@@ -1887,6 +543,7 @@
                         <span class="preview-toggle" id="previewToggle">▼ 点击展开</span>
                     </div>
                     <div class="preview-content" id="resumePreviewContent">
+                        <iframe id="resumePreviewFrame" style="width:100%;height:600px;border:none;display:none;"></iframe>
                         <!-- 基本信息 -->
                         <div class="preview-section" id="previewBasicInfo"></div>
                         <!-- 教育背景 -->
@@ -1916,7 +573,7 @@
 
                 <div class="download-buttons">
                     <a href="#" class="btn-download" id="downloadWord">📄 下载 Word 文档</a>
-                    <button type="button" class="btn-download" id="editResumeBtn" style="background:#667eea; display:none;" onclick="toggleResumeEditMode()">✏️ 编辑简历</button>
+                    <button type="button" class="btn-download" id="editResumeBtn" style="background:#0075de; display:none;" onclick="toggleResumeEditMode()">✏️ 编辑简历</button>
                     <button type="button" class="btn-download btn-retry" id="retryBtn">🔄 换个职位试试</button>
                 </div>
 
@@ -1946,9 +603,9 @@
             <h3 style="margin:0 0 20px; text-align:center; font-size:17px; color:#333;">上传简历文件</h3>
             <div id="uploadDropZone" style="border:2px dashed #ddd; border-radius:12px; padding:32px 20px; text-align:center; cursor:pointer; transition:all 0.25s;"
                  onclick="document.getElementById('resumeFile').click()"
-                 onmouseover="this.style.borderColor='#667eea';this.style.background='#f8f9ff'"
+                 onmouseover="this.style.borderColor='#0075de';this.style.background='#f8f9ff'"
                  onmouseout="this.style.borderColor='#ddd';this.style.background=''">
-                <div style="font-size:36px; margin-bottom:10px; color:#667eea;">📄</div>
+                <div style="font-size:36px; margin-bottom:10px; color:#0075de;">📄</div>
                 <div style="color:#333; font-size:15px; margin-bottom:6px;">拖拽文件到这里，或点击选择</div>
                 <div style="color:#999; font-size:12px;">支持 PDF、Word、TXT、Markdown 格式，不超过 16MB</div>
                 <input type="file" id="resumeFile" name="resume" accept=".pdf,.docx,.doc,.txt,.md" style="display:none;">
@@ -1996,7 +653,7 @@
                     </div>
                 </div>
                 <button id="sendCodeBtn" onclick="handleSendCode()"
-                    style="width:100%; padding:12px; background:linear-gradient(135deg,#667eea,#764ba2); color:white; border:none; border-radius:10px; font-size:16px; cursor:pointer;">
+                    style="width:100%; padding:12px; background:#0075de; color:white; border:none; border-radius:10px; font-size:16px; cursor:pointer;">
                     获取验证码
                 </button>
             </div>
@@ -2008,15 +665,15 @@
                         oninput="this.value=this.value.replace(/\D/g,'')">
                 </div>
                 <button onclick="handleLogin()"
-                    style="width:100%; padding:12px; background:linear-gradient(135deg,#667eea,#764ba2); color:white; border:none; border-radius:10px; font-size:16px; cursor:pointer;">
+                    style="width:100%; padding:12px; background:#0075de; color:white; border:none; border-radius:10px; font-size:16px; cursor:pointer;">
                     登录 / 注册
                 </button>
                 <p style="text-align:center; margin-top:12px;">
-                    <a href="javascript:void(0)" onclick="resetLogin()" style="color:#667eea; font-size:13px;">重新发送</a>
+                    <a href="javascript:void(0)" onclick="resetLogin()" style="color:#0075de; font-size:13px;">重新发送</a>
                 </p>
             </div>
             <p style="text-align:center; color:#999; font-size:12px; margin-top:20px;">
-                登录即表示同意 <a href="#" style="color:#667eea;">用户协议</a> 和 <a href="#" style="color:#667eea;">隐私政策</a>
+                登录即表示同意 <a href="#" style="color:#0075de;">用户协议</a> 和 <a href="#" style="color:#0075de;">隐私政策</a>
             </p>
         </div>
     </div>
@@ -2070,7 +727,7 @@
                 </div>
                 <div style="display:flex; gap:10px; margin-bottom:16px;">
                     <button onclick="closeUserCenter(); showPaymentModal();"
-                        style="flex:1; padding:10px; background:linear-gradient(135deg,#667eea,#764ba2); color:white; border:none; border-radius:8px; cursor:pointer;">
+                        style="flex:1; padding:10px; background:#0075de; color:white; border:none; border-radius:8px; cursor:pointer;">
                         💎 购买套餐
                     </button>
                     <button onclick="handleLogout()"
@@ -2092,7 +749,7 @@
             <h3 style="margin-bottom:10px;">配额已用完</h3>
             <p style="color:#666; margin-bottom:20px;" id="quotaExhaustedMsg">免费体验次数已用完，购买套餐继续使用</p>
             <button onclick="closeQuotaModal(); showPaymentModal();"
-                style="padding:12px 32px; background:linear-gradient(135deg,#667eea,#764ba2); color:white; border:none; border-radius:10px; font-size:16px; cursor:pointer;">
+                style="padding:12px 32px; background:#0075de; color:white; border:none; border-radius:10px; font-size:16px; cursor:pointer;">
                 💎 购买套餐
             </button>
         </div>
@@ -2121,8 +778,8 @@
             padding: 16px; border: 2px solid #eee; border-radius: 12px;
             cursor: pointer; transition: all 0.2s; position: relative;
         }
-        .plan-card:hover { border-color: #667eea; }
-        .plan-card.selected { border-color: #667eea; background: #f0f3ff; }
+        .plan-card:hover { border-color: #0075de; }
+        .plan-card.selected { border-color: #0075de; background: #f2f9ff; }
         .plan-card.recommended::after {
             content: '推荐'; position: absolute; top: -10px; right: 12px;
             background: #e74c3c; color: white; font-size: 12px;
@@ -2149,6 +806,12 @@
             if (event.persisted) location.reload();
         });
         let currentMode = 'upload';
+
+        // HTML 转义函数 - 防止 XSS 攻击
+        function escapeHtml(text) {
+            if (!text) return '';
+            return String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
 
         // ==================== 用户参数持久化 ====================
         const STORAGE_KEY = 'tailorCV_userData';
@@ -2310,13 +973,30 @@
             selector.classList.toggle('collapsed');
         }
 
+        // ATS PDF 模式下禁用模板选择器
+        function toggleTemplateSelectorState() {
+            const isAts = document.querySelector('input[name="outputFormat"]:checked').value === 'ats_pdf';
+            const selector = document.getElementById('templateSelector');
+            const header = selector.querySelector('.template-selector-header');
+            const body = selector.querySelector('.template-selector-body');
+            if (isAts) {
+                selector.style.opacity = '0.4';
+                selector.style.pointerEvents = 'none';
+                header.title = 'ATS PDF 使用固定模板，无需选择';
+            } else {
+                selector.style.opacity = '1';
+                selector.style.pointerEvents = 'auto';
+                header.title = '';
+            }
+        }
+
         // 更新当前模板显示
         function updateTemplateCurrentInfo() {
             const infoEl = document.getElementById('templateCurrentInfo');
             if (templateMode === 'auto') {
                 infoEl.innerHTML = '当前: <span class="template-name-current">自动（使用原简历样式）</span>';
             } else if (selectedTemplateName) {
-                infoEl.innerHTML = '当前: <span class="template-name-current">' + selectedTemplateName + '</span>';
+                infoEl.innerHTML = '当前: <span class="template-name-current">' + escapeHtml(selectedTemplateName) + '</span>';
             } else {
                 infoEl.innerHTML = '当前: <span class="template-name-current">请选择模板</span>';
             }
@@ -2370,26 +1050,26 @@
 
             grid.innerHTML = filteredTemplates.map(t => `
                 <div class="template-card ${selectedTemplateId === t.template_id ? 'selected' : ''}"
-                     onclick="selectTemplate('${t.template_id}')"
-                     data-id="${t.template_id}">
+                     onclick="selectTemplate('${escapeHtml(t.template_id)}')"
+                     data-id="${escapeHtml(t.template_id)}">
                     ${t.is_default ? '<span class="template-default-badge">默认</span>' : ''}
-                    <span class="template-source-badge ${t.source}">${getSourceLabel(t.source)}</span>
-                    <div class="template-preview" onclick="event.stopPropagation(); showTemplatePreview('${t.template_id}')">
+                    <span class="template-source-badge ${escapeHtml(t.source)}">${getSourceLabel(t.source)}</span>
+                    <div class="template-preview" onclick="event.stopPropagation(); showTemplatePreview('${escapeHtml(t.template_id)}')">
                         ${t.preview_image ?
-                            `<img src="/api/templates/${t.template_id}/preview" alt="${t.name}">` :
-                            `<span class="template-preview-placeholder">${t.name.charAt(0)}</span>`
+                            `<img src="/api/templates/${escapeHtml(t.template_id)}/preview" alt="${escapeHtml(t.name)}">` :
+                            `<span class="template-preview-placeholder">${escapeHtml(t.name.charAt(0))}</span>`
                         }
                     </div>
-                    <div class="template-name">${t.name}</div>
+                    <div class="template-name">${escapeHtml(t.name)}</div>
                     <div class="template-tags">
-                        ${(t.tags || []).slice(0, 2).map(tag => `<span class="template-tag">${tag}</span>`).join('')}
+                        ${(t.tags || []).slice(0, 2).map(tag => `<span class="template-tag">${escapeHtml(tag)}</span>`).join('')}
                     </div>
                     <div class="template-card-actions">
-                        <span class="template-action-icon" onclick="event.stopPropagation(); showTemplatePreview('${t.template_id}')" title="预览">👁</span>
-                        ${t.source !== 'builtin' ? `<span class="template-action-icon" onclick="event.stopPropagation(); deleteTemplate('${t.template_id}')" title="删除">🗑</span>` : ''}
+                        <span class="template-action-icon" onclick="event.stopPropagation(); showTemplatePreview('${escapeHtml(t.template_id)}')" title="预览">👁</span>
+                        ${t.source !== 'builtin' ? `<span class="template-action-icon" onclick="event.stopPropagation(); deleteTemplate('${escapeHtml(t.template_id)}')" title="删除">🗑</span>` : ''}
                     </div>
                 </div>
-            `).join('');
+            ` ).join('');
         }
 
         // 显示模板预览
@@ -2400,7 +1080,7 @@
             const modal = document.getElementById('templatePreviewModal');
             document.getElementById('previewTemplateName').textContent = template.name;
             document.getElementById('previewTemplateDesc').textContent = template.description || '暂无描述';
-            document.getElementById('previewTemplateTags').innerHTML = (template.tags || []).map(t => `<span class="template-tag">${t}</span>`).join('');
+            document.getElementById('previewTemplateTags').innerHTML = (template.tags || []).map(t => `<span class="template-tag">${escapeHtml(t)}</span>`).join('');
             document.getElementById('previewTemplateSource').textContent = getSourceLabel(template.source);
             document.getElementById('previewTemplateUseCount').textContent = template.use_count || 0;
 
@@ -2477,7 +1157,7 @@
             document.getElementById('templatePreviewModal').style.display = 'none';
             // 退出编辑模式
             document.getElementById('templateEditPanel').style.display = 'none';
-            document.getElementById('previewTemplateContainer').parentElement.querySelector('.modal-body').style.display = '';
+            document.querySelector('#templatePreviewModal .modal-body').style.display = '';
         }
 
         // ==================== 模板编辑功能 ====================
@@ -2508,7 +1188,7 @@
                         document.getElementById('templateEditContent').innerHTML = '<p style="color:#e74c3c;">加载失败</p>';
                     }
                 } catch (e) {
-                    document.getElementById('templateEditContent').innerHTML = '<p style="color:#e74c3c;">加载失败: ' + e.message + '</p>';
+                    document.getElementById('templateEditContent').innerHTML = '<p style="color:#e74c3c;">加载失败: ' + escapeHtml(e.message) + '</p>';
                 }
             } else {
                 panel.style.display = 'none';
@@ -2520,35 +1200,64 @@
 
         function renderTemplateEditContent(paragraphs) {
             const container = document.getElementById('templateEditContent');
-            let html = '';
+            if (!paragraphs || paragraphs.length === 0) {
+                container.innerHTML = '<p style="color:#a39e98;">模板无可编辑内容</p>';
+                return;
+            }
+            // Store paragraph metadata for save
+            container.dataset.paragraphs = JSON.stringify(paragraphs);
+            // Build full text: editable paragraphs with jinja markers
+            let fullText = '';
             for (const p of paragraphs) {
                 if (!p.text) continue;
-                const isJinja = p.is_jinja;
-                const bg = isJinja ? '#fff3cd' : '#fff';
-                const readonly = isJinja ? 'readonly' : '';
-                const label = isJinja ? '⬛ 模板变量（不可编辑）' : '✏️ 可编辑文本';
-                html += `<div style="margin-bottom:6px; padding:8px; background:${bg}; border-radius:6px; border:1px solid ${isJinja ? '#ffc107' : '#e9ecef'};">
-                    <div style="font-size:11px; color:${isJinja ? '#856404' : '#999'}; margin-bottom:3px;">${label}</div>
-                    <textarea data-para-index="${p.index}" rows="1" ${readonly}
-                        style="width:100%;padding:4px 6px;border:1px solid ${isJinja ? '#ffc107' : '#ddd'};border-radius:4px;font-size:12px;font-family:monospace;box-sizing:border-box;resize:vertical;">${escapeHtml(p.text)}</textarea>
-                </div>`;
+                if (p.is_jinja) {
+                    fullText += '<!-- JINJA -->' + p.text + '<!-- /JINJA -->\n';
+                } else {
+                    fullText += p.text + '\n';
+                }
             }
-            container.innerHTML = html || '<p style="color:#999;">模板无可编辑内容</p>';
+            fullText = fullText.trimEnd();
+            container.innerHTML = `<textarea id="templateEditTextarea"
+                style="width:100%;min-height:500px;padding:12px;border:1px solid rgba(0,0,0,0.1);border-radius:4px;font-size:13px;font-family:'Inter',monospace;line-height:1.6;resize:vertical;color:rgba(0,0,0,0.95);background:#ffffff;box-sizing:border-box;"
+                placeholder="在此编辑模板全文内容...">${escapeHtml(fullText)}</textarea>`;
         }
 
         async function saveTemplateEdit() {
             if (!currentEditTemplateId) return;
 
-            const textareas = document.querySelectorAll('#templateEditContent textarea:not([readonly])');
+            const container = document.getElementById('templateEditContent');
+            const textarea = document.getElementById('templateEditTextarea');
+            const fullText = textarea.value;
+            const originalParagraphs = JSON.parse(container.dataset.paragraphs || '[]');
+
+            // Parse edited text back into paragraphs
             const editedParagraphs = [];
-            textareas.forEach(el => {
-                const idx = parseInt(el.dataset.paraIndex);
-                if (!isNaN(idx)) {
-                    editedParagraphs.push({ index: idx, text: el.value });
+            const jinjaRegex = /<!-- JINJA -->([\s\S]*?)<!-- \/JINJA -->/g;
+            const nonJinjaParts = fullText.split(jinjaRegex);
+
+            let nonJinjaIdx = 0;
+            let match;
+            for (const p of originalParagraphs) {
+                if (!p.text) continue;
+                if (p.is_jinja) {
+                    // Jinja paragraph: use original text (unchanged)
+                    editedParagraphs.push({ index: p.index, text: p.text });
+                } else {
+                    // Editable paragraph: get text from non-jinja parts
+                    let newText = nonJinjaParts[nonJinjaIdx] || '';
+                    newText = newText.trim();
+                    editedParagraphs.push({ index: p.index, text: newText });
+                    nonJinjaIdx++;
                 }
+            }
+
+            // Also check for any non-empty edits
+            const hasEdits = editedParagraphs.some(ep => {
+                const orig = originalParagraphs.find(op => op.index === ep.index);
+                return orig && orig.text !== ep.text;
             });
 
-            if (editedParagraphs.length === 0) {
+            if (!hasEdits) {
                 alert('没有编辑任何内容');
                 return;
             }
@@ -2710,11 +1419,11 @@
 
         // 显示上传模态框
         function showUploadModal() {
-            document.getElementById('uploadModal').classList.add('show');
+            document.getElementById('uploadModal').style.display = 'flex';
         }
 
         function hideUploadModal() {
-            document.getElementById('uploadModal').classList.remove('show');
+            document.getElementById('uploadModal').style.display = 'none';
             // 清空表单
             document.getElementById('uploadTemplateFile').value = '';
             document.getElementById('uploadTemplateName').value = '';
@@ -2758,11 +1467,11 @@
 
         // 显示提取模态框
         function showExtractModal() {
-            document.getElementById('extractModal').classList.add('show');
+            document.getElementById('extractModal').style.display = 'flex';
         }
 
         function hideExtractModal() {
-            document.getElementById('extractModal').classList.remove('show');
+            document.getElementById('extractModal').style.display = 'none';
             document.getElementById('extractTemplateFile').value = '';
             document.getElementById('extractTemplateName').value = '';
         }
@@ -2777,7 +1486,15 @@
 
             const formData = new FormData();
             formData.append('resume', fileInput.files[0]);
-            formData.append('name', document.getElementById('extractTemplateName').value);
+            const templateName = document.getElementById('extractTemplateName').value;
+            console.log('[提取模板] 模板名称:', JSON.stringify(templateName));
+            formData.append('name', templateName);
+
+            // 显示加载状态
+            const btn = event.target.closest('button');
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '⏳ 提取中...';
 
             try {
                 const response = await fetch('/api/templates/extract', {
@@ -2796,6 +1513,9 @@
             } catch (error) {
                 console.error('提取失败:', error);
                 alert('提取失败: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
             }
         }
 
@@ -2901,8 +1621,8 @@
         // 弹窗拖拽事件
         uploadDropZone.addEventListener('dragover', (e) => {
             e.preventDefault();
-            uploadDropZone.style.borderColor = '#667eea';
-            uploadDropZone.style.background = '#f0f3ff';
+            uploadDropZone.style.borderColor = '#0075de';
+            uploadDropZone.style.background = '#f2f9ff';
         });
         uploadDropZone.addEventListener('dragleave', () => {
             uploadDropZone.style.borderColor = '#ddd';
@@ -3105,7 +1825,7 @@
         function showTip(index) {
             const tip = tips[index];
             const tipsContent = document.getElementById('tipsContent');
-            tipsContent.innerHTML = `<div class="tips-title">${tip.title}</div>${tip.content}`;
+            tipsContent.innerHTML = `<div class="tips-title">${escapeHtml(tip.title)}</div>${escapeHtml(tip.content)}`;
         }
 
         function startTipsCarousel() {
@@ -3230,6 +1950,7 @@
                     formData.append('resume', resumeFile.files[0]);
                     formData.append('jd_text', jdText);
                     formData.append('style', 'original');
+                    formData.append('format', document.querySelector('input[name="outputFormat"]:checked').value);
                     formData.append('no_cache', 'true');  // 强制不使用缓存，每次重新处理
 
                     // 从隐藏字段和 localStorage 获取值，确保数据同步
@@ -3300,6 +2021,7 @@
                                 resume_text: resumeText,
                                 jd_text: jdText,
                                 style: 'original',
+                                format: document.querySelector('input[name="outputFormat"]:checked').value,
                                 no_cache: true,  // 强制不使用缓存，每次重新处理
                                 template_mode: actualTemplateMode,
                                 template_id: actualTemplateMode === 'selected' ? actualTemplateId : ''
@@ -3418,7 +2140,7 @@
                     const color = value >= 0 ? '#27ae60' : '#e74c3c';
                     const sign = value >= 0 ? '+' : '';
                     return `<span style="background: white; padding: 4px 8px; border-radius: 4px; font-size: 12px;">
-                        <span style="color: #666;">${key}</span>
+                        <span style="color: #666;">${escapeHtml(key)}</span>
                         <span style="color: ${color}; font-weight: bold;">${sign}${value}</span>
                     </span>`;
                 }).join('');
@@ -3430,14 +2152,14 @@
             strengthsList.innerHTML = (analysis.strengths || []).map(s => {
                 // 支持对象格式 {item: "..."} 和字符串格式
                 const text = typeof s === 'object' ? (s.item || s.text || JSON.stringify(s)) : s;
-                return `<li>${text}</li>`;
+                return `<li>${escapeHtml(text)}</li>`;
             }).join('');
 
             const gapsList = document.getElementById('gapsList');
             gapsList.innerHTML = (analysis.gaps || []).map(g => {
                 // 支持对象格式 {item: "...", mitigation: "..."} 和字符串格式
                 const text = typeof g === 'object' ? (g.item || g.text || JSON.stringify(g)) : g;
-                return `<li>${text}</li>`;
+                return `<li>${escapeHtml(text)}</li>`;
             }).join('');
 
             const evidence = result.evidence_report || {};
@@ -3447,6 +2169,45 @@
 
             // 显示模板使用状态
             updateTemplateStatus(result);
+
+            // 显示 Writer-Reviewer 审阅反馈
+            const reviewData = result.review_data || {};
+            const reviewCard = document.getElementById('reviewFeedbackCard');
+            if (reviewData.iterations !== undefined && reviewData.iterations > 0) {
+                reviewCard.style.display = 'block';
+                document.getElementById('reviewIterations').textContent = reviewData.iterations;
+                const scores = reviewData.scores || [];
+                const lastScore = scores.length > 0 ? scores[scores.length - 1].overall_score : '-';
+                document.getElementById('reviewFinalScore').textContent = lastScore;
+                document.getElementById('reviewStopReason').textContent = reviewData.stop_reason || '-';
+                if (reviewData.feedback_summary) {
+                    const summaryEl = document.getElementById('reviewFeedbackSummary');
+                    summaryEl.style.display = 'block';
+                    summaryEl.textContent = reviewData.feedback_summary;
+                }
+
+                const scoresList = document.getElementById('reviewScoresList');
+                let scoresHtml = '';
+                scores.forEach((s, i) => {
+                    const scoreColor = s.overall_score >= 8 ? '#27ae60' : s.overall_score >= 6 ? '#f39c12' : '#e74c3c';
+                    scoresHtml += `<div style="margin-bottom: 10px; padding: 10px; background: #f8f9fa; border-radius: 8px; border-left: 3px solid ${scoreColor};">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <span style="font-weight: bold; color: #333;">第 ${i + 1} 轮审阅</span>
+                            <span style="font-weight: bold; color: ${scoreColor}; font-size: 15px;">${s.overall_score} 分</span>
+                        </div>
+                        ${s.summary ? `<div style="color: #555; margin-bottom: 6px;">${escapeHtml(s.summary)}</div>` : ''}
+                        ${s.specific_revisions && s.specific_revisions.length > 0 ? `<ul style="margin: 0; padding-left: 18px; color: #666;">${s.specific_revisions.map(r => {
+                            const text = typeof r === 'object'
+                                ? (r.content || r.text || r.suggestion || r.reason || `${r.section || ''} 第${(r.item_index||0)+1}项`)
+                                : r;
+                            return `<li style="margin-bottom: 3px;">${escapeHtml(text)}</li>`;
+                        }).join('')}</ul>` : ''}
+                    </div>`;
+                });
+                scoresList.innerHTML = scoresHtml;
+            } else {
+                reviewCard.style.display = 'none';
+            }
 
             // 保存结果供文件名生成使用
             window.lastTailorResult = result;
@@ -3460,8 +2221,27 @@
                 document.getElementById('editResumeBtn').style.display = 'inline-block';
             }
 
-            // 新增：展示简历预览（使用 mammoth 转换，确保与下载文件一致）
-            if (result.tailored_word) {
+            // 展示简历预览和下载
+            if (result.tailored_ats_pdf) {
+                // ATS PDF 模式：用 PDF 预览
+                const pdfBlob = base64ToBlob(result.tailored_ats_pdf, 'application/pdf');
+                const pdfUrl = URL.createObjectURL(pdfBlob);
+                const previewFrame = document.getElementById('resumePreviewFrame');
+                if (previewFrame) {
+                    previewFrame.src = pdfUrl;
+                    previewFrame.style.display = 'block';
+                    const previewContent = document.getElementById('resumePreviewContent');
+                    if (previewContent) {
+                        previewContent.style.display = 'block';
+                        previewContent.classList.add('show');
+                    }
+                    document.getElementById('previewToggle').textContent = '▲ 点击收起';
+                }
+                document.getElementById('downloadWord').textContent = '📄 下载 ATS PDF';
+                document.getElementById('downloadWord').href = pdfUrl;
+                generateDefaultFilename();
+            } else if (result.tailored_word) {
+                // Word 模式：用 mammoth 预览
                 renderResumePreviewFromDocx(result.tailored_word);
                 const blob = base64ToBlob(result.tailored_word, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
                 const url = URL.createObjectURL(blob);
@@ -3501,15 +2281,11 @@
             } else {
                 panel.style.display = 'none';
                 btn.textContent = '✏️ 编辑简历';
-                btn.style.background = '#667eea';
+                btn.style.background = '#0075de';
                 btn.style.color = '#fff';
             }
         }
 
-        function escapeHtml(text) {
-            if (!text) return '';
-            return String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-        }
 
         function renderEditSections() {
             const container = document.getElementById('resumeEditSections');
@@ -3575,7 +2351,7 @@
 
         function buildSectionHtml(title, field, content) {
             return `<div style="margin-bottom:18px;padding:14px;background:#f8f9fa;border-radius:10px;">
-                <div style="font-size:14px;font-weight:600;color:#667eea;margin-bottom:8px;">${title}</div>
+                <div style="font-size:14px;font-weight:600;color:#0075de;margin-bottom:8px;">${title}</div>
                 <textarea data-section="${field}" rows="4"
                     style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;box-sizing:border-box;">${content}</textarea>
             </div>`;
@@ -3587,7 +2363,7 @@
                 `<div style="padding:10px;background:#fff;border:1px solid #eee;border-radius:8px;margin-bottom:8px;">${renderItem(item, idx)}</div>`
             ).join('');
             return `<div style="margin-bottom:18px;padding:14px;background:#f8f9fa;border-radius:10px;">
-                <div style="font-size:14px;font-weight:600;color:#667eea;margin-bottom:8px;">${title}</div>
+                <div style="font-size:14px;font-weight:600;color:#0075de;margin-bottom:8px;">${title}</div>
                 ${itemsHtml}
             </div>`;
         }
@@ -3701,13 +2477,14 @@
             const name = result?.candidate_name || result?.tailored_resume?.basic_info?.name || '';
             const job = result?.job_title || result?.analysis?.match_position || '';
             const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+            const isAts = result?.output_format === 'ats_pdf';
 
             let parts = [name, job, date].filter(p => p && p.trim());
             let filename;
             if (parts.length > 0) {
-                filename = parts.map(sanitizeFilename).join('_') + '.docx';
+                filename = parts.map(sanitizeFilename).join('_') + (isAts ? '_ats.pdf' : '.docx');
             } else {
-                filename = '定制简历.docx';
+                filename = isAts ? '定制简历_ats.pdf' : '定制简历.docx';
             }
 
             document.getElementById('customFilename').value = filename;
@@ -3722,7 +2499,8 @@
                 generateDefaultFilename();
                 name = document.getElementById('customFilename').value.trim();
             }
-            return name.endsWith('.docx') ? name : name + '.docx';
+            if (name.endsWith('.docx') || name.endsWith('.pdf')) return name;
+            return name + '.docx';
         }
 
         // 更新模板状态显示
@@ -3787,6 +2565,7 @@
                 statusCard.style.display = 'none';
             }
         }
+
 
         function base64ToBlob(base64, mimeType) {
             const byteCharacters = atob(base64);
@@ -4034,16 +2813,16 @@
             const container = document.getElementById('planList');
             container.innerHTML = plans.filter(p => p.price > 0).map(p => `
                 <div class="plan-card ${p.type === 'monthly' ? 'recommended' : ''}"
-                     onclick="selectPlan('${p.type}')" id="plan_${p.type}">
+                     onclick="selectPlan('${escapeHtml(p.type)}')" id="plan_${escapeHtml(p.type)}">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <div>
-                            <div class="plan-name">${p.name}</div>
-                            <div class="plan-desc">${p.quota > 0 ? p.quota + '次定制' : '不限次定制'} · 每日上限${p.daily_limit}次</div>
+                            <div class="plan-name">${escapeHtml(p.name)}</div>
+                            <div class="plan-desc">${p.quota > 0 ? escapeHtml(p.quota) + '次定制' : '不限次定制'} · 每日上限${escapeHtml(p.daily_limit)}次</div>
                         </div>
-                        <div class="plan-price">¥${p.price}<small>/${p.type === 'quarterly' ? '季' : p.type === 'monthly' ? '月' : ''}</small></div>
+                        <div class="plan-price">¥${escapeHtml(p.price)}<small>/${p.type === 'quarterly' ? '季' : p.type === 'monthly' ? '月' : ''}</small></div>
                     </div>
                 </div>
-            `).join('');
+            ` ).join('');
         }
 
         async function selectPlan(planType) {
@@ -4111,8 +2890,8 @@
                 const icons = { alipay: '🔷', wechat: '💬' };
                 const icon = icons[p.provider_id] || '💳';
                 const active = p.provider_id === currentProviderId ? 'active' : '';
-                return `<button class="provider-tab ${active}" onclick="switchProvider('${p.provider_id}')">
-                    <span class="tab-icon">${icon}</span>${p.provider_name}
+                return `<button class="provider-tab ${escapeHtml(active)}" onclick="switchProvider('${escapeHtml(p.provider_id)}')">
+                    <span class="tab-icon">${escapeHtml(icon)}</span>${escapeHtml(p.provider_name)}
                 </button>`;
             }).join('');
         }
@@ -4250,11 +3029,11 @@
                 if (data.success && data.records.length > 0) {
                     container.innerHTML = data.records.map(r => `
                         <div style="padding:10px; border-bottom:1px solid #f0f0f0; font-size:13px;">
-                            <span style="color:#666;">${r.created_at || ''}</span>
-                            ${r.job_title ? `<span style="margin-left:8px;">🎯 ${r.job_title}</span>` : ''}
-                            ${r.match_score ? `<span style="margin-left:8px; color:#27ae60;">${r.match_score}分</span>` : ''}
+                            <span style="color:#666;">${escapeHtml(r.created_at || '')}</span>
+                            ${r.job_title ? `<span style="margin-left:8px;">🎯 ${escapeHtml(r.job_title)}</span>` : ''}
+                            ${r.match_score ? `<span style="margin-left:8px; color:#27ae60;">${escapeHtml(r.match_score)}分</span>` : ''}
                         </div>
-                    `).join('');
+                    ` ).join('');
                 } else {
                     container.innerHTML = '<p style="color:#999; font-size:13px; text-align:center;">暂无使用记录</p>';
                 }

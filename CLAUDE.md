@@ -146,6 +146,7 @@ WRITER_REVIEWER_REVIEWER_MODELS = 'qwen3.5-plus'  # 审阅模型
 
 | Date | Change |
 |------|--------|
+| 2026-04-09 | 专家复盘 Phase 1：XSS 防护（escapeHtml 统一转义）；错误信息脱敏（移除 traceback 泄露）；jinja_inserter 54 个单元测试；template_manager 37 个单元测试；task_status TTL 清理；调试日志降级；test_static_checks 正则修复 |
 | 2026-04-07 | Writer-Reviewer 审稿日志持久化（review_loop 入库 + pipeline.log）；全局异常友好化（error_id + 中文文案）；response_parser 公共模块提取；结构检测增强（末尾时间格式）；支付宝回调验签实现 |
 | 2026-04-04 | 模板渲染修复（tailored 内容变量化 + 换行拆段 + 求职意向识别）；登录引导页重设计；用户参数服务端持久化；GLM API 并发错峰；免费体验 3 次；Benchmark 测试套件 |
 | 2026-04-02 | 支付系统重构：provider 模式、支付宝当面付接入、微信支付预留、前端支付方式切换 |
@@ -156,4 +157,4 @@ WRITER_REVIEWER_REVIEWER_MODELS = 'qwen3.5-plus'  # 审阅模型
 
 ---
 
-*Last updated: 2026-04-07*
+*Last updated: 2026-04-09*

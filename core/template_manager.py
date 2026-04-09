@@ -432,7 +432,16 @@ class TemplateManager:
         # 检查是否已存在相同模板
         existing = db.get_template_by_hash(content_hash)
         if existing:
-            return existing['template_id'], f"已存在相同模板: {existing.get('name', '未知模板')}"
+            # 同文件同名称且未指定新名称：直接返回已有模板
+            if not name and not existing.get('name'):
+                return existing['template_id'], f"已存在相同模板: {existing.get('name', '未知模板')}"
+            # 否则：删除旧模板，允许重新提取（支持改名或更新）
+            logger.info(f"删除旧模板 {existing['template_id']} ({existing.get('name')})，重新提取")
+            db.delete_template(existing['template_id'])
+            # 清理 preprocessed 缓存文件
+            preprocessed_path = Path('templates/preprocessed') / f"{existing['template_id']}.docx"
+            if preprocessed_path.exists():
+                preprocessed_path.unlink()
 
         try:
             import io as io_module

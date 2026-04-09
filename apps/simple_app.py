@@ -141,6 +141,21 @@ def create_app() -> Flask:
 
     # 任务状态存储
     task_status: Dict[str, Dict[str, Any]] = {}
+    _TASK_STATUS_TTL = 1800  # 30 minutes TTL for stale task entries
+
+    def _cleanup_task_status():
+        """Remove stale task_status entries older than TTL."""
+        import time as _time
+        now = _time.time()
+        stale_keys = [
+            k for k, v in task_status.items()
+            if now - v.get('_created_at', 0) > _TASK_STATUS_TTL
+        ]
+        for k in stale_keys:
+            del task_status[k]
+        if stale_keys:
+            logger.debug(f"Cleaned {len(stale_keys)} stale task_status entries")
+
 
     # ==================== 辅助函数 ====================
 
@@ -386,13 +401,25 @@ def create_app() -> Flask:
                 logger.error(f"五阶段流程失败: {error_msg}")
                 raise RuntimeError(error_msg)
 
+            # 提取 Writer-Reviewer 闭环数据（从 optimization_summary 派生，避免双重构建）
+            review_data = {}
+            review_loop = result.optimization_summary.get('review_loop') if isinstance(result.optimization_summary, dict) else {}
+            if review_loop:
+                review_data = {
+                    'iterations': review_loop['iterations'],
+                    'stop_reason': review_loop['stop_reason'],
+                    'feedback_summary': review_loop.get('feedback_summary', ''),
+                    'scores': review_loop.get('iteration_details', []),
+                }
+
             return {
                 'tailored_resume': result.tailored_resume,
                 'evidence_report': result.evidence_report,
                 'optimization_summary': result.optimization_summary,
                 'analysis': result.analysis,
                 'quality_score': result.quality_result.overall_score if result.quality_result else 0,
-                'is_v2': True
+                'is_v2': True,
+                'review_data': review_data,
             }
         else:
             # 两阶段流程（兼容旧版）
@@ -716,7 +743,7 @@ def create_app() -> Flask:
                 return jsonify({'error': '未提供职位JD'}), 400
 
             session_id = str(uuid.uuid4())
-            task_status[session_id] = {'status': 'processing', 'progress': 0, 'message': '正在解析简历...'}
+            _cleanup_task_status(); task_status[session_id] = {'status': 'processing', 'progress': 0, 'message': '正在解析简历...', '_created_at': time.time()}
 
             resume_content = resume_file.read()
             user_id_str = str(current_user['id']) if current_user else None
@@ -810,6 +837,8 @@ def create_app() -> Flask:
                     'pipeline_version': 'v2',
                     'cache_hit': True,
                 }
+                if cached_result.get('review_data'):
+                    result['review_data'] = cached_result['review_data']
 
                 task_status[session_id]['progress'] = 100
                 task_status[session_id]['status'] = 'completed'
@@ -851,22 +880,86 @@ def create_app() -> Flask:
             task_status[session_id]['progress'] = 80
             task_status[session_id]['message'] = '正在生成文档...'
 
+            output_format = request.form.get('format', 'word')  # word / ats_pdf
+            logger.info(f"📝 output_format = '{output_format}' (from form)")
             style = request.form.get('style', 'original')
             style_preserved = False
             used_template_id = None
 
+            # ATS PDF 模式：使用 career-ops 风格的 ATS 优化输出
+            if output_format == 'ats_pdf':
+                task_status[session_id]['message'] = '正在生成 ATS 优化简历...'
+                try:
+                    jd_keywords = analysis_data.get('matching_strategy', {}).get('must_have_skills', [])
+                    if not jd_keywords:
+                        jd_keywords = analysis_data.get('matching_strategy', {}).get('strengths', [])
+
+                    ats_html_path = generator.generate_ats_html(
+                        tailored_resume,
+                        jd_keywords=jd_keywords
+                    )
+                    ats_pdf_path = ats_html_path.replace('.html', '.pdf')
+
+                    import subprocess as _subprocess
+                    pdf_tool = Path('tools/generate-pdf.mjs')
+                    if pdf_tool.exists():
+                        proc = _subprocess.run(
+                            ['node', str(pdf_tool), ats_html_path, ats_pdf_path, '--format=letter'],
+                            capture_output=True, text=True, timeout=30
+                        )
+                        if proc.returncode == 0:
+                            with open(ats_pdf_path, 'rb') as f:
+                                ats_pdf_bytes = f.read()
+                            task_status[session_id]['progress'] = 100
+                            task_status[session_id]['status'] = 'completed'
+                            task_status[session_id]['message'] = 'ATS 简历生成完成'
+
+                            candidate_name = parsed_resume.basic_info.get('name', '')
+                            job_title, company = parse_jd_info(jd_content)
+
+                            result = {
+                                'session_id': session_id,
+                                'status': 'completed',
+                                'processing_time': int((time.time() - start_time) * 1000),
+                                'tailored_word': '',
+                                'tailored_ats_pdf': base64.b64encode(ats_pdf_bytes).decode('utf-8'),
+                                'evidence_report': evidence_report if isinstance(evidence_report, dict) else evidence_report.to_dict(),
+                                'validation_result': 'pass' if (evidence_report.coverage if hasattr(evidence_report, 'coverage') else evidence_report.get('coverage', 0)) >= 0.9 else 'pass_with_review',
+                                'output_format': 'ats_pdf',
+                                'style_preserved': False,
+                                'template_used': False,
+                                'template_mode': 'ats',
+                                'analysis': analysis_data,
+                                'pipeline_version': 'v2' if is_v2 else 'v1',
+                                'candidate_name': candidate_name,
+                                'job_title': job_title
+                            }
+                            if is_v2:
+                                result['quality_score'] = pipeline_result.get('quality_score', 0)
+                                result['optimization_summary'] = pipeline_result.get('optimization_summary', {})
+                            if pipeline_result.get('review_data'):
+                                result['review_data'] = pipeline_result['review_data']
+                            cache_manager.set(parsed_resume.raw_text, jd_content, result)
+                            logger.info(f"ATS PDF 生成成功: {ats_pdf_path}")
+                            return jsonify(result)
+                        else:
+                            logger.error(f"ATS PDF 生成失败: {proc.stderr}")
+                    logger.error("ATS PDF 工具不存在")
+                except Exception as e:
+                    logger.error(f"ATS PDF 异常: {e}", exc_info=True)
+
             # 根据模板模式选择渲染方式 - 增强日志用于诊断
-            logger.info(f"🔍 模板参数详情:")
-            logger.info(f"   template_mode = '{template_mode}'")
-            logger.info(f"   template_id = '{template_id}'")
-            logger.info(f"   条件判断: selected={template_mode == 'selected' and bool(template_id)}")
-            logger.info(f"🔍 原始表单数据: {list(request.form.keys())}")
-            logger.info(f"🔍 AI生成数据 keys: {list(tailored_resume.keys())}")
+            logger.debug(f"模板参数详情:")
+            logger.debug(f"   template_mode = '{template_mode}'")
+            logger.debug(f"   template_id = '{template_id}'")
+            logger.debug(f"   条件判断: selected={template_mode == 'selected' and bool(template_id)}")
+            logger.debug(f"原始表单数据: {list(request.form.keys())}")
+            logger.debug(f"AI生成数据 keys: {list(tailored_resume.keys())}")
 
             if template_mode == 'selected' and template_id:
                 # 用户指定模板 - 强制使用选定模板，不降级
                 selected_template = template_manager.get_template(template_id)
-                logger.info(f"获取模板信息: {selected_template.get('name') if selected_template else 'None'}")
+                logger.debug(f"获取模板信息: {selected_template.get('name') if selected_template else 'None'}")
                 if not selected_template:
                     # 模板不存在，返回错误
                     task_status[session_id]['status'] = 'failed'
@@ -1005,6 +1098,8 @@ def create_app() -> Flask:
             if is_v2:
                 result['quality_score'] = pipeline_result.get('quality_score', 0)
                 result['optimization_summary'] = pipeline_result.get('optimization_summary', {})
+            if pipeline_result.get('review_data'):
+                result['review_data'] = pipeline_result['review_data']
 
             cache_manager.set(parsed_resume.raw_text, jd_content, result)
             save_tailored_file(word_bytes, session_id)
@@ -1050,9 +1145,8 @@ def create_app() -> Flask:
                 return jsonify({'error': 'AI服务连接失败，请检查网络'}), 503
             logger.error(f"文件定制详细错误类型: {error_type}, 消息: {error_str}")
             return jsonify({
-                'error': f'处理失败: {error_str}',
-                'error_type': error_type,
-                'traceback': full_tb
+                'error': '处理失败，请稍后重试',
+                'success': False,
             }), 500
 
     @app.route('/api/tailor/text', methods=['POST'])
@@ -1081,7 +1175,7 @@ def create_app() -> Flask:
                 return jsonify({'error': '未提供职位JD'}), 400
 
             session_id = str(uuid.uuid4())
-            task_status[session_id] = {'status': 'processing', 'progress': 0, 'message': '正在分析...'}
+            _cleanup_task_status(); task_status[session_id] = {'status': 'processing', 'progress': 0, 'message': '正在分析...', '_created_at': time.time()}
 
             task_status[session_id]['progress'] = 20
             task_status[session_id]['message'] = '正在分析JD需求...'
@@ -1125,6 +1219,66 @@ def create_app() -> Flask:
 
             task_status[session_id]['progress'] = 98
             task_status[session_id]['message'] = '正在生成文档...'
+
+            # ATS PDF 模式
+            output_format = data.get('format', 'word')
+            logger.info(f"📝 [引导模式] output_format = '{output_format}' (from json)")
+            if output_format == 'ats_pdf':
+                task_status[session_id]['message'] = '正在生成 ATS 优化简历...'
+                try:
+                    jd_keywords = analysis_data.get('matching_strategy', {}).get('must_have_skills', [])
+                    if not jd_keywords:
+                        jd_keywords = analysis_data.get('matching_strategy', {}).get('strengths', [])
+
+                    ats_html_path = generator.generate_ats_html(
+                        tailored_resume,
+                        jd_keywords=jd_keywords
+                    )
+                    ats_pdf_path = ats_html_path.replace('.html', '.pdf')
+
+                    import subprocess as _subprocess
+                    pdf_tool = Path('tools/generate-pdf.mjs')
+                    if pdf_tool.exists():
+                        proc = _subprocess.run(
+                            ['node', str(pdf_tool), ats_html_path, ats_pdf_path, '--format=letter'],
+                            capture_output=True, text=True, timeout=30
+                        )
+                        if proc.returncode == 0:
+                            with open(ats_pdf_path, 'rb') as f:
+                                ats_pdf_bytes = f.read()
+                            task_status[session_id]['progress'] = 100
+                            task_status[session_id]['status'] = 'completed'
+                            task_status[session_id]['message'] = 'ATS 简历生成完成'
+
+                            result = {
+                                'session_id': session_id,
+                                'status': 'completed',
+                                'processing_time': int((time.time() - start_time) * 1000),
+                                'tailored_word': '',
+                                'tailored_ats_pdf': base64.b64encode(ats_pdf_bytes).decode('utf-8'),
+                                'evidence_report': evidence_report if isinstance(evidence_report, dict) else evidence_report.to_dict(),
+                                'validation_result': 'pass' if (evidence_report.coverage if hasattr(evidence_report, 'coverage') else evidence_report.get('coverage', 0)) >= 0.9 else 'pass_with_review',
+                                'output_format': 'ats_pdf',
+                                'style_preserved': False,
+                                'template_used': False,
+                                'template_mode': 'ats',
+                                'analysis': analysis_data,
+                                'pipeline_version': 'v2' if is_v2 else 'v1',
+                                'candidate_name': tailored_resume.get('basic_info', {}).get('name', ''),
+                                'job_title': ''
+                            }
+                            if is_v2:
+                                result['quality_score'] = pipeline_result.get('quality_score', 0)
+                                result['optimization_summary'] = pipeline_result.get('optimization_summary', {})
+                            if pipeline_result.get('review_data'):
+                                result['review_data'] = pipeline_result['review_data']
+                            cache_manager.set(resume_text, jd_content, result)
+                            logger.info(f"ATS PDF 生成成功(引导模式): {ats_pdf_path}")
+                            return jsonify(result)
+                        else:
+                            logger.error(f"ATS PDF 生成失败(引导模式): {proc.stderr}")
+                except Exception as e:
+                    logger.error(f"ATS PDF 异常(引导模式): {e}", exc_info=True)
 
             # 根据模板模式选择渲染方式
             logger.info(f"引导模式 - 模板模式: {template_mode}, template_id: {template_id}")
@@ -1230,6 +1384,8 @@ def create_app() -> Flask:
             if is_v2:
                 result['quality_score'] = pipeline_result.get('quality_score', 0)
                 result['optimization_summary'] = pipeline_result.get('optimization_summary', {})
+            if pipeline_result.get('review_data'):
+                result['review_data'] = pipeline_result['review_data']
 
             cache_manager.set(resume_text, jd_content, result)
             save_tailored_file(word_bytes, session_id)
@@ -1284,9 +1440,8 @@ def create_app() -> Flask:
                 return jsonify({'error': 'AI服务连接失败，请检查网络'}), 503
             logger.error(f"文本定制详细错误类型: {error_type}, 消息: {error_str}")
             return jsonify({
-                'error': f'处理失败: {error_str}',
-                'error_type': error_type,
-                'traceback': full_tb
+                'error': '处理失败，请稍后重试',
+                'success': False,
             }), 500
 
     @app.route('/api/tailor/form', methods=['POST'])
@@ -1308,7 +1463,7 @@ def create_app() -> Flask:
                 return jsonify({'error': '未提供职位JD'}), 400
 
             session_id = str(uuid.uuid4())
-            task_status[session_id] = {'status': 'processing', 'progress': 0, 'message': '正在构建简历...'}
+            _cleanup_task_status(); task_status[session_id] = {'status': 'processing', 'progress': 0, 'message': '正在构建简历...', '_created_at': time.time()}
 
             resume_text = builder.build_from_form(data)
 
@@ -1388,6 +1543,8 @@ def create_app() -> Flask:
             if is_v2:
                 result['quality_score'] = pipeline_result.get('quality_score', 0)
                 result['optimization_summary'] = pipeline_result.get('optimization_summary', {})
+            if pipeline_result.get('review_data'):
+                result['review_data'] = pipeline_result['review_data']
 
             cache_manager.set(resume_text, jd_content, result)
             save_tailored_file(word_bytes, session_id)
@@ -1427,9 +1584,8 @@ def create_app() -> Flask:
             if "resume_analysis" in error_str or "{" in error_str:
                 return jsonify({'error': 'AI响应解析失败，请重试'}), 500
             return jsonify({
-                'error': f'处理失败: {error_str}',
-                'error_type': error_type,
-                'traceback': full_tb
+                'error': '处理失败，请稍后重试',
+                'success': False,
             }), 500
 
     @app.route('/api/status/<task_id>', methods=['GET'])
@@ -1548,6 +1704,7 @@ def create_app() -> Flask:
                 return jsonify({'error': '仅支持 .docx 格式的简历'}), 400
 
             name = request.form.get('name', '')
+            logger.info(f"[提取模板] 收到 name={repr(name)}, file={resume_file.filename}")
 
             file_content = resume_file.read()
             template_id, error = template_manager.extract_template_from_resume(
@@ -1724,10 +1881,10 @@ def create_app() -> Flask:
         """获取模板的 HTML 预览（使用示例数据渲染）"""
         import mammoth
 
-        logger.info(f"🔍 预览请求 - template_id: {template_id}")
+        logger.debug(f"预览请求 - template_id: {template_id}")
 
         template = template_manager.get_template(template_id)
-        logger.info(f"📂 模板信息: name={template.get('name') if template else 'N/A'}, "
+        logger.debug(f"模板信息: name={template.get('name') if template else 'N/A'}, "
                    f"source={template.get('source') if template else 'N/A'}, "
                    f"file_path={template.get('file_path') if template else 'N/A'}")
 

@@ -407,6 +407,7 @@ class JinjaTagInserter:
                         f'{{{{ {list_var}_0_tailored }}}}'
                     )
                     # 清除后续内容段落直到空行或下一个条目
+                    clear_paras = []
                     clear_idx = next_idx + 1
                     while clear_idx < len(doc.paragraphs):
                         cp = doc.paragraphs[clear_idx]
@@ -414,8 +415,12 @@ class JinjaTagInserter:
                             break
                         if re.match(r'^\d+\.', cp.text.strip()):
                             break
-                        cp.clear()
+                        clear_paras.append(cp)
                         clear_idx += 1
+                    for cp in clear_paras:
+                        parent = cp._element.getparent()
+                        if parent is not None:
+                            parent.remove(cp._element)
                     logger.debug(f"简单条目插入内容变量 (段落 {next_idx})")
                     break
                 next_idx += 1
@@ -480,9 +485,15 @@ class JinjaTagInserter:
                 )
                 logger.debug(f"插入内容段落变量 (段落 {first_content_idx})")
             # 清除剩余内容段落
+            # 清除剩余内容段落（从XML中彻底删除，避免空行残留）
+            paragraphs_to_remove = []
             for idx in entry.content_paragraphs[1:]:
                 if idx < len(doc.paragraphs):
-                    doc.paragraphs[idx].clear()
+                    paragraphs_to_remove.append(doc.paragraphs[idx])
+            for para in paragraphs_to_remove:
+                parent = para._element.getparent()
+                if parent is not None:
+                    parent.remove(para._element)
         else:
             # 兜底：content_paragraphs 为空时，向前扫描找到内容段落
             next_idx = entry.paragraph_index + 1
@@ -494,6 +505,7 @@ class JinjaTagInserter:
                         f'{{{{ {list_var}_{index}_tailored }}}}'
                     )
                     # 清除后续内容段落直到空行或下一个条目
+                    clear_paras = []
                     clear_idx = next_idx + 1
                     while clear_idx < len(doc.paragraphs):
                         cp = doc.paragraphs[clear_idx]
@@ -501,8 +513,12 @@ class JinjaTagInserter:
                             break
                         if re.match(r'^\d+\.', cp.text.strip()):
                             break
-                        cp.clear()
+                        clear_paras.append(cp)
                         clear_idx += 1
+                    for cp in clear_paras:
+                        parent = cp._element.getparent()
+                        if parent is not None:
+                            parent.remove(cp._element)
                     logger.debug(f"兜底插入内容段落变量 (段落 {next_idx})")
                     break
                 next_idx += 1
