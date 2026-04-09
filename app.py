@@ -327,7 +327,65 @@ def tailor_file():
 
         # 生成文档
         style = request.form.get('style', 'original')
+        output_format = request.form.get('format', 'word')  # word / ats_pdf
         style_preserved = False
+
+        # ATS PDF 模式：使用 career-ops 风格的 ATS 优化输出
+        if output_format == 'ats_pdf':
+            task_status[session_id]['message'] = '正在生成 ATS 优化简历...'
+            try:
+                # Extract JD keywords for competency tags
+                jd_keywords = analysis.matching_strategy.get('must_have_skills', [])
+                if not jd_keywords:
+                    jd_keywords = analysis.matching_strategy.get('strengths', [])
+
+                ats_html_path = generator.generate_ats_html(
+                    generation.tailored_resume,
+                    jd_keywords=jd_keywords
+                )
+                ats_pdf_path = ats_html_path.replace('.html', '.pdf')
+
+                # Use generate-pdf.mjs
+                import subprocess as _subprocess
+                pdf_tool = Path('tools/generate-pdf.mjs')
+                if pdf_tool.exists():
+                    proc = _subprocess.run(
+                        ['node', str(pdf_tool), ats_html_path, ats_pdf_path, '--format=letter'],
+                        capture_output=True, text=True, timeout=30
+                    )
+                    if proc.returncode == 0:
+                        with open(ats_pdf_path, 'rb') as f:
+                            ats_pdf_bytes = f.read()
+                        task_status[session_id]['progress'] = 100
+                        task_status[session_id]['status'] = 'completed'
+                        task_status[session_id]['message'] = 'ATS 简历生成完成'
+
+                        result = {
+                            'session_id': session_id,
+                            'status': 'completed',
+                            'processing_time': int((time.time() - start_time) * 1000),
+                            'tailored_word': '',  # ATS mode doesn't produce Word
+                            'tailored_ats_pdf': base64.b64encode(ats_pdf_bytes).decode('utf-8'),
+                            'evidence_report': evidence_report.to_dict(),
+                            'validation_result': 'pass' if evidence_report.coverage >= 0.9 else 'pass_with_review',
+                            'output_format': 'ats_pdf',
+                            'style_preserved': False,
+                            'analysis': {
+                                'match_score': analysis.matching_strategy.get('match_score', 0),
+                                'match_level': analysis.matching_strategy.get('match_level', ''),
+                                'strengths': analysis.matching_strategy.get('strengths', []),
+                                'gaps': analysis.matching_strategy.get('gaps', [])
+                            }
+                        }
+                        cache_manager.set(parsed_resume.raw_text, jd_content, result)
+                        return jsonify(result)
+                    else:
+                        logger.error(f"ATS PDF 生成失败: {proc.stderr}")
+                else:
+                    logger.warning("generate-pdf.mjs 不存在，回退到 Word 格式")
+            except Exception as e:
+                logger.error(f"ATS PDF 生成异常: {e}")
+                logger.warning("回退到 Word 格式")
 
         # 优先使用模板渲染（Word 格式）
         if template_result and template_result.success and original_doc:

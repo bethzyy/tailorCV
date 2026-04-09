@@ -7,6 +7,8 @@
 import io
 import os
 import logging
+import subprocess
+import tempfile
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 from datetime import datetime
@@ -17,6 +19,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
 from docx.enum.style import WD_STYLE_TYPE
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
+from jinja2 import Environment, FileSystemLoader
 
 from .config import config
 from .resume_parser import StyleMetadata
@@ -456,3 +459,309 @@ class ResumeGenerator:
 
         # 添加下划线
         p.add_run('\n' + '─' * 20)
+
+    # ================================================================
+    # ATS-optimized HTML/PDF output (career-ops integration)
+    # ================================================================
+
+    def generate_ats_html(self, tailored_resume: Dict[str, Any],
+                          jd_keywords: Optional[List[str]] = None,
+                          output_path: Optional[str] = None) -> str:
+        """
+        Generate ATS-optimized HTML resume.
+
+        Args:
+            tailored_resume: Tailored resume data from Stage 3
+            jd_keywords: List of JD keywords for competency tags (optional)
+            output_path: Output HTML file path (optional)
+
+        Returns:
+            str: Path to generated HTML file
+        """
+        ats_template_dir = config.BASE_DIR / 'templates' / 'ats'
+        env = Environment(loader=FileSystemLoader(str(ats_template_dir)))
+        template = env.get_template('ats_template.html')
+
+        # Build template context from tailored_resume
+        context = self._build_ats_context(tailored_resume, jd_keywords)
+
+        # Render HTML
+        html_content = template.render(**context)
+
+        # Save to file
+        if not output_path:
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            name = tailored_resume.get('basic_info', {}).get('name', 'resume')
+            output_path = str(self.output_dir / f'{name}_ats_{timestamp}.html')
+
+        Path(output_path).write_text(html_content, encoding='utf-8')
+        logger.info(f"ATS HTML 生成完成: {output_path}")
+        return output_path
+
+    def generate_ats_pdf(self, tailored_resume: Dict[str, Any],
+                         jd_keywords: Optional[List[str]] = None,
+                         output_path: Optional[str] = None) -> str:
+        """
+        Generate ATS-optimized PDF resume via Puppeteer.
+
+        Args:
+            tailored_resume: Tailored resume data from Stage 3
+            jd_keywords: List of JD keywords (optional)
+            output_path: Output PDF file path (optional)
+
+        Returns:
+            str: Path to generated PDF file
+        """
+        # First generate HTML
+        html_path = self.generate_ats_html(tailored_resume, jd_keywords)
+
+        # Derive PDF path
+        if not output_path:
+            output_path = html_path.replace('.html', '.pdf')
+
+        # Call generate-pdf.mjs via Node.js
+        pdf_tool = config.BASE_DIR / 'tools' / 'generate-pdf.mjs'
+        if not pdf_tool.exists():
+            logger.error(f"PDF 生成工具不存在: {pdf_tool}")
+            return html_path
+
+        try:
+            result = subprocess.run(
+                ['node', str(pdf_tool), html_path, output_path, '--format=letter'],
+                capture_output=True, text=True, timeout=30,
+                cwd=str(config.BASE_DIR)
+            )
+            if result.returncode == 0:
+                logger.info(f"ATS PDF 生成完成: {output_path}")
+                return output_path
+            else:
+                logger.error(f"PDF 生成失败: {result.stderr}")
+                return html_path
+        except Exception as e:
+            logger.error(f"PDF 生成异常: {e}")
+            return html_path
+
+    def _build_ats_context(self, tailored_resume: Dict[str, Any],
+                            jd_keywords: Optional[List[str]] = None) -> Dict[str, Any]:
+        """Build template context from tailored_resume for ATS HTML template."""
+
+        basic = tailored_resume.get('basic_info', {})
+        name = basic.get('name', 'Candidate')
+        email = basic.get('email', '')
+        phone = basic.get('phone', '')
+        location = basic.get('location', '')
+
+        # Build contact display (linkedin/github if available)
+        contact_parts = []
+        if email:
+            contact_parts.append(email)
+        if phone:
+            contact_parts.append(phone)
+        contact_display = ' | '.join(contact_parts)
+
+        # Professional Summary
+        summary_text = tailored_resume.get('summary', '')
+
+        # Core Competencies from JD keywords
+        if jd_keywords:
+            competency_tags = '\n              '.join(
+                f'<span class="competency-tag">{kw}</span>' for kw in jd_keywords[:8]
+            )
+        else:
+            competency_tags = ''
+
+        # Work Experience → HTML
+        experience_html = self._build_ats_experience(tailored_resume.get('work_experience', []))
+
+        # Projects → HTML (top 4)
+        projects_html = self._build_ats_projects(tailored_resume.get('projects', [])[:4])
+
+        # Education → HTML
+        education_html = self._build_ats_education(tailored_resume.get('education', []))
+
+        # Certifications → HTML
+        certs_html = self._build_ats_certificates(tailored_resume.get('certificates', []))
+
+        # Skills → HTML
+        skills_html = self._build_ats_skills(tailored_resume.get('skills', []))
+
+        return {
+            'LANG': 'en',
+            'PAGE_WIDTH': '8.5in',
+            'NAME': name,
+            'EMAIL': email,
+            'LINKEDIN_URL': '#',
+            'LINKEDIN_DISPLAY': 'LinkedIn',
+            'PORTFOLIO_URL': '#',
+            'PORTFOLIO_DISPLAY': 'Portfolio',
+            'LOCATION': location,
+            'SECTION_SUMMARY': 'Professional Summary',
+            'SUMMARY_TEXT': summary_text,
+            'SECTION_COMPETENCIES': 'Core Competencies',
+            'COMPETENCIES': competency_tags,
+            'SECTION_EXPERIENCE': 'Work Experience',
+            'EXPERIENCE': experience_html,
+            'SECTION_PROJECTS': 'AI Projects',
+            'PROJECTS': projects_html,
+            'SECTION_EDUCATION': 'Education',
+            'EDUCATION': education_html,
+            'SECTION_CERTIFICATIONS': 'Certifications',
+            'CERTIFICATIONS': certs_html,
+            'SECTION_SKILLS': 'Technical Skills',
+            'SKILLS': skills_html,
+        }
+
+    def _build_ats_experience(self, work_experience: List[Dict]) -> str:
+        """Build HTML for work experience section."""
+        if not work_experience:
+            return '<p style="color:#888;">No work experience listed.</p>'
+
+        html_parts = []
+        for exp in work_experience:
+            company = exp.get('company', '')
+            time = exp.get('time', '')
+            position = exp.get('position', '')
+
+            # Get tailored content
+            content = exp.get('tailored', '')
+            if not content and 'tailored_bullets' in exp:
+                bullets = exp.get('tailored_bullets', [])
+                if isinstance(bullets, list):
+                    contents = [b.get('content', '') if isinstance(b, dict) else b for b in bullets]
+                    content = '\n'.join(filter(None, contents))
+            if not content:
+                content = exp.get('content', '')
+
+            # Build bullet items
+            bullets_html = ''
+            if content:
+                lines = content.split('\n')
+                for line in lines:
+                    line = line.strip()
+                    if line:
+                        # Strip common bullet prefixes
+                        line = line.lstrip('- •·').strip()
+                        if line:
+                            bullets_html += f'<li>{line}</li>\n'
+
+            html_parts.append(f'''
+            <div class="job">
+              <div class="job-header">
+                <span class="job-company">{self._esc_html(company)}</span>
+                <span class="job-period">{self._esc_html(time)}</span>
+              </div>
+              <div class="job-role">{self._esc_html(position)}</div>
+              <ul>{bullets_html}</ul>
+            </div>''')
+
+        return '\n'.join(html_parts)
+
+    def _build_ats_projects(self, projects: List[Dict]) -> str:
+        """Build HTML for projects section."""
+        if not projects:
+            return ''
+
+        html_parts = []
+        for proj in projects:
+            name = proj.get('name', 'Project')
+            content = proj.get('tailored', '') or proj.get('tailored_description', '') or proj.get('content', '')
+
+            # Build tech from project if available
+            tech = proj.get('tech', proj.get('technologies', ''))
+            tech_html = f'<div class="project-tech">{self._esc_html(tech)}</div>' if tech else ''
+
+            # Clean content for description
+            desc = content.strip().split('\n')[0] if content else ''
+
+            html_parts.append(f'''
+            <div class="project">
+              <div class="project-title">{self._esc_html(name)}</div>
+              <div class="project-desc">{self._esc_html(desc)}</div>
+              {tech_html}
+            </div>''')
+
+        return '\n'.join(html_parts)
+
+    def _build_ats_education(self, education: List[Dict]) -> str:
+        """Build HTML for education section."""
+        if not education:
+            return ''
+
+        html_parts = []
+        for edu in education:
+            school = edu.get('school', '')
+            major = edu.get('major', '')
+            degree = edu.get('degree', '')
+
+            title_parts = []
+            if major:
+                title_parts.append(major)
+            if degree:
+                title_parts.append(degree)
+            title_text = ' &mdash; '.join(title_parts)
+
+            html_parts.append(f'''
+            <div class="edu-item">
+              <div class="edu-header">
+                <span><span class="edu-title">{title_text}</span> &mdash; <span class="edu-org">{self._esc_html(school)}</span></span>
+              </div>
+            </div>''')
+
+        return '\n'.join(html_parts)
+
+    def _build_ats_certificates(self, certificates: List) -> str:
+        """Build HTML for certifications section."""
+        if not certificates:
+            return ''
+
+        html_parts = []
+        for cert in certificates:
+            if isinstance(cert, dict):
+                name = cert.get('name', '')
+                org = cert.get('org', cert.get('issuer', ''))
+                year = cert.get('year', cert.get('date', ''))
+            else:
+                name = str(cert)
+                org = ''
+                year = ''
+
+            if name:
+                org_html = f'<span class="cert-org">{self._esc_html(org)}</span>' if org else ''
+                year_html = f'<span class="cert-year">{self._esc_html(year)}</span>' if year else ''
+                html_parts.append(f'''
+            <div class="cert-item">
+              <span class="cert-title">{self._esc_html(name)}</span>
+              {org_html}
+              {year_html}
+            </div>''')
+
+        return '\n'.join(html_parts)
+
+    def _build_ats_skills(self, skills: List) -> str:
+        """Build HTML for skills section."""
+        if not skills:
+            return ''
+
+        html_parts = []
+        for skill in skills:
+            if isinstance(skill, dict):
+                name = skill.get('name', '')
+                desc = skill.get('tailored_description', skill.get('description', ''))
+                text = f'{name}: {desc}' if desc else name
+            else:
+                text = str(skill)
+            if text:
+                html_parts.append(f'<span class="skill-item">{self._esc_html(text)}</span>')
+
+        return '\n'.join(html_parts)
+
+    @staticmethod
+    def _esc_html(text: str) -> str:
+        """Escape HTML special characters."""
+        if not text:
+            return ''
+        return (str(text)
+                .replace('&', '&amp;')
+                .replace('<', '&lt;')
+                .replace('>', '&gt;')
+                .replace('"', '&quot;'))
