@@ -26,6 +26,7 @@ from core.expert_team import ExpertTeam, AnalysisResult, GenerationResult
 from core.evidence_tracker import EvidenceTracker
 from core.resume_generator import ResumeGenerator
 from core.cache_manager import CacheManager
+from core.auth import login_required
 from core.template_processor import TemplateProcessor
 from core.database import db
 
@@ -778,6 +779,7 @@ def save_config():
 
 
 @app.route('/api/config/<key>', methods=['DELETE'])
+@login_required
 def delete_config(key: str):
     """
     删除用户配置

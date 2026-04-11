@@ -18,47 +18,6 @@ from .config import config
 
 logger = logging.getLogger(__name__)
 
-
-@dataclass
-class ValidationResult:
-    """验证结果"""
-    item_id: str
-    valid: bool
-    confidence: float
-    action: str  # pass / needs_review / reject
-    reason: str = ""
-    details: Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class EvidenceReport:
-    """依据报告"""
-    total_items: int = 0
-    validated: int = 0
-    needs_review: int = 0
-    rejected: int = 0
-    coverage: float = 0.0
-    items: List[ValidationResult] = field(default_factory=list)
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            'total_items': self.total_items,
-            'validated': self.validated,
-            'needs_review': self.needs_review,
-            'rejected': self.rejected,
-            'coverage': round(self.coverage, 2),
-            'details': [
-                {
-                    'item_id': item.item_id,
-                    'validation_status': item.action,
-                    'confidence': item.confidence,
-                    'reason': item.reason
-                }
-                for item in self.items
-            ]
-        }
-
-
 class EvidenceTracker:
     """依据追踪器 - 混合验证机制"""
 
@@ -97,6 +56,24 @@ class EvidenceTracker:
         Returns:
             ValidationResult: 验证结果
         """
+        return self._validate_content(original_resume, tailored_content)
+
+    def validate_resume(self, original_resume: str,
+                        tailored_resume: Dict[str, Any]) -> EvidenceReport:
+        """
+        验证整个定制简历
+
+        Args:
+            original_resume: 原版简历文本
+            tailored_resume: 定制简历结构
+
+        Returns:
+            EvidenceReport: 依据报告
+        """
+        return self._validate_resume(original_resume, tailored_resume)
+
+    def _validate_content(self, original_resume: str,
+                          tailored_content: Dict[str, Any]) -> ValidationResult:
         item_id = tailored_content.get('id', 'unknown')
         evidence = tailored_content.get('evidence', {})
         original = tailored_content.get('original', '')
@@ -123,19 +100,17 @@ class EvidenceTracker:
 
         # 第三重：AI验证（仅对可疑内容）
         if suspicious and evidence.get('confidence', 1.0) < self.CONFIDENCE_THRESHOLD:
-            if self.model_manager:
-                self.validation_stats['ai_checks'] += 1
-                ai_result = self._ai_validate(tailored, original_resume)
-                if not ai_result['valid']:
-                    self.validation_stats['rejected'] += 1
-                    return ValidationResult(
-                        item_id=item_id,
-                        valid=False,
-                        confidence=ai_result['confidence'],
-                        action='reject',
-                        reason=ai_result['reason'],
-                        details={'suspicious_keywords': suspicious}
-                    )
+            ai_result = self._ai_validate(tailored, original_resume)
+            if not ai_result['valid']:
+                self.validation_stats['rejected'] += 1
+                return ValidationResult(
+                    item_id=item_id,
+                    valid=False,
+                    confidence=ai_result['confidence'],
+                    action='reject',
+                    reason=ai_result['reason'],
+                    details={'suspicious_keywords': suspicious}
+                )
 
         # 计算最终置信度
         final_confidence = self._calculate_final_confidence(
@@ -165,45 +140,35 @@ class EvidenceTracker:
             details={'similarity': similarity}
         )
 
-    def validate_resume(self, original_resume: str,
-                        tailored_resume: Dict[str, Any]) -> EvidenceReport:
-        """
-        验证整个定制简历
-
-        Args:
-            original_resume: 原版简历文本
-            tailored_resume: 定制简历结构
-
-        Returns:
-            EvidenceReport: 依据报告
-        """
+    def _validate_resume(self, original_resume: str,
+                         tailored_resume: Dict[str, Any]) -> EvidenceReport:
         report = EvidenceReport()
 
         # 验证工作经历
         work_exp = tailored_resume.get('work_experience', [])
         for item in work_exp:
-            result = self.validate_content(original_resume, item)
+            result = self._validate_content(original_resume, item)
             report.items.append(result)
             report.total_items += 1
 
         # 验证项目经历
         projects = tailored_resume.get('projects', [])
         for item in projects:
-            result = self.validate_content(original_resume, item)
+            result = self._validate_content(original_resume, item)
             report.items.append(result)
             report.total_items += 1
 
         # 验证技能
         skills = tailored_resume.get('skills', [])
         for item in skills:
-            result = self.validate_content(original_resume, item)
+            result = self._validate_content(original_resume, item)
             report.items.append(result)
             report.total_items += 1
 
         # 验证教育背景
         education = tailored_resume.get('education', [])
         for item in education:
-            result = self.validate_content(original_resume, item)
+            result = self._validate_content(original_resume, item)
             report.items.append(result)
             report.total_items += 1
 
@@ -388,3 +353,41 @@ class EvidenceTracker:
     def get_stats(self) -> Dict[str, int]:
         """获取验证统计"""
         return self.validation_stats.copy()
+
+@dataclass
+class ValidationResult:
+    """验证结果"""
+    item_id: str
+    valid: bool
+    confidence: float
+    action: str  # pass / needs_review / reject
+    reason: str = ""
+    details: Dict[str, Any] = field(default_factory=dict)
+
+@dataclass
+class EvidenceReport:
+    """依据报告"""
+    total_items: int = 0
+    validated: int = 0
+    needs_review: int = 0
+    rejected: int = 0
+    coverage: float = 0.0
+    items: List[ValidationResult] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'total_items': self.total_items,
+            'validated': self.validated,
+            'needs_review': self.needs_review,
+            'rejected': self.rejected,
+            'coverage': round(self.coverage, 2),
+            'details': [
+                {
+                    'item_id': item.item_id,
+                    'validation_status': item.action,
+                    'confidence': item.confidence,
+                    'reason': item.reason
+                }
+                for item in self.items
+            ]
+        }
