@@ -306,7 +306,6 @@ class MultiModelManager:
 
         # 确定顺序
         if provider_order is None:
-            # 使用切片创建副本，避免修改原始字典键视图
             provider_order = list(self.providers.keys())
 
         last_error = None
