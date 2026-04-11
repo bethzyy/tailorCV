@@ -210,11 +210,12 @@ class Database:
         }
         return columns[table_name]
 
-    def _create_index_if_not_exists(self, cursor, table_name, column_name, order):
+    def _create_index_if_not_exists(self, cursor, table_name, column_name, order=''):
         """创建索引（如果不存在）"""
+        order_clause = f' {order}' if order else ''
         cursor.execute(f'''
             CREATE INDEX IF NOT EXISTS idx_{table_name}_{column_name}
-            ON {table_name}({column_name} {order})
+            ON {table_name}({column_name}{order_clause})
         ''')
 
     def create_task(self, task_id: str, session_id: str,

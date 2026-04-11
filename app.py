@@ -28,9 +28,7 @@ from core.resume_generator import ResumeGenerator
 from core.cache_manager import CacheManager
 from core.template_processor import TemplateProcessor
 from core.database import db
-
-# 延迟导入 auth 模块以避免循环依赖
-# from core.auth import login_required
+from core.auth import login_required
 
 # 配置日志
 logging.basicConfig(
@@ -781,6 +779,7 @@ def save_config():
 
 
 @app.route('/api/config/<key>', methods=['DELETE'])
+@login_required
 def delete_config(key: str):
     """
     删除用户配置
