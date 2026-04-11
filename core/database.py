@@ -80,19 +80,23 @@ class Database:
             self._create_table_if_not_exists(cursor, 'usage_records')
 
             # 创建索引
-            self._create_index_if_not_exists(cursor, 'history', 'created_at', 'DESC')
-            self._create_index_if_not_exists(cursor, 'history', 'session_id')
-            self._create_index_if_not_exists(cursor, 'tasks', 'status')
-            self._create_index_if_not_exists(cursor, 'user_config', 'config_key')
-            self._create_index_if_not_exists(cursor, 'templates', 'source')
-            self._create_index_if_not_exists(cursor, 'templates', 'is_default')
-            self._create_index_if_not_exists(cursor, 'users', 'phone')
-            self._create_index_if_not_exists(cursor, 'users', 'email')
-            self._create_index_if_not_exists(cursor, 'orders', 'user_id')
-            self._create_index_if_not_exists(cursor, 'orders', 'status')
-            self._create_index_if_not_exists(cursor, 'usage_records', 'user_id')
+            self._create_indexes(cursor)
 
             logger.info(f"数据库初始化完成: {self.db_path}")
+
+    def _create_indexes(self, cursor):
+        """创建数据库索引"""
+        self._create_index_if_not_exists(cursor, 'history', 'created_at', 'DESC')
+        self._create_index_if_not_exists(cursor, 'history', 'session_id')
+        self._create_index_if_not_exists(cursor, 'tasks', 'status')
+        self._create_index_if_not_exists(cursor, 'user_config', 'config_key')
+        self._create_index_if_not_exists(cursor, 'templates', 'source')
+        self._create_index_if_not_exists(cursor, 'templates', 'is_default')
+        self._create_index_if_not_exists(cursor, 'users', 'phone')
+        self._create_index_if_not_exists(cursor, 'users', 'email')
+        self._create_index_if_not_exists(cursor, 'orders', 'user_id')
+        self._create_index_if_not_exists(cursor, 'orders', 'status')
+        self._create_index_if_not_exists(cursor, 'usage_records', 'user_id')
 
     def _create_table_if_not_exists(self, cursor, table_name):
         """创建表（如果不存在）"""
@@ -258,6 +262,7 @@ class Database:
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
+                values = self._prepare_history_values(session_id, data)
                 cursor.execute('''
                     INSERT OR REPLACE INTO history (
                         session_id, task_id, candidate_name, candidate_type,
@@ -266,28 +271,32 @@ class Database:
                         evidence_report, optimization_summary,
                         model_used, tokens_used, processing_time_ms
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    session_id,
-                    data.get('task_id'),
-                    data.get('candidate_name', ''),
-                    data.get('candidate_type', 'experienced'),
-                    data.get('job_title', ''),
-                    data.get('company', ''),
-                    data.get('match_score'),
-                    data.get('match_level', ''),
-                    data.get('original_resume', ''),
-                    json.dumps(data.get('tailored_resume', {}), ensure_ascii=False) if isinstance(data.get('tailored_resume'), dict) else data.get('tailored_resume', ''),
-                    data.get('jd_content', ''),
-                    json.dumps(data.get('evidence_report', {}), ensure_ascii=False),
-                    json.dumps(data.get('optimization_summary', {}), ensure_ascii=False),
-                    data.get('model_used', ''),
-                    data.get('tokens_used', 0),
-                    data.get('processing_time_ms', 0)
-                ))
+                ''', values)
                 return cursor.rowcount > 0
         except sqlite3.Error as e:
             logger.error(f"保存历史记录失败: {e}")
             return False
+
+    def _prepare_history_values(self, session_id: str, data: Dict[str, Any]) -> tuple:
+        """准备历史记录插入的值"""
+        return (
+            session_id,
+            data.get('task_id'),
+            data.get('candidate_name', ''),
+            data.get('candidate_type', 'experienced'),
+            data.get('job_title', ''),
+            data.get('company', ''),
+            data.get('match_score'),
+            data.get('match_level', ''),
+            data.get('original_resume', ''),
+            json.dumps(data.get('tailored_resume', {}), ensure_ascii=False) if isinstance(data.get('tailored_resume'), dict) else data.get('tailored_resume', ''),
+            data.get('jd_content', ''),
+            json.dumps(data.get('evidence_report', {}), ensure_ascii=False),
+            json.dumps(data.get('optimization_summary', {}), ensure_ascii=False),
+            data.get('model_used', ''),
+            data.get('tokens_used', 0),
+            data.get('processing_time_ms', 0)
+        )
 
     def save_template(self, template_data: Dict[str, Any]) -> bool:
         """
@@ -302,31 +311,36 @@ class Database:
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
+                values = self._prepare_template_values(template_data)
                 cursor.execute('''
                     INSERT OR REPLACE INTO templates (
                         template_id, name, source, file_path, content_hash,
                         structure_confidence, sections, variables, description,
                         tags, preview_image, use_count, is_default
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    template_data.get('template_id'),
-                    template_data.get('name'),
-                    template_data.get('source'),
-                    template_data.get('file_path'),
-                    template_data.get('content_hash'),
-                    template_data.get('structure_confidence'),
-                    json.dumps(template_data.get('sections', []), ensure_ascii=False),
-                    json.dumps(template_data.get('variables', []), ensure_ascii=False),
-                    template_data.get('description', ''),
-                    json.dumps(template_data.get('tags', []), ensure_ascii=False),
-                    template_data.get('preview_image'),
-                    template_data.get('use_count', 0),
-                    1 if template_data.get('is_default') else 0
-                ))
+                ''', values)
                 return cursor.rowcount > 0
         except sqlite3.Error as e:
             logger.error(f"保存模板失败: {e}")
             return False
+
+    def _prepare_template_values(self, template_data: Dict[str, Any]) -> tuple:
+        """准备模板插入的值"""
+        return (
+            template_data.get('template_id'),
+            template_data.get('name'),
+            template_data.get('source'),
+            template_data.get('file_path'),
+            template_data.get('content_hash'),
+            template_data.get('structure_confidence'),
+            json.dumps(template_data.get('sections', []), ensure_ascii=False),
+            json.dumps(template_data.get('variables', []), ensure_ascii=False),
+            template_data.get('description', ''),
+            json.dumps(template_data.get('tags', []), ensure_ascii=False),
+            template_data.get('preview_image'),
+            template_data.get('use_count', 0),
+            1 if template_data.get('is_default') else 0
+        )
 
     def create_user(self, phone: str = '', email: str = '', nickname: str = '') -> Optional[int]:
         """
@@ -392,18 +406,25 @@ class Database:
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute('''
-                    INSERT INTO usage_records (user_id, task_id, session_id, tokens_used)
-                    VALUES (?, ?, ?, ?)
-                ''', (user_id, task_id, session_id, tokens_used))
-                # 更新用户已用配额
-                cursor.execute('''
-                    UPDATE users SET quota_used = quota_used + 1 WHERE id = ?
-                ''', (user_id,))
+                self._insert_usage_record(cursor, user_id, task_id, session_id, tokens_used)
+                self._update_user_quota(cursor, user_id)
                 return cursor.rowcount > 0
         except sqlite3.Error as e:
             logger.error(f"记录使用失败: {e}")
             return False
+
+    def _insert_usage_record(self, cursor, user_id: int, task_id: str, session_id: str, tokens_used: int):
+        """插入使用记录"""
+        cursor.execute('''
+            INSERT INTO usage_records (user_id, task_id, session_id, tokens_used)
+            VALUES (?, ?, ?, ?)
+        ''', (user_id, task_id, session_id, tokens_used))
+
+    def _update_user_quota(self, cursor, user_id: int):
+        """更新用户已用配额"""
+        cursor.execute('''
+            UPDATE users SET quota_used = quota_used + 1 WHERE id = ?
+        ''', (user_id,))
 
 # 创建全局数据库实例
 db = Database()
