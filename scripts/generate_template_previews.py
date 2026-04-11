@@ -6,7 +6,14 @@
 
 import os
 import sys
+import logging
 from pathlib import Path
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
 # 添加项目根目录到路径
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -16,7 +23,7 @@ try:
     HAS_PYTHON_DOCX = True
 except ImportError:
     HAS_PYTHON_DOCX = False
-    print("请先安装 python-docx: pip install python-docx")
+    logging.error("请先安装 python-docx: pip install python-docx")
     sys.exit(1)
 
 try:
@@ -24,7 +31,7 @@ try:
     HAS_PIL = True
 except ImportError:
     HAS_PIL = False
-    print("请先安装 Pillow: pip install Pillow")
+    logging.error("请先安装 Pillow: pip install Pillow")
     sys.exit(1)
 
 
@@ -102,7 +109,7 @@ def get_font(size, bold=False):
         if Path(path).exists():
             try:
                 return ImageFont.truetype(path, size)
-            except Exception:
+            except OSError:
                 continue
 
     # 回退：尝试通过字体名称查找
@@ -115,11 +122,75 @@ def get_font(size, bold=False):
     for name in font_names:
         try:
             return ImageFont.truetype(name, size)
-        except Exception:
+        except OSError:
             continue
 
     # 最后回退到默认字体
     return ImageFont.load_default()
+
+
+def _read_template_content(template_path):
+    """读取模板文件内容"""
+    try:
+        doc = Document(str(template_path))
+        return [p.text for p in doc.paragraphs if p.text.strip()]
+    except Exception as e:
+        logging.warning(f"无法读取模板文件 {template_path}: {e}")
+        return []
+
+
+def _draw_wrapped_text(draw, text, x, y, max_width, font, color, line_height=16):
+    """绘制自动换行的文本"""
+    words = text
+    char_width = 10  # 估算字符宽度
+    chars_per_line = max_width // char_width
+    
+    while words:
+        if len(words) <= chars_per_line:
+            draw.text((x, y), words, fill=color, font=font)
+            y += line_height
+            break
+        else:
+            draw.text((x, y), words[:chars_per_line], fill=color, font=font)
+            words = words[chars_per_line:]
+            y += line_height
+    
+    return y
+
+
+def _draw_resume_sections(draw, width, colors, fonts):
+    """绘制简历的各个部分"""
+    y = 75  # 起始 Y 坐标
+    height = 560  # 画布高度
+    
+    sections = [
+        ('个人简介', '资深专业人士，具有丰富的工作经验和专业技能...'),
+        ('教育背景', 'XX大学 | 计算机科学 | 硕士\n2015-2018'),
+        ('工作经历', 'ABC公司 | 高级工程师\n2018-至今\n负责核心系统开发...'),
+        ('项目经历', '项目名称 | 核心成员\n主要技术栈和成果...'),
+        ('专业技能', 'Python, JavaScript, 项目管理...'),
+    ]
+
+    for section_title, section_content in sections:
+        # 章节标题
+        draw.text((20, y), section_title, fill=hex_to_rgb(colors['section']), font=fonts['section'])
+        y += 22
+
+        # 章节内容
+        lines = section_content.split('\n')
+        for line in lines:
+            y = _draw_wrapped_text(
+                draw, line, 25, y, width - 40,
+                fonts['small'], hex_to_rgb(colors['text'])
+            )
+
+        y += 10
+
+        # 检查是否超出画布
+        if y > height - 30:
+            break
+    
+    return y
 
 
 def generate_preview(template_id: str, template_path: Path, output_path: Path):
@@ -132,19 +203,15 @@ def generate_preview(template_id: str, template_path: Path, output_path: Path):
     draw = ImageDraw.Draw(img)
 
     # 字体
-    font_name = get_font(20, bold=True)
-    font_section = get_font(14, bold=True)
-    font_text = get_font(11)
-    font_small = get_font(9)
-
-    y = 20
+    fonts = {
+        'name': get_font(20, bold=True),
+        'section': get_font(14, bold=True),
+        'text': get_font(11),
+        'small': get_font(9)
+    }
 
     # 读取模板内容
-    try:
-        doc = Document(str(template_path))
-        paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
-    except:
-        paragraphs = []
+    paragraphs = _read_template_content(template_path)
 
     # 绘制模板名称
     template_names = {
@@ -156,58 +223,20 @@ def generate_preview(template_id: str, template_path: Path, output_path: Path):
         'tech_engineer': '技术工程师'
     }
     name = template_names.get(template_id, template_id)
-    draw.text((20, y), name, fill=hex_to_rgb(colors['header']), font=font_name)
-    y += 35
+    draw.text((20, 20), name, fill=hex_to_rgb(colors['header']), font=fonts['name'])
 
     # 绘制分隔线
-    draw.line([(20, y), (width - 20, y)], fill=hex_to_rgb(colors['accent']), width=2)
-    y += 15
+    draw.line([(20, 55), (width - 20, 55)], fill=hex_to_rgb(colors['accent']), width=2)
 
-    # 模拟简历内容
-    sections = [
-        ('个人简介', '资深专业人士，具有丰富的工作经验和专业技能...'),
-        ('教育背景', 'XX大学 | 计算机科学 | 硕士\n2015-2018'),
-        ('工作经历', 'ABC公司 | 高级工程师\n2018-至今\n负责核心系统开发...'),
-        ('项目经历', '项目名称 | 核心成员\n主要技术栈和成果...'),
-        ('专业技能', 'Python, JavaScript, 项目管理...'),
-    ]
-
-    for section_title, section_content in sections:
-        # 章节标题
-        draw.text((20, y), section_title, fill=hex_to_rgb(colors['section']), font=font_section)
-        y += 22
-
-        # 章节内容
-        lines = section_content.split('\n')
-        for line in lines:
-            # 自动换行
-            words = line
-            max_width = width - 40
-            while words:
-                # 估算每行可容纳的字符数
-                char_width = 10
-                chars_per_line = max_width // char_width
-                if len(words) <= chars_per_line:
-                    draw.text((25, y), words, fill=hex_to_rgb(colors['text']), font=font_small)
-                    y += 16
-                    break
-                else:
-                    draw.text((25, y), words[:chars_per_line], fill=hex_to_rgb(colors['text']), font=font_small)
-                    words = words[chars_per_line:]
-                    y += 16
-
-        y += 10
-
-        # 检查是否超出画布
-        if y > height - 30:
-            break
+    # 绘制简历内容
+    _draw_resume_sections(draw, width, colors, fonts)
 
     # 添加底部边框装饰
     draw.rectangle([(0, height-5), (width, height)], fill=hex_to_rgb(colors['accent']))
 
     # 保存
     img.save(str(output_path), 'PNG')
-    print(f'  Generated: {output_path.name}')
+    logging.info(f'  Generated: {output_path.name}')
 
 
 def main():
@@ -216,10 +245,10 @@ def main():
     previews_dir = Path(__file__).parent.parent / 'templates' / 'previews'
     previews_dir.mkdir(parents=True, exist_ok=True)
 
-    print('Generating template previews...')
-    print(f'Source: {builtin_dir}')
-    print(f'Output: {previews_dir}')
-    print()
+    logging.info('Generating template previews...')
+    logging.info(f'Source: {builtin_dir}')
+    logging.info(f'Output: {previews_dir}')
+    logging.info('')
 
     templates = [
         'classic_professional',
@@ -235,13 +264,13 @@ def main():
         output_path = previews_dir / f'{template_id}.png'
 
         if not template_path.exists():
-            print(f'  Skipped: {template_id} (file not found)')
+            logging.warning(f'  Skipped: {template_id} (file not found)')
             continue
 
         generate_preview(template_id, template_path, output_path)
 
-    print()
-    print('Done!')
+    logging.info('')
+    logging.info('Done!')
 
 
 if __name__ == '__main__':

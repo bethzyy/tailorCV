@@ -195,15 +195,8 @@ class MultiModelManager:
         model_ids = model_ids or {}
 
         # 确定要调用的提供者
-        if provider_ids:
-            target_providers = {
-                pid: self.providers[pid]
-                for pid in provider_ids
-                if pid in self.providers
-            }
-        else:
-            target_providers = self.providers
-
+        target_providers = self._get_target_providers(provider_ids)
+        
         if not target_providers:
             return MultiModelResult(
                 success=False,
@@ -213,6 +206,33 @@ class MultiModelManager:
             )
 
         # 并行调用
+        results = self._execute_parallel_calls(
+            target_providers, prompt, model_ids, max_tokens, temperature, max_retries
+        )
+
+        # 找出最佳结果并更新统计
+        return self._process_parallel_results(results)
+
+    def _get_target_providers(self, provider_ids: Optional[List[str]]) -> Dict[str, BaseModelProvider]:
+        """获取目标提供者字典"""
+        if provider_ids:
+            return {
+                pid: self.providers[pid]
+                for pid in provider_ids
+                if pid in self.providers
+            }
+        return self.providers
+
+    def _execute_parallel_calls(
+        self,
+        target_providers: Dict[str, BaseModelProvider],
+        prompt: str,
+        model_ids: Dict[str, str],
+        max_tokens: int,
+        temperature: float,
+        max_retries: int
+    ) -> Dict[str, ModelResponse]:
+        """执行并行调用"""
         results = {}
         with ThreadPoolExecutor(max_workers=len(target_providers)) as executor:
             futures = {}
@@ -241,8 +261,10 @@ class MultiModelManager:
                         model_name="",
                         error_message=str(e)
                     )
+        return results
 
-        # 找出最佳结果
+    def _process_parallel_results(self, results: Dict[str, ModelResponse]) -> MultiModelResult:
+        """处理并行调用结果，更新统计并返回MultiModelResult"""
         successful_results = [
             (pid, resp) for pid, resp in results.items() if resp.success
         ]
@@ -284,6 +306,7 @@ class MultiModelManager:
 
         # 确定顺序
         if provider_order is None:
+            # 使用切片创建副本，避免修改原始字典键视图
             provider_order = list(self.providers.keys())
 
         last_error = None

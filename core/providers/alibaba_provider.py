@@ -143,50 +143,17 @@ class AlibabaProvider(BaseModelProvider):
         last_error = None
         for attempt in range(max_retries):
             try:
-                start_time = time.time()
-
-                response = self._client.chat.completions.create(
-                    model=model_id,
-                    messages=[{
-                        "role": "user",
-                        "content": prompt
-                    }],
-                    max_tokens=max_tokens,
-                    temperature=temperature
+                response, latency_ms = self._execute_request(
+                    prompt, model_id, max_tokens, temperature
                 )
-
-                latency_ms = int((time.time() - start_time) * 1000)
-                content = response.choices[0].message.content
-
-                # 更新统计
-                self.stats['success_calls'] += 1
-                tokens_used = response.usage.total_tokens if response.usage else 0
-                self.stats['total_tokens'] += tokens_used
-                self.stats['total_latency_ms'] += latency_ms
-
-                logger.info(f"阿里云调用成功: model={model_id}, tokens={tokens_used}, latency={latency_ms}ms")
-
-                return ModelResponse(
-                    success=True,
-                    content=content,
-                    model_id=model_id,
-                    model_name=model_name,
-                    tokens_used=tokens_used,
-                    latency_ms=latency_ms
+                return self._process_success_response(
+                    response, model_id, model_name, latency_ms
                 )
-
             except Exception as e:
                 last_error = e
-                logger.warning(f"阿里云调用失败 (model={model_id}, attempt={attempt+1}): {e}")
-
-                # 配额错误不重试
-                if self._is_quota_error(e):
+                should_retry = self._handle_request_error(e, model_id, attempt, max_retries)
+                if not should_retry:
                     break
-
-                # 等待后重试
-                if attempt < max_retries - 1:
-                    wait_time = (attempt + 1) * 2
-                    time.sleep(wait_time)
 
         # 失败
         self.stats['failed_calls'] += 1
@@ -199,6 +166,63 @@ class AlibabaProvider(BaseModelProvider):
             model_name=model_name,
             error_message=str(last_error)
         )
+
+    def _execute_request(self, prompt: str, model_id: str,
+                         max_tokens: int, temperature: float) -> tuple:
+        """执行单次 API 请求"""
+        start_time = time.time()
+
+        response = self._client.chat.completions.create(
+            model=model_id,
+            messages=[{
+                "role": "user",
+                "content": prompt
+            }],
+            max_tokens=max_tokens,
+            temperature=temperature
+        )
+
+        latency_ms = int((time.time() - start_time) * 1000)
+        return response, latency_ms
+
+    def _process_success_response(self, response, model_id: str,
+                                   model_name: str, latency_ms: int) -> ModelResponse:
+        """处理成功的 API 响应"""
+        content = response.choices[0].message.content
+
+        # 更新统计
+        self.stats['success_calls'] += 1
+        tokens_used = response.usage.total_tokens if response.usage else 0
+        self.stats['total_tokens'] += tokens_used
+        self.stats['total_latency_ms'] += latency_ms
+
+        logger.info(f"阿里云调用成功: model={model_id}, tokens={tokens_used}, latency={latency_ms}ms")
+
+        return ModelResponse(
+            success=True,
+            content=content,
+            model_id=model_id,
+            model_name=model_name,
+            tokens_used=tokens_used,
+            latency_ms=latency_ms
+        )
+
+    def _handle_request_error(self, error: Exception, model_id: str,
+                              attempt: int, max_retries: int) -> bool:
+        """处理请求错误并决定是否重试"""
+        logger.warning(f"阿里云调用失败 (model={model_id}, attempt={attempt+1}): {error}")
+
+        # 配额错误不重试
+        if self._is_quota_error(error):
+            return False
+
+        # 等待后重试
+        if attempt < max_retries - 1:
+            wait_time = (attempt + 1) * 2
+            time.sleep(wait_time)
+            return True
+
+        return False
 
     def _is_quota_error(self, error: Exception) -> bool:
         """判断是否为配额错误"""

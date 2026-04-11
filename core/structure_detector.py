@@ -79,15 +79,12 @@ class StructureMap:
     raw_text_preview: str = ""
 
 
-class StructureDetector:
+class ResumePatterns:
     """
-    简历结构检测器
-
-    检测策略：
-    1. 姓名检测：文档开头短文本（2-10字符，纯中文）
-    2. 联系方式检测：正则匹配电话/邮箱
-    3. 章节标题检测：关键词匹配 + 格式特征（加粗、字号）
-    4. 动态条目检测：时间-公司-职位模式
+    简历模式匹配常量类
+    
+    封装所有用于简历结构检测的正则表达式和关键词映射。
+    提取此类是为了避免循环依赖，并便于集中管理匹配规则。
     """
 
     # 章节关键词映射
@@ -110,7 +107,6 @@ class StructureDetector:
     )
 
     # 时间在末尾的条目格式正则（如 "公司名 | 职位 | 2006.3 – 2025.12"）
-    # 匹配以 | 分隔、最后一个字段是时间的格式
     TRAILING_TIME_PATTERN = re.compile(
         r'^(.+?)\s*\|\s*(.+?)\s*\|\s*'
         r'('
@@ -129,60 +125,17 @@ class StructureDetector:
     PHONE_PATTERN = re.compile(r'1[3-9]\d{9}')
     EMAIL_PATTERN = re.compile(r'[\w.-]+@[\w.-]+\.\w+')
 
+
+class BasicInfoDetector:
+    """基本信息检测器：负责检测姓名和联系方式"""
+
     def __init__(self):
-        self.detection_stats = {
+        self.stats = {
             'name_detected': 0,
-            'contact_detected': 0,
-            'sections_detected': 0,
-            'entries_detected': 0,
-            'failed': 0
+            'contact_detected': 0
         }
 
-    def detect_structure(self, doc: 'Document') -> StructureMap:
-        """
-        检测文档结构
-
-        Args:
-            doc: python-docx Document 对象
-
-        Returns:
-            StructureMap: 结构映射
-        """
-        if not HAS_PYTHON_DOCX:
-            raise ImportError("未安装 python-docx")
-
-        structure = StructureMap()
-
-        # 获取所有段落
-        paragraphs = list(doc.paragraphs)
-
-        # 1. 检测姓名（通常在前几行）
-        structure.name_paragraph_index = self._detect_name(paragraphs)
-
-        # 2. 检测联系方式
-        structure.contact_paragraph_index = self._detect_contact(paragraphs)
-
-        # 3. 检测章节标题
-        structure.sections = self._detect_sections(paragraphs)
-
-        # 4. 检测动态条目
-        structure.entries = self._detect_entries(paragraphs, structure.sections)
-
-        # 5. 计算置信度
-        structure.confidence = self._calculate_confidence(structure)
-
-        # 6. 生成预览文本
-        structure.raw_text_preview = '\n'.join(
-            p.text[:50] + '...' if len(p.text) > 50 else p.text
-            for p in paragraphs[:10]
-        )
-
-        logger.info(f"结构检测完成: 置信度 {structure.confidence:.2f}, "
-                   f"章节 {len(structure.sections)}, 条目 {len(structure.entries)}")
-
-        return structure
-
-    def _detect_name(self, paragraphs: List['Paragraph']) -> Optional[int]:
+    def detect_name(self, paragraphs: List['Paragraph']) -> Optional[int]:
         """
         检测姓名段落
 
@@ -193,14 +146,14 @@ class StructureDetector:
             # 检查是否是纯中文，长度2-10
             if 2 <= len(text) <= 10 and re.match(r'^[\u4e00-\u9fa5]+$', text):
                 # 检查不是章节标题
-                if not any(kw in text for kw_list in self.SECTION_KEYWORDS.values()
+                if not any(kw in text for kw_list in ResumePatterns.SECTION_KEYWORDS.values()
                           for kw in kw_list):
-                    self.detection_stats['name_detected'] += 1
+                    self.stats['name_detected'] += 1
                     logger.debug(f"检测到姓名: {text} (段落 {i})")
                     return i
         return None
 
-    def _detect_contact(self, paragraphs: List['Paragraph']) -> Optional[int]:
+    def detect_contact(self, paragraphs: List['Paragraph']) -> Optional[int]:
         """
         检测联系方式段落
 
@@ -208,13 +161,22 @@ class StructureDetector:
         """
         for i, para in enumerate(paragraphs[:10]):  # 通常在前10行
             text = para.text
-            if self.PHONE_PATTERN.search(text) or self.EMAIL_PATTERN.search(text):
-                self.detection_stats['contact_detected'] += 1
+            if ResumePatterns.PHONE_PATTERN.search(text) or ResumePatterns.EMAIL_PATTERN.search(text):
+                self.stats['contact_detected'] += 1
                 logger.debug(f"检测到联系方式 (段落 {i}): {text[:30]}...")
                 return i
         return None
 
-    def _detect_sections(self, paragraphs: List['Paragraph']) -> List[SectionInfo]:
+
+class SectionDetector:
+    """章节检测器：负责识别文档中的各个章节"""
+
+    def __init__(self):
+        self.stats = {
+            'sections_detected': 0
+        }
+
+    def detect_sections(self, paragraphs: List['Paragraph']) -> List[SectionInfo]:
         """
         检测章节标题
 
@@ -253,7 +215,7 @@ class StructureDetector:
                         SectionType.PROJECT
                     ]
                 )
-                self.detection_stats['sections_detected'] += 1
+                self.stats['sections_detected'] += 1
                 logger.debug(f"检测到章节: {text} (类型: {detected_type.value}, 段落 {i})")
 
         # 添加最后一个章节（确保 content_end >= content_start）
@@ -280,19 +242,23 @@ class StructureDetector:
         if '{{' in text or '{%' in text:
             return SectionType.UNKNOWN
 
-        for section_type, keywords in self.SECTION_KEYWORDS.items():
+        for section_type, keywords in ResumePatterns.SECTION_KEYWORDS.items():
             for kw in keywords:
                 if kw.lower() in text_lower:
                     return section_type
 
-        # 检查格式特征（加粗）
-        # if para.runs and para.runs[0].bold:
-        #     # 可能是未知的章节标题
-        #     pass
-
         return SectionType.UNKNOWN
 
-    def _detect_entries(self, paragraphs: List['Paragraph'],
+
+class EntryDetector:
+    """动态条目检测器：负责解析工作经历、项目经历等条目"""
+
+    def __init__(self):
+        self.stats = {
+            'entries_detected': 0
+        }
+
+    def detect_entries(self, paragraphs: List['Paragraph'],
                        sections: List[SectionInfo]) -> List[EntryInfo]:
         """
         检测动态条目（工作经历、项目经历、教育背景）
@@ -318,11 +284,11 @@ class StructureDetector:
                     continue
 
                 # 检测时间开头的行（新条目标志）
-                time_match = self.TIME_PATTERN.match(text)
-                # 检测时间在末尾的行（如 "公司 | 职位 | 2006.3 – 2025.12"）
-                trailing_match = self.TRAILING_TIME_PATTERN.match(text) if not time_match else None
-                # 检测编号列表开头的行（如 "1. 项目名 —— 描述"）
-                numbered_match = self.NUMBERED_LIST_PATTERN.match(text) if not time_match and not trailing_match else None
+                time_match = ResumePatterns.TIME_PATTERN.match(text)
+                # 检测时间在末尾的行
+                trailing_match = ResumePatterns.TRAILING_TIME_PATTERN.match(text) if not time_match else None
+                # 检测编号列表开头的行
+                numbered_match = ResumePatterns.NUMBERED_LIST_PATTERN.match(text) if not time_match and not trailing_match else None
 
                 if time_match or trailing_match or numbered_match:
                     # 保存上一个条目
@@ -335,12 +301,10 @@ class StructureDetector:
                         rest = text[time_match.end():].strip()
                         org, role = self._parse_entry_header(rest)
                     elif trailing_match:
-                        # 时间在末尾格式: "公司 | 职位 | 时间"
                         time_str = trailing_match.group(3).strip()
                         org = trailing_match.group(1).strip()
                         role = trailing_match.group(2).strip()
                     else:
-                        # 编号列表格式: "1. 项目名 —— 描述"
                         time_str = ''
                         rest = numbered_match.group(2).strip()
                         org, role = self._parse_entry_header(rest)
@@ -353,7 +317,7 @@ class StructureDetector:
                         role=role,
                         content_paragraphs=[]
                     )
-                    self.detection_stats['entries_detected'] += 1
+                    self.stats['entries_detected'] += 1
                     logger.debug(f"检测到条目: {time_str} {org} {role} (段落 {i})")
 
                 elif current_entry:
@@ -389,6 +353,74 @@ class StructureDetector:
         # 没有分隔符，整体作为组织名
         return text.strip(), ''
 
+
+class StructureDetector:
+    """
+    简历结构检测器
+
+    检测策略：
+    1. 姓名检测：文档开头短文本（2-10字符，纯中文）
+    2. 联系方式检测：正则匹配电话/邮箱
+    3. 章节标题检测：关键词匹配 + 格式特征（加粗、字号）
+    4. 动态条目检测：时间-公司-职位模式
+
+    架构说明：
+    使用组合模式替代单一 God Class，将检测逻辑拆分到：
+    - BasicInfoDetector: 处理姓名和联系方式
+    - SectionDetector: 处理章节标题
+    - EntryDetector: 处理动态条目
+    """
+
+    def __init__(self):
+        # 组合各个子检测器
+        self.basic_detector = BasicInfoDetector()
+        self.section_detector = SectionDetector()
+        self.entry_detector = EntryDetector()
+
+    def detect_structure(self, doc: 'Document') -> StructureMap:
+        """
+        检测文档结构
+
+        Args:
+            doc: python-docx Document 对象
+
+        Returns:
+            StructureMap: 结构映射
+        """
+        if not HAS_PYTHON_DOCX:
+            raise ImportError("未安装 python-docx")
+
+        structure = StructureMap()
+
+        # 获取所有段落
+        paragraphs = list(doc.paragraphs)
+
+        # 1. 检测姓名（通常在前几行）
+        structure.name_paragraph_index = self.basic_detector.detect_name(paragraphs)
+
+        # 2. 检测联系方式
+        structure.contact_paragraph_index = self.basic_detector.detect_contact(paragraphs)
+
+        # 3. 检测章节标题
+        structure.sections = self.section_detector.detect_sections(paragraphs)
+
+        # 4. 检测动态条目
+        structure.entries = self.entry_detector.detect_entries(paragraphs, structure.sections)
+
+        # 5. 计算置信度
+        structure.confidence = self._calculate_confidence(structure)
+
+        # 6. 生成预览文本
+        structure.raw_text_preview = '\n'.join(
+            p.text[:50] + '...' if len(p.text) > 50 else p.text
+            for p in paragraphs[:10]
+        )
+
+        logger.info(f"结构检测完成: 置信度 {structure.confidence:.2f}, "
+                   f"章节 {len(structure.sections)}, 条目 {len(structure.entries)}")
+
+        return structure
+
     def _calculate_confidence(self, structure: StructureMap) -> float:
         """
         计算检测置信度
@@ -421,4 +453,9 @@ class StructureDetector:
 
     def get_stats(self) -> Dict[str, int]:
         """获取检测统计信息"""
-        return self.detection_stats.copy()
+        # 聚合所有子模块的统计信息
+        total_stats = {}
+        total_stats.update(self.basic_detector.stats)
+        total_stats.update(self.section_detector.stats)
+        total_stats.update(self.entry_detector.stats)
+        return total_stats

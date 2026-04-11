@@ -83,8 +83,8 @@ class ModelManager:
 
         # 模型列表：首选 -> 备选
         models_to_try = [preferred_model] + self.fallback_models
-        # 去重
-        models_to_try = list(dict.fromkeys(models_to_try))
+        # 去重并创建新列表副本
+        models_to_try = list(dict.fromkeys(models_to_try))[:]
 
         last_error = None
 

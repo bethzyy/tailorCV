@@ -42,16 +42,9 @@ class TemplateMetadata:
     entries_detected: int = 0                  # 检测到的条目数
 
 
-class JinjaTagInserter:
-    """
-    Jinja2 标记插入器
-
-    将普通 Word 文档转换为 Jinja2 模板，支持：
-    1. 静态变量：{{ basic_info.name }}
-    2. 动态循环：{%tr for exp in work_experience %} ... {%tr endfor %}
-    3. 条件判断：{%p if summary %} ... {%p endif %}
-    """
-
+class VariableMapper:
+    """变量映射配置类"""
+    
     # 变量名映射
     VARIABLE_MAPPING = {
         SectionType.BASIC_INFO: {
@@ -100,86 +93,185 @@ class JinjaTagInserter:
         },
     }
 
-    def __init__(self):
-        self.insertion_stats = {
-            'static_variables': 0,
-            'dynamic_loops': 0,
-            'conditional_blocks': 0,
-            'failed': 0
+
+class ParagraphFormatter:
+    """段落格式处理工具类"""
+
+    @staticmethod
+    def save_run_format(run: 'Run') -> Optional[Dict[str, Any]]:
+        """保存 Run 的格式信息"""
+        if not run:
+            return None
+        return {
+            'font_name': run.font.name,
+            'font_size': run.font.size,
+            'font_bold': run.font.bold,
+            'font_color': run.font.color.rgb if run.font.color.rgb else None,
+            'font_italic': run.font.italic,
+            'font_underline': run.font.underline
         }
 
-    def insert_tags(self, doc: 'Document', structure: StructureMap,
-                   template_id: str) -> Tuple['Document', TemplateMetadata]:
+    @staticmethod
+    def save_para_format(para: 'Paragraph') -> Dict[str, Any]:
+        """保存段落的格式信息"""
+        return {
+            'alignment': para.paragraph_format.alignment,
+            'space_before': para.paragraph_format.space_before,
+            'space_after': para.paragraph_format.space_after,
+            'line_spacing': para.paragraph_format.line_spacing,
+            'style': para.style
+        }
+
+    @staticmethod
+    def restore_format(run: 'Run', run_info: Dict[str, Any], para_info: Dict[str, Any]):
+        """恢复格式到 Run 和 Paragraph"""
+        if run_info:
+            if run_info['font_name']:
+                run.font.name = run_info['font_name']
+            if run_info['font_size']:
+                run.font.size = run_info['font_size']
+            if run_info['font_bold'] is not None:
+                run.font.bold = run_info['font_bold']
+            if run_info['font_color']:
+                run.font.color.rgb = run_info['font_color']
+            if run_info['font_italic'] is not None:
+                run.font.italic = run_info['font_italic']
+            if run_info['font_underline'] is not None:
+                run.font.underline = run_info['font_underline']
+        
+        # 恢复段落格式
+        para = run._element.getparent().getparent()
+        if para_info['alignment'] is not None:
+            para.paragraph_format.alignment = para_info['alignment']
+        if para_info['space_before'] is not None:
+            para.paragraph_format.space_before = para_info['space_before']
+        if para_info['space_after'] is not None:
+            para.paragraph_format.space_after = para_info['space_after']
+        if para_info['line_spacing'] is not None:
+            para.paragraph_format.line_spacing = para_info['line_spacing']
+
+        # 如果没有 run 格式，尝试使用段落样式
+        if not run_info and para_info['style'] and para_info['style'].font:
+            run.font.name = para_info['style'].font.name
+            run.font.size = para_info['style'].font.size
+            run.font.bold = para_info['style'].font.bold
+
+    @staticmethod
+    def replace_paragraph_text(para: 'Paragraph', new_text: str):
         """
-        在文档中插入 Jinja2 标记
+        替换段落文本，保留段落格式和第一个 run 的字体格式
 
         Args:
-            doc: python-docx Document 对象
-            structure: 结构映射
-            template_id: 模板ID
+            para: 段落对象
+            new_text: 新文本
+        """
+        # 保存第一个 run 的格式（如果存在）
+        first_run_info = None
+        if para.runs:
+            first_run_info = ParagraphFormatter.save_run_format(para.runs[0])
+
+        # 保存段落格式
+        para_info = ParagraphFormatter.save_para_format(para)
+
+        # 清除所有 runs
+        para.clear()
+
+        # 添加新的 run
+        run = para.add_run(new_text)
+
+        # 恢复格式
+        ParagraphFormatter.restore_format(run, first_run_info, para_info)
+
+
+class ContactHandler:
+    """联系方式处理类"""
+
+    @staticmethod
+    def detect_separator(text: str) -> Optional[str]:
+        """
+        检测联系方式中的分隔符
+
+        Args:
+            text: 原始联系方式文本
 
         Returns:
-            Tuple[Document, TemplateMetadata]: (标记后的文档, 模板元数据)
+            Optional[str]: 分隔符，如果没有则返回 None
         """
-        if not HAS_PYTHON_DOCX:
-            raise ImportError("未安装 python-docx")
+        # 常见分隔符优先级（包括全角和半角字符）
+        separators = ['|', '｜', '/', '／', '·', '•', '-', '—']
 
-        # 创建文档副本（通过保存和重新加载，确保深拷贝）
-        # deepcopy 对 python-docx 对象不完全有效
-        bio = io.BytesIO()
-        doc.save(bio)
-        bio.seek(0)
-        tagged_doc = Document(bio)
+        for sep in separators:
+            if sep in text:
+                return sep
 
-        variables = []
-        has_dynamic = False
+        return None
 
-        # 1. 处理姓名
-        if structure.name_paragraph_index is not None:
-            self._insert_name_tag(tagged_doc, structure.name_paragraph_index)
-            variables.append('basic_info.name')
-            self.insertion_stats['static_variables'] += 1
+    @staticmethod
+    def insert_tag(doc: 'Document', para_index: int):
+        """
+        在联系方式段落插入变量标记 - 保留原始格式
 
-        # 2. 处理联系方式
-        if structure.contact_paragraph_index is not None:
-            self._insert_contact_tag(tagged_doc, structure.contact_paragraph_index)
-            variables.extend(['basic_info.phone', 'basic_info.email', 'basic_info.location'])
-            self.insertion_stats['static_variables'] += 1
+        分析原始联系方式的格式，保留分隔符和布局，
+        只将电话、邮箱、地址替换为 Jinja2 变量。
+        """
+        para = doc.paragraphs[para_index]
+        original_text = para.text.strip()
 
-        # 3. 处理各章节
-        for section in structure.sections:
-            if section.is_dynamic:
-                # 动态章节（循环）
-                section_vars = self._insert_dynamic_section(
-                    tagged_doc, section, structure.entries
-                )
-                variables.extend(section_vars)
-                has_dynamic = True
-                self.insertion_stats['dynamic_loops'] += 1
-            else:
-                # 静态章节
-                section_var = self._insert_static_section(tagged_doc, section)
-                if section_var:
-                    variables.append(section_var)
-                    self.insertion_stats['static_variables'] += 1
+        # 保存原始格式
+        original_runs = []
+        for run in para.runs:
+            run_info = {
+                'text': run.text,
+                'font_name': run.font.name,
+                'font_size': run.font.size,
+                'font_bold': run.font.bold,
+                'font_color': run.font.color.rgb if run.font.color.rgb else None
+            }
+            original_runs.append(run_info)
 
-        # 创建元数据
-        metadata = TemplateMetadata(
-            template_id=template_id,
-            original_filename='',  # 由调用方设置
-            structure_confidence=structure.confidence,
-            variables=list(set(variables)),
-            has_dynamic_content=has_dynamic,
-            sections_detected=len(structure.sections),
-            entries_detected=len(structure.entries)
-        )
+        # 分析原始文本，提取分隔符
+        separator = ContactHandler.detect_separator(original_text)
 
-        logger.info(f"Jinja2 标记插入完成: {len(variables)} 变量, "
-                   f"动态内容: {has_dynamic}")
+        # 使用简单的变量替换语法（不使用条件判断）
+        # 因为 docxtpl 在同一段落中的条件语法支持有限
+        if separator:
+            contact_template = (
+                f'电话: {{{{ basic_info.phone }}}} {separator} '
+                f'邮箱: {{{{ basic_info.email }}}} {separator} '
+                f'现居: {{{{ basic_info.location }}}}'
+            )
+        else:
+            contact_template = (
+                '电话: {{ basic_info.phone }} '
+                '邮箱: {{ basic_info.email }} '
+                '现居: {{ basic_info.location }}'
+            )
 
-        return tagged_doc, metadata
+        # 保留第一个 run 的格式
+        if original_runs:
+            first_run_info = original_runs[0]
+            para.clear()
+            new_run = para.add_run(contact_template)
+            if first_run_info['font_name']:
+                new_run.font.name = first_run_info['font_name']
+            if first_run_info['font_size']:
+                new_run.font.size = first_run_info['font_size']
+            if first_run_info['font_bold'] is not None:
+                new_run.font.bold = first_run_info['font_bold']
+            if first_run_info['font_color']:
+                new_run.font.color.rgb = first_run_info['font_color']
+        else:
+            para.clear()
+            para.add_run(contact_template)
 
-    def _insert_name_tag(self, doc: 'Document', para_index: int):
+        logger.debug(f"插入联系方式变量 (段落 {para_index})")
+
+
+class NameHandler:
+    """姓名处理类"""
+
+    @staticmethod
+    def insert_tag(doc: 'Document', para_index: int):
         """
         在姓名段落插入变量标记 - 保留原始格式
 
@@ -220,85 +312,14 @@ class JinjaTagInserter:
 
         logger.debug(f"插入姓名变量 (段落 {para_index})")
 
-    def _insert_contact_tag(self, doc: 'Document', para_index: int):
-        """
-        在联系方式段落插入变量标记 - 保留原始格式
 
-        分析原始联系方式的格式，保留分隔符和布局，
-        只将电话、邮箱、地址替换为 Jinja2 变量。
-        """
-        para = doc.paragraphs[para_index]
-        original_text = para.text.strip()
+class SectionInserter:
+    """章节插入处理类"""
 
-        # 保存原始格式
-        original_runs = []
-        for run in para.runs:
-            run_info = {
-                'text': run.text,
-                'font_name': run.font.name,
-                'font_size': run.font.size,
-                'font_bold': run.font.bold,
-                'font_color': run.font.color.rgb if run.font.color.rgb else None
-            }
-            original_runs.append(run_info)
+    def __init__(self, variable_mapper: VariableMapper):
+        self.mapper = variable_mapper
 
-        # 分析原始文本，提取分隔符
-        separator = self._detect_contact_separator(original_text)
-
-        # 使用简单的变量替换语法（不使用条件判断）
-        # 因为 docxtpl 在同一段落中的条件语法支持有限
-        if separator:
-            contact_template = (
-                f'电话: {{{{ basic_info.phone }}}} {separator} '
-                f'邮箱: {{{{ basic_info.email }}}} {separator} '
-                f'现居: {{{{ basic_info.location }}}}'
-            )
-        else:
-            contact_template = (
-                '电话: {{ basic_info.phone }} '
-                '邮箱: {{ basic_info.email }} '
-                '现居: {{ basic_info.location }}'
-            )
-
-        # 保留第一个 run 的格式
-        if original_runs:
-            first_run_info = original_runs[0]
-            para.clear()
-            new_run = para.add_run(contact_template)
-            if first_run_info['font_name']:
-                new_run.font.name = first_run_info['font_name']
-            if first_run_info['font_size']:
-                new_run.font.size = first_run_info['font_size']
-            if first_run_info['font_bold'] is not None:
-                new_run.font.bold = first_run_info['font_bold']
-            if first_run_info['font_color']:
-                new_run.font.color.rgb = first_run_info['font_color']
-        else:
-            para.clear()
-            para.add_run(contact_template)
-
-        logger.debug(f"插入联系方式变量 (段落 {para_index})")
-
-    def _detect_contact_separator(self, text: str) -> Optional[str]:
-        """
-        检测联系方式中的分隔符
-
-        Args:
-            text: 原始联系方式文本
-
-        Returns:
-            Optional[str]: 分隔符，如果没有则返回 None
-        """
-        # 常见分隔符优先级（包括全角和半角字符）
-        separators = ['|', '｜', '/', '／', '·', '•', '-', '—']
-
-        for sep in separators:
-            if sep in text:
-                return sep
-
-        return None
-
-    def _insert_static_section(self, doc: 'Document', section: SectionInfo) -> Optional[str]:
+    def insert_static(self, doc: 'Document', section: SectionInfo) -> Optional[str]:
         """
         处理静态章节（个人简介、自我评价）
 
@@ -309,7 +330,7 @@ class JinjaTagInserter:
         Returns:
             Optional[str]: 变量名，如果没有处理则返回 None
         """
-        var_name = self.VARIABLE_MAPPING.get(section.section_type)
+        var_name = self.mapper.VARIABLE_MAPPING.get(section.section_type)
         if not var_name:
             return None
 
@@ -330,7 +351,7 @@ class JinjaTagInserter:
 
         # 使用简单变量替换（不使用 {%p %} 条件标签，避免 XML runs 拆分导致 docxtpl 解析失败）
         template_text = f'{{{{ {var_name} }}}}'
-        self._replace_paragraph_text(para, template_text)
+        ParagraphFormatter.replace_paragraph_text(para, template_text)
 
         # 清除其他内容段落
         for idx in content_paras[1:]:
@@ -339,8 +360,8 @@ class JinjaTagInserter:
         logger.debug(f"插入静态章节变量: {var_name}")
         return var_name
 
-    def _insert_dynamic_section(self, doc: 'Document', section: SectionInfo,
-                               entries: List[EntryInfo]) -> List[str]:
+    def insert_dynamic(self, doc: 'Document', section: SectionInfo,
+                       entries: List[EntryInfo]) -> List[str]:
         """
         处理动态章节（工作经历、项目经历、教育背景）
 
@@ -354,7 +375,7 @@ class JinjaTagInserter:
         Returns:
             List[str]: 使用的变量列表
         """
-        loop_config = self.LOOP_VARIABLES.get(section.section_type)
+        loop_config = self.mapper.LOOP_VARIABLES.get(section.section_type)
         if not loop_config:
             return []
 
@@ -395,14 +416,14 @@ class JinjaTagInserter:
 
         if insert_idx < len(doc.paragraphs):
             para = doc.paragraphs[insert_idx]
-            self._replace_paragraph_text(para, template_text)
+            ParagraphFormatter.replace_paragraph_text(para, template_text)
 
             # 替换下一个内容段落为 tailored 变量
             next_idx = insert_idx + 1
             while next_idx < len(doc.paragraphs):
                 next_para = doc.paragraphs[next_idx]
                 if next_para.text.strip():
-                    self._replace_paragraph_text(
+                    ParagraphFormatter.replace_paragraph_text(
                         next_para,
                         f'{{{{ {list_var}_0_tailored }}}}'
                     )
@@ -472,14 +493,14 @@ class JinjaTagInserter:
         else:
             template = f'{{{{ {list_var}_{index}_name }}}}'
 
-        self._replace_paragraph_text(para, template)
+        ParagraphFormatter.replace_paragraph_text(para, template)
 
         # 处理内容段落 → 合并到第一个，替换为 tailored 变量
         if entry.content_paragraphs:
             first_content_idx = entry.content_paragraphs[0]
             if first_content_idx < len(doc.paragraphs):
                 content_para = doc.paragraphs[first_content_idx]
-                self._replace_paragraph_text(
+                ParagraphFormatter.replace_paragraph_text(
                     content_para,
                     f'{{{{ {list_var}_{index}_tailored }}}}'
                 )
@@ -490,17 +511,17 @@ class JinjaTagInserter:
             for idx in entry.content_paragraphs[1:]:
                 if idx < len(doc.paragraphs):
                     paragraphs_to_remove.append(doc.paragraphs[idx])
-            for para in paragraphs_to_remove:
-                parent = para._element.getparent()
+            for p in paragraphs_to_remove:
+                parent = p._element.getparent()
                 if parent is not None:
-                    parent.remove(para._element)
+                    parent.remove(p._element)
         else:
             # 兜底：content_paragraphs 为空时，向前扫描找到内容段落
             next_idx = entry.paragraph_index + 1
             while next_idx < len(doc.paragraphs):
                 next_para = doc.paragraphs[next_idx]
                 if next_para.text.strip():
-                    self._replace_paragraph_text(
+                    ParagraphFormatter.replace_paragraph_text(
                         next_para,
                         f'{{{{ {list_var}_{index}_tailored }}}}'
                     )
@@ -525,69 +546,97 @@ class JinjaTagInserter:
 
         logger.debug(f"插入简单条目变量 (段落 {entry.paragraph_index}, 索引 {index})")
 
-    def _replace_paragraph_text(self, para: 'Paragraph', new_text: str):
+
+class JinjaTagInserter:
+    """
+    Jinja2 标记插入器
+
+    将普通 Word 文档转换为 Jinja2 模板，支持：
+    1. 静态变量：{{ basic_info.name }}
+    2. 动态循环：{%tr for exp in work_experience %} ... {%tr endfor %}
+    3. 条件判断：{%p if summary %} ... {%p endif %}
+    """
+
+    def __init__(self):
+        self.insertion_stats = {
+            'static_variables': 0,
+            'dynamic_loops': 0,
+            'conditional_blocks': 0,
+            'failed': 0
+        }
+        self.mapper = VariableMapper()
+        self.section_inserter = SectionInserter(self.mapper)
+
+    def insert_tags(self, doc: 'Document', structure: StructureMap,
+                   template_id: str) -> Tuple['Document', TemplateMetadata]:
         """
-        替换段落文本，保留段落格式和第一个 run 的字体格式
+        在文档中插入 Jinja2 标记
 
         Args:
-            para: 段落对象
-            new_text: 新文本
+            doc: python-docx Document 对象
+            structure: 结构映射
+            template_id: 模板ID
+
+        Returns:
+            Tuple[Document, TemplateMetadata]: (标记后的文档, 模板元数据)
         """
-        # 保存第一个 run 的格式（如果存在）
-        first_run_info = None
-        if para.runs:
-            first_run = para.runs[0]
-            first_run_info = {
-                'font_name': first_run.font.name,
-                'font_size': first_run.font.size,
-                'font_bold': first_run.font.bold,
-                'font_color': first_run.font.color.rgb if first_run.font.color.rgb else None,
-                'font_italic': first_run.font.italic,
-                'font_underline': first_run.font.underline
-            }
+        if not HAS_PYTHON_DOCX:
+            raise ImportError("未安装 python-docx")
 
-        # 保存段落格式
-        para_alignment = para.paragraph_format.alignment
-        para_space_before = para.paragraph_format.space_before
-        para_space_after = para.paragraph_format.space_after
-        para_line_spacing = para.paragraph_format.line_spacing
+        # 创建文档副本（通过保存和重新加载，确保深拷贝）
+        # deepcopy 对 python-docx 对象不完全有效
+        bio = io.BytesIO()
+        doc.save(bio)
+        bio.seek(0)
+        tagged_doc = Document(bio)
 
-        # 清除所有 runs
-        para.clear()
+        variables = []
+        has_dynamic = False
 
-        # 添加新的 run
-        run = para.add_run(new_text)
+        # 1. 处理姓名
+        if structure.name_paragraph_index is not None:
+            NameHandler.insert_tag(tagged_doc, structure.name_paragraph_index)
+            variables.append('basic_info.name')
+            self.insertion_stats['static_variables'] += 1
 
-        # 恢复第一个 run 的格式
-        if first_run_info:
-            if first_run_info['font_name']:
-                run.font.name = first_run_info['font_name']
-            if first_run_info['font_size']:
-                run.font.size = first_run_info['font_size']
-            if first_run_info['font_bold'] is not None:
-                run.font.bold = first_run_info['font_bold']
-            if first_run_info['font_color']:
-                run.font.color.rgb = first_run_info['font_color']
-            if first_run_info['font_italic'] is not None:
-                run.font.italic = first_run_info['font_italic']
-            if first_run_info['font_underline'] is not None:
-                run.font.underline = first_run_info['font_underline']
+        # 2. 处理联系方式
+        if structure.contact_paragraph_index is not None:
+            ContactHandler.insert_tag(tagged_doc, structure.contact_paragraph_index)
+            variables.extend(['basic_info.phone', 'basic_info.email', 'basic_info.location'])
+            self.insertion_stats['static_variables'] += 1
 
-        # 恢复段落格式
-        if para_alignment is not None:
-            para.paragraph_format.alignment = para_alignment
-        if para_space_before is not None:
-            para.paragraph_format.space_before = para_space_before
-        if para_space_after is not None:
-            para.paragraph_format.space_after = para_space_after
-        if para_line_spacing is not None:
-            para.paragraph_format.line_spacing = para_line_spacing
+        # 3. 处理各章节
+        for section in structure.sections:
+            if section.is_dynamic:
+                # 动态章节（循环）
+                section_vars = self.section_inserter.insert_dynamic(
+                    tagged_doc, section, structure.entries
+                )
+                variables.extend(section_vars)
+                has_dynamic = True
+                self.insertion_stats['dynamic_loops'] += 1
+            else:
+                # 静态章节
+                section_var = self.section_inserter.insert_static(tagged_doc, section)
+                if section_var:
+                    variables.append(section_var)
+                    self.insertion_stats['static_variables'] += 1
 
-        # 如果没有 run 格式，尝试使用段落样式
-        if not first_run_info and para.style and para.style.font:
-            run.font.name = para.style.font.name
-            run.font.size = para.style.font.size
-            run.font.bold = para.style.font.bold
+        # 创建元数据
+        metadata = TemplateMetadata(
+            template_id=template_id,
+            original_filename='',  # 由调用方设置
+            structure_confidence=structure.confidence,
+            variables=list(set(variables)),
+            has_dynamic_content=has_dynamic,
+            sections_detected=len(structure.sections),
+            entries_detected=len(structure.entries)
+        )
+
+        logger.info(f"Jinja2 标记插入完成: {len(variables)} 变量, "
+                   f"动态内容: {has_dynamic}")
+
+        return tagged_doc, metadata
 
     def get_stats(self) -> Dict[str, int]:
         """获取插入统计信息"""

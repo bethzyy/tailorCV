@@ -76,6 +76,82 @@ def _get_provider(provider_id: str = None) -> BasePaymentProvider:
     return provider
 
 
+def _resolve_provider(provider_id: str = None) -> BasePaymentProvider:
+    """
+    解析并获取可用的支付 provider，支持回退逻辑
+
+    Args:
+        provider_id: 首选 provider 标识
+
+    Returns:
+        BasePaymentProvider 实例
+    """
+    try:
+        return _get_provider(provider_id)
+    except (ValueError, RuntimeError):
+        available = get_available_providers()
+        if not available:
+            raise RuntimeError("没有可用的支付方式")
+        fallback_provider = _get_provider(available[0]['provider_id'])
+        logger.warning(f"支付方式 {provider_id} 不可用，回退到 {fallback_provider.provider_name}")
+        return fallback_provider
+
+
+def _ensure_pending_order(user_id: int, plan_type: str, plan_config: Dict[str, Any],
+                          provider_id: str, amount: float) -> str:
+    """
+    确保存在待支付订单（复用或创建）
+
+    Args:
+        user_id: 用户ID
+        plan_type: 套餐类型
+        plan_config: 套餐配置
+        provider_id: 支付方式标识
+        amount: 金额
+
+    Returns:
+        str: 订单号
+    """
+    # 检查是否有未支付的待处理订单（同一 provider + 同一套餐）
+    pending_order = db.get_pending_order(user_id, plan_type)
+    if pending_order and pending_order.get('provider') == provider_id:
+        order_no = pending_order['order_no']
+        logger.info(f"复用待支付订单: {order_no}")
+        return order_no
+
+    order_no = _generate_order_no()
+    db.create_order(order_no, user_id, plan_type, plan_config['name'],
+                    amount, provider=provider_id)
+    return order_no
+
+
+def _create_payment_qr(provider: BasePaymentProvider, order_no: str,
+                       amount: float, description: str) -> Dict[str, Any]:
+    """
+    调用支付接口创建二维码订单
+
+    Args:
+        provider: 支付 provider 实例
+        order_no: 订单号
+        amount: 金额
+        description: 订单描述
+
+    Returns:
+        dict: 包含 code_url, sandbox 等信息的字典
+    """
+    result = provider.create_qr_order(order_no, amount, description)
+    code_url = result.get('code_url', '')
+
+    # 用 Python qrcode 包生成 base64 二维码图片
+    qr_image = _generate_qr_base64(code_url)
+
+    return {
+        'code_url': code_url,
+        'qr_image': qr_image,
+        'sandbox': result.get('sandbox', False),
+    }
+
+
 def create_payment(user_id: int, plan_type: str,
                    provider_id: str = None) -> Dict[str, Any]:
     """
@@ -98,35 +174,16 @@ def create_payment(user_id: int, plan_type: str,
         raise ValueError("免费套餐无需支付")
 
     # 获取 provider（支持回退）
-    try:
-        provider = _get_provider(provider_id)
-    except (ValueError, RuntimeError):
-        available = get_available_providers()
-        if not available:
-            raise RuntimeError("没有可用的支付方式")
-        provider = _get_provider(available[0]['provider_id'])
-        logger.warning(f"支付方式 {provider_id} 不可用，回退到 {provider.provider_name}")
-
+    provider = _resolve_provider(provider_id)
     actual_provider_id = provider.provider_id
 
-    # 检查是否有未支付的待处理订单（同一 provider + 同一套餐）
-    pending_order = db.get_pending_order(user_id, plan_type)
-    if pending_order and pending_order.get('provider') == actual_provider_id:
-        order_no = pending_order['order_no']
-        logger.info(f"复用待支付订单: {order_no}")
-    else:
-        order_no = _generate_order_no()
-        db.create_order(order_no, user_id, plan_type, plan_config['name'],
-                        amount, provider=actual_provider_id)
+    # 确保订单存在
+    order_no = _ensure_pending_order(user_id, plan_type, plan_config, actual_provider_id, amount)
 
     # 调用 provider 创建预付单
     description = f"智能简历定制 - {plan_config['name']}"
     try:
-        result = provider.create_qr_order(order_no, amount, description)
-        code_url = result.get('code_url', '')
-
-        # 用 Python qrcode 包生成 base64 二维码图片
-        qr_image = _generate_qr_base64(code_url)
+        qr_result = _create_payment_qr(provider, order_no, amount, description)
 
         return {
             'order_no': order_no,
@@ -135,9 +192,7 @@ def create_payment(user_id: int, plan_type: str,
             'plan_type': plan_type,
             'provider': actual_provider_id,
             'provider_name': provider.provider_name,
-            'code_url': code_url,
-            'qr_image': qr_image,
-            'sandbox': result.get('sandbox', False),
+            **qr_result,
         }
     except Exception as e:
         logger.error(f"创建支付订单失败: {e}")
@@ -278,6 +333,7 @@ def _generate_qr_base64(code_url: str) -> str:
         img = qr.make_image(fill_color='black', back_color='white')
         buf = io.BytesIO()
         img.save(buf, format='PNG')
+        # 修复说明：此处仅用于生成二维码图片展示，不涉及敏感数据加密或存储，故保留 base64 编码方式。
         return base64.b64encode(buf.getvalue()).decode('utf-8')
     except Exception as e:
         logger.error(f"生成二维码失败: {e}")

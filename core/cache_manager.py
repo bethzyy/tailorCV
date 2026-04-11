@@ -101,6 +101,7 @@ class CacheManager:
             return None
 
         try:
+            # 使用 with 语句自动管理资源
             with open(cache_file, 'r', encoding='utf-8') as f:
                 cached = json.load(f)
 
@@ -143,6 +144,7 @@ class CacheManager:
                 'result': result
             }
 
+            # 使用 with 语句自动管理资源
             with open(cache_file, 'w', encoding='utf-8') as f:
                 json.dump(cached, f, ensure_ascii=False, indent=2)
 
@@ -187,6 +189,7 @@ class CacheManager:
 
         for cache_file in self.cache_dir.glob("*.json"):
             try:
+                # 使用 with 语句自动管理资源
                 with open(cache_file, 'r', encoding='utf-8') as f:
                     cached = json.load(f)
 

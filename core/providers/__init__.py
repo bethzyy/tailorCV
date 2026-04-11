@@ -16,3 +16,27 @@ __all__ = [
     'AlibabaProvider',
     'AntiGravityProvider',
 ]
+
+# 延迟导入以避免循环导入
+def get_provider(provider_name: str, config: dict) -> BaseModelProvider:
+    """
+    工厂函数：根据配置获取对应的模型提供者实例
+    
+    Args:
+        provider_name: 提供者名称
+        config: 配置字典
+        
+    Returns:
+        BaseModelProvider: 模型提供者实例
+    """
+    providers = {
+        'zhipu': ZhipuProvider,
+        'alibaba': AlibabaProvider,
+        'antigravity': AntiGravityProvider,
+    }
+    
+    provider_class = providers.get(provider_name.lower())
+    if not provider_class:
+        raise ValueError(f"Unknown provider: {provider_name}")
+    
+    return provider_class(config)

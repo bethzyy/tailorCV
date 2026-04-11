@@ -71,12 +71,37 @@ class AntiGravityProvider(BaseModelProvider):
     def available_models(self) -> Dict[str, str]:
         return self.MODELS.copy()
 
+    def _validate_url(self, url: str) -> bool:
+        """验证 URL 是否为合法的内网地址，防止 SSRF 攻击"""
+        from urllib.parse import urlparse
+
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+
+        # 如果解析失败，拒绝请求
+        if not hostname:
+            return False
+
+        # 允许 localhost 和 127.0.0.1
+        if hostname in ('localhost', '127.0.0.1'):
+            return True
+
+        # 拒绝其他所有地址（防止访问公网或内网其他IP）
+        return False
+
     def is_available(self) -> bool:
         """通过探测 /models 端点检测代理是否在线"""
         if self._available is not None:
             return self._available
         try:
             url = f"{self._base_url}/models"
+            
+            # SSRF 防护：验证 URL
+            if not self._validate_url(url):
+                logger.warning(f"AntiGravity URL 验证失败 (SSRF 防护): {url}")
+                self._available = False
+                return self._available
+
             req = urllib.request.Request(url, method='GET')
             with urllib.request.urlopen(req, timeout=3) as resp:
                 self._available = resp.status == 200
