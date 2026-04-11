@@ -32,15 +32,16 @@ class ZhipuProvider(BaseModelProvider):
         'glm-4-air': 'GLM-4-Air',
     }
 
-    def __init__(self, api_key: str = None):
+    def __init__(self, api_key: str = None, client=None):
         """
         初始化智谱AI提供者
 
         Args:
             api_key: API密钥（可选，默认从环境变量读取）
+            client: 外部注入的Anthropic客户端（可选，用于依赖注入避免循环导入）
         """
         self._api_key = api_key or os.getenv('ZHIPU_API_KEY', '')
-        self._client = None
+        self._client = client
 
         # 调用统计
         self.stats = {
@@ -81,6 +82,67 @@ class ZhipuProvider(BaseModelProvider):
         """检查智谱AI是否可用"""
         return bool(self._api_key)
 
+    def _execute_api_call(self, model_id: str, prompt: str,
+                          max_tokens: int) -> tuple:
+        """
+        执行单次API调用
+
+        Args:
+            model_id: 模型ID
+            prompt: 输入提示词
+            max_tokens: 最大输出token数
+
+        Returns:
+            tuple: (response, latency_ms)
+        """
+        start_time = time.time()
+
+        # Anthropic 风格的 API 调用
+        response = self._client.messages.create(
+            model=model_id,
+            max_tokens=max_tokens,
+            messages=[{
+                "role": "user",
+                "content": prompt
+            }]
+        )
+
+        latency_ms = int((time.time() - start_time) * 1000)
+        return response, latency_ms
+
+    def _build_success_response(self, response, latency_ms: int,
+                                model_id: str, model_name: str) -> ModelResponse:
+        """
+        构建成功响应并更新统计
+
+        Args:
+            response: API响应对象
+            latency_ms: 延迟毫秒数
+            model_id: 模型ID
+            model_name: 模型名称
+
+        Returns:
+            ModelResponse: 模型响应
+        """
+        content = response.content[0].text
+
+        # 更新统计
+        total_tokens = response.usage.input_tokens + response.usage.output_tokens
+        self.stats['success_calls'] += 1
+        self.stats['total_tokens'] += total_tokens
+        self.stats['total_latency_ms'] += latency_ms
+
+        logger.info(f"智谱AI调用成功: model={model_id}, tokens={total_tokens}, latency={latency_ms}ms")
+
+        return ModelResponse(
+            success=True,
+            content=content,
+            model_id=model_id,
+            model_name=model_name,
+            tokens_used=total_tokens,
+            latency_ms=latency_ms
+        )
+
     def call(self, prompt: str, model_id: str = None,
              max_tokens: int = 4096, temperature: float = 0.7,
              max_retries: int = 3, **kwargs) -> ModelResponse:
@@ -107,36 +169,11 @@ class ZhipuProvider(BaseModelProvider):
         last_error = None
         for attempt in range(max_retries):
             try:
-                start_time = time.time()
-
-                # Anthropic 风格的 API 调用
-                response = self._client.messages.create(
-                    model=model_id,
-                    max_tokens=max_tokens,
-                    messages=[{
-                        "role": "user",
-                        "content": prompt
-                    }]
+                response, latency_ms = self._execute_api_call(
+                    model_id, prompt, max_tokens
                 )
-
-                latency_ms = int((time.time() - start_time) * 1000)
-                content = response.content[0].text
-
-                # 更新统计
-                total_tokens = response.usage.input_tokens + response.usage.output_tokens
-                self.stats['success_calls'] += 1
-                self.stats['total_tokens'] += total_tokens
-                self.stats['total_latency_ms'] += latency_ms
-
-                logger.info(f"智谱AI调用成功: model={model_id}, tokens={total_tokens}, latency={latency_ms}ms")
-
-                return ModelResponse(
-                    success=True,
-                    content=content,
-                    model_id=model_id,
-                    model_name=model_name,
-                    tokens_used=total_tokens,
-                    latency_ms=latency_ms
+                return self._build_success_response(
+                    response, latency_ms, model_id, model_name
                 )
 
             except Exception as e:
