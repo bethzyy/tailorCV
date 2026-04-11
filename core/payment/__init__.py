@@ -28,7 +28,6 @@ from .base import BasePaymentProvider
 logger = logging.getLogger(__name__)
 
 # 注册所有支付 provider
-# 修复说明：移除对具体实现类的直接导入，改为延迟加载或工厂模式，以解决循环导入问题。
 _providers: Dict[str, BasePaymentProvider] = {}
 
 def _init_providers():
@@ -125,7 +124,6 @@ def _ensure_pending_order(user_id: int, plan_type: str, plan_config: Dict[str, A
         str: 订单号
     """
     # 检查是否有未支付的待处理订单（同一 provider + 同一套餐）
-    # 修复说明：增加数据库操作的错误处理
     try:
         pending_order = db.get_pending_order(user_id, plan_type)
         if pending_order and pending_order.get('provider') == provider_id:
@@ -240,7 +238,6 @@ def handle_payment_notify(request: Request, provider_id: str) -> bool:
         transaction_id = notify_data.get('transaction_id', '')
 
         # 查询订单
-        # 修复说明：增加数据库操作的错误处理
         try:
             order = db.get_order(order_no)
             if not order:
@@ -280,7 +277,6 @@ def query_payment(order_no: str) -> Dict[str, Any]:
         dict: {status, paid_at, ...}
     """
     _init_providers()
-    # 修复说明：增加数据库操作的错误处理
     try:
         order = db.get_order(order_no)
         if not order:
@@ -321,7 +317,6 @@ def simulate_payment(order_no: str) -> bool:
     """
     模拟支付成功（仅沙箱环境使用）
     """
-    # 修复说明：增加数据库操作的错误处理
     try:
         order = db.get_order(order_no)
         if not order or order['status'] != 'pending':
