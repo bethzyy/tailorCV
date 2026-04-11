@@ -23,6 +23,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+from core.auth import authenticate_user  # 修复循环导入问题
+from core.cache_manager import CacheManager  # 修复循环导入问题
+from core.config import config  # 修复循环导入问题
+from core.database import db  # 修复循环导入问题
+from apps.simple_app import create_app  # 修复循环导入问题
 
 def clear_pycache(project_root: Path) -> int:
     """清理所有 __pycache__ 目录"""
@@ -102,7 +107,6 @@ def clear_all_caches(is_development: bool):
             logger.info(f"  cache/: 已清理 {biz_count} 个文件（全量）")
     else:
         try:
-            from core.cache_manager import CacheManager
             cm = CacheManager()
             biz_count = cm.clear_all()
             if biz_count > 0:
@@ -112,7 +116,6 @@ def clear_all_caches(is_development: bool):
 
     # 3. 清理过期 storage 文件（所有模式都清理）
     try:
-        from core.config import config
         retention_days = config.HISTORY_RETENTION_DAYS
     except Exception:
         retention_days = 30
@@ -123,7 +126,6 @@ def clear_all_caches(is_development: bool):
 
     # 4. 清理数据库过期数据（所有模式都清理）
     try:
-        from core.database import db
         db_count = db.cleanup_expired()
         if db_count > 0:
             logger.info(f"  数据库: 已清理 {db_count} 条过期记录")
@@ -143,7 +145,6 @@ if __name__ == '__main__':
 
     # 验证配置
     try:
-        from core.config import config
         config.validate()
     except ValueError as e:
         logger.error(f"配置验证失败: {e}")
@@ -152,16 +153,8 @@ if __name__ == '__main__':
         exit(1)
 
     # 创建并启动应用
-    from apps.simple_app import create_app
-
     app = create_app()
-    
-    # 获取端口配置
-    try:
-        port = config.SIMPLE_APP_PORT
-    except NameError:
-        # 如果 config.validate() 失败导致 config 未定义，使用默认值
-        port = 5001
+    port = config.SIMPLE_APP_PORT
 
     mode_label = "开发模式" if is_development else "应用模式"
     print(f"\n{'='*50}")

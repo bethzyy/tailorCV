@@ -65,7 +65,8 @@ class CacheManager:
         for f in version_files:
             path = self.base_dir / f
             if path.exists():
-                h.update(path.read_bytes())
+                with open(path, 'rb') as file:
+                    h.update(file.read())
         return h.hexdigest()[:8]
 
     def get_cache_key(self, resume_content: str, jd_content: str) -> str:
@@ -280,3 +281,4 @@ class CacheManager:
             'cache_count': cache_count,
             'cache_size_mb': round(cache_size / (1024 * 1024), 2)
         }
+
