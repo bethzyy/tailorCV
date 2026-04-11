@@ -452,6 +452,7 @@ class TemplateProcessor:
         """
         from docx.oxml.ns import qn
 
+        # 创建列表副本以避免迭代时修改集合
         paragraphs = list(doc.paragraphs)
         for para in paragraphs:
             text = para.text
@@ -477,6 +478,7 @@ class TemplateProcessor:
                 continue
 
             # 找到当前段落在父元素中的位置
+            # 创建列表副本以安全调用 index
             para_index = list(para_parent).index(para_element)
 
             # 为后续每行创建新段落，复制格式
@@ -738,6 +740,7 @@ class TemplateProcessor:
                 ZhipuProvider = ZP
 
             # 构建结构快照
+            # 创建列表副本以避免迭代时修改集合
             paragraphs_text = [p.text for p in doc.paragraphs]
             structure_snapshot = {
                 'confidence': structure.confidence,
