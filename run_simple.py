@@ -23,11 +23,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from core.auth import authenticate_user  # 修复循环导入问题
-from core.cache_manager import CacheManager  # 修复循环导入问题
-from core.config import config  # 修复循环导入问题
-from core.database import db  # 修复循环导入问题
-from apps.simple_app import create_app  # 修复循环导入问题
+# 将共享逻辑提取到独立模块
+from core.auth import authenticate_user
+from core.cache_manager import CacheManager
+from core.config import config
+from core.database import db
+from apps.simple_app import create_app
 
 def clear_pycache(project_root: Path) -> int:
     """清理所有 __pycache__ 目录"""
