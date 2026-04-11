@@ -32,12 +32,13 @@ server_status = {
     'multi': {'running': False, 'port': 5002, 'script': 'run_multi.py'}
 }
 
+# 将认证逻辑移至独立模块
+from core.auth import authenticate_request
 
 def require_auth(f):
     """访问控制装饰器 - 使用延迟导入避免循环依赖 (run.py <-> core.auth)"""
     @wraps(f)
     def decorated(*args, **kwargs):
-        from core.auth import authenticate_request
         if not authenticate_request(request):
             return jsonify({'status': 'error', 'message': 'Unauthorized access'}), 401
         return f(*args, **kwargs)
