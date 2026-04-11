@@ -42,3 +42,9 @@ __all__ = [
     'MultiModelAnalysisResult',
     'MultiModelGenerationResult',
 ]
+
+def initialize_app():
+    """延迟初始化应用，避免循环导入"""
+    from app import create_app
+    return create_app()
+
