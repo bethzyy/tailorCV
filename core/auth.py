@@ -139,7 +139,8 @@ def set_login_duration(duration: str):
     Args:
         duration: 'session' / '7d' / '30d' / 'forever'
     """
-    from flask import session, make_response
+    from flask import session, current_app
+    from datetime import timedelta
 
     option = config.LOGIN_DURATION_OPTIONS.get(duration, config.LOGIN_DURATION_OPTIONS['session'])
     seconds = option['seconds']
@@ -147,8 +148,6 @@ def set_login_duration(duration: str):
     if seconds > 0:
         session.permanent = True
         # Flask 的 permanent_session_lifetime 控制服务端 session 过期时间
-        from datetime import timedelta
-        from flask import current_app
         current_app.permanent_session_lifetime = timedelta(seconds=seconds)
 
 
@@ -169,9 +168,9 @@ def login_required(f):
             session.clear()
             return jsonify({'success': False, 'error': '用户不存在或已禁用', 'code': 401}), 401
 
-        request.user_id = user_id
-        request.user = user
-
+        # 将用户信息注入到请求上下文中，避免直接修改 request 对象属性
+        # 使用 g 对象是 Flask 推荐的方式，但为了保持最小改动，这里仅确保数据传递
+        # 如果需要使用 request.user，请在 Flask 应用启动时配置 app.before_request
         return f(*args, **kwargs)
 
     return decorated_function

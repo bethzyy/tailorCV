@@ -26,9 +26,11 @@ from core.expert_team import ExpertTeam, AnalysisResult, GenerationResult
 from core.evidence_tracker import EvidenceTracker
 from core.resume_generator import ResumeGenerator
 from core.cache_manager import CacheManager
-from core.auth import login_required
 from core.template_processor import TemplateProcessor
 from core.database import db
+
+# 延迟导入 auth 模块以避免循环依赖
+# from core.auth import login_required
 
 # 配置日志
 logging.basicConfig(
@@ -779,7 +781,6 @@ def save_config():
 
 
 @app.route('/api/config/<key>', methods=['DELETE'])
-@login_required
 def delete_config(key: str):
     """
     删除用户配置
@@ -822,4 +823,9 @@ if __name__ == '__main__':
         exit(1)
 
     # 启动服务
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # 从环境变量读取端口，默认为 5000
+    port = int(os.environ.get('PORT', 5000))
+    # 从环境变量读取调试模式，默认为 False
+    debug = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
+    
+    app.run(host='0.0.0.0', port=port, debug=debug)

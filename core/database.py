@@ -217,8 +217,6 @@ class Database:
             ON {table_name}({column_name} {order})
         ''')
 
-    # ... (其他方法保持不变，仅展示修改部分)
-
     def create_task(self, task_id: str, session_id: str,
                     input_mode: str = 'file', metadata: dict = None) -> bool:
         """
@@ -233,15 +231,17 @@ class Database:
         Returns:
             bool: 是否创建成功
         """
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT INTO tasks (task_id, session_id, input_mode, status, metadata)
-                VALUES (?, ?, ?, 'pending', ?)
-            ''', (task_id, session_id, input_mode, json.dumps(metadata or {})))
-            return cursor.rowcount > 0
-
-    # ... (其他方法保持不变，仅展示修改部分)
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT INTO tasks (task_id, session_id, input_mode, status, metadata)
+                    VALUES (?, ?, ?, 'pending', ?)
+                ''', (task_id, session_id, input_mode, json.dumps(metadata or {})))
+                return cursor.rowcount > 0
+        except sqlite3.Error as e:
+            logger.error(f"创建任务失败: {e}")
+            return False
 
     def save_history(self, session_id: str, data: Dict[str, Any]) -> bool:
         """
@@ -254,37 +254,39 @@ class Database:
         Returns:
             bool: 是否保存成功
         """
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT OR REPLACE INTO history (
-                    session_id, task_id, candidate_name, candidate_type,
-                    job_title, company, match_score, match_level,
-                    original_resume, tailored_resume, jd_content,
-                    evidence_report, optimization_summary,
-                    model_used, tokens_used, processing_time_ms
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                session_id,
-                data.get('task_id'),
-                data.get('candidate_name', ''),
-                data.get('candidate_type', 'experienced'),
-                data.get('job_title', ''),
-                data.get('company', ''),
-                data.get('match_score'),
-                data.get('match_level', ''),
-                data.get('original_resume', ''),
-                json.dumps(data.get('tailored_resume', {}), ensure_ascii=False) if isinstance(data.get('tailored_resume'), dict) else data.get('tailored_resume', ''),
-                data.get('jd_content', ''),
-                json.dumps(data.get('evidence_report', {}), ensure_ascii=False),
-                json.dumps(data.get('optimization_summary', {}), ensure_ascii=False),
-                data.get('model_used', ''),
-                data.get('tokens_used', 0),
-                data.get('processing_time_ms', 0)
-            ))
-            return cursor.rowcount > 0
-
-    # ... (其他方法保持不变，仅展示修改部分)
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT OR REPLACE INTO history (
+                        session_id, task_id, candidate_name, candidate_type,
+                        job_title, company, match_score, match_level,
+                        original_resume, tailored_resume, jd_content,
+                        evidence_report, optimization_summary,
+                        model_used, tokens_used, processing_time_ms
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    session_id,
+                    data.get('task_id'),
+                    data.get('candidate_name', ''),
+                    data.get('candidate_type', 'experienced'),
+                    data.get('job_title', ''),
+                    data.get('company', ''),
+                    data.get('match_score'),
+                    data.get('match_level', ''),
+                    data.get('original_resume', ''),
+                    json.dumps(data.get('tailored_resume', {}), ensure_ascii=False) if isinstance(data.get('tailored_resume'), dict) else data.get('tailored_resume', ''),
+                    data.get('jd_content', ''),
+                    json.dumps(data.get('evidence_report', {}), ensure_ascii=False),
+                    json.dumps(data.get('optimization_summary', {}), ensure_ascii=False),
+                    data.get('model_used', ''),
+                    data.get('tokens_used', 0),
+                    data.get('processing_time_ms', 0)
+                ))
+                return cursor.rowcount > 0
+        except sqlite3.Error as e:
+            logger.error(f"保存历史记录失败: {e}")
+            return False
 
     def save_template(self, template_data: Dict[str, Any]) -> bool:
         """
@@ -296,32 +298,34 @@ class Database:
         Returns:
             bool: 是否保存成功
         """
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT OR REPLACE INTO templates (
-                    template_id, name, source, file_path, content_hash,
-                    structure_confidence, sections, variables, description,
-                    tags, preview_image, use_count, is_default
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                template_data.get('template_id'),
-                template_data.get('name'),
-                template_data.get('source'),
-                template_data.get('file_path'),
-                template_data.get('content_hash'),
-                template_data.get('structure_confidence'),
-                json.dumps(template_data.get('sections', []), ensure_ascii=False),
-                json.dumps(template_data.get('variables', []), ensure_ascii=False),
-                template_data.get('description', ''),
-                json.dumps(template_data.get('tags', []), ensure_ascii=False),
-                template_data.get('preview_image'),
-                template_data.get('use_count', 0),
-                1 if template_data.get('is_default') else 0
-            ))
-            return cursor.rowcount > 0
-
-    # ... (其他方法保持不变，仅展示修改部分)
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT OR REPLACE INTO templates (
+                        template_id, name, source, file_path, content_hash,
+                        structure_confidence, sections, variables, description,
+                        tags, preview_image, use_count, is_default
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    template_data.get('template_id'),
+                    template_data.get('name'),
+                    template_data.get('source'),
+                    template_data.get('file_path'),
+                    template_data.get('content_hash'),
+                    template_data.get('structure_confidence'),
+                    json.dumps(template_data.get('sections', []), ensure_ascii=False),
+                    json.dumps(template_data.get('variables', []), ensure_ascii=False),
+                    template_data.get('description', ''),
+                    json.dumps(template_data.get('tags', []), ensure_ascii=False),
+                    template_data.get('preview_image'),
+                    template_data.get('use_count', 0),
+                    1 if template_data.get('is_default') else 0
+                ))
+                return cursor.rowcount > 0
+        except sqlite3.Error as e:
+            logger.error(f"保存模板失败: {e}")
+            return False
 
     def create_user(self, phone: str = '', email: str = '', nickname: str = '') -> Optional[int]:
         """
@@ -335,20 +339,21 @@ class Database:
         Returns:
             用户ID，失败返回None
         """
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            try:
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
                 cursor.execute('''
                     INSERT INTO users (phone, email, nickname, plan_type, quota_total, quota_used)
                     VALUES (?, ?, ?, 'free', 3, 0)
                 ''', (phone or '', email or '', nickname))
                 return cursor.lastrowid
-            except sqlite3.IntegrityError:
-                identifier = email or phone
-                logger.warning(f"用户已存在: {identifier}")
-                return None
-
-    # ... (其他方法保持不变，仅展示修改部分)
+        except sqlite3.IntegrityError:
+            identifier = email or phone
+            logger.warning(f"用户已存在: {identifier}")
+            return None
+        except sqlite3.Error as e:
+            logger.error(f"创建用户失败: {e}")
+            return None
 
     def create_order(self, order_no: str, user_id: int, plan_type: str,
                      plan_name: str, amount: float, provider: str = '') -> bool:
@@ -366,34 +371,38 @@ class Database:
         Returns:
             bool
         """
-        # 订单30分钟过期
-        expires_at = datetime.now() + timedelta(minutes=30)
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT INTO orders (order_no, user_id, plan_type, plan_name, amount, provider, expires_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (order_no, user_id, plan_type, plan_name, amount, provider, expires_at))
-            return cursor.rowcount > 0
-
-    # ... (其他方法保持不变，仅展示修改部分)
+        try:
+            # 订单30分钟过期
+            expires_at = datetime.now() + timedelta(minutes=30)
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT INTO orders (order_no, user_id, plan_type, plan_name, amount, provider, expires_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', (order_no, user_id, plan_type, plan_name, amount, provider, expires_at))
+                return cursor.rowcount > 0
+        except sqlite3.Error as e:
+            logger.error(f"创建订单失败: {e}")
+            return False
 
     def record_usage(self, user_id: int, task_id: str = None,
                      session_id: str = None, tokens_used: int = 0) -> bool:
         """记录一次使用"""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT INTO usage_records (user_id, task_id, session_id, tokens_used)
-                VALUES (?, ?, ?, ?)
-            ''', (user_id, task_id, session_id, tokens_used))
-            # 更新用户已用配额
-            cursor.execute('''
-                UPDATE users SET quota_used = quota_used + 1 WHERE id = ?
-            ''', (user_id,))
-            return cursor.rowcount > 0
-
-    # ... (其他方法保持不变，仅展示修改部分)
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT INTO usage_records (user_id, task_id, session_id, tokens_used)
+                    VALUES (?, ?, ?, ?)
+                ''', (user_id, task_id, session_id, tokens_used))
+                # 更新用户已用配额
+                cursor.execute('''
+                    UPDATE users SET quota_used = quota_used + 1 WHERE id = ?
+                ''', (user_id,))
+                return cursor.rowcount > 0
+        except sqlite3.Error as e:
+            logger.error(f"记录使用失败: {e}")
+            return False
 
 # 创建全局数据库实例
 db = Database()
