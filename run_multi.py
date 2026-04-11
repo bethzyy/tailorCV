@@ -16,7 +16,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
 def main():
     """主入口函数，使用延迟导入避免循环依赖 run_multi.py <-> core.auth.py"""
     from core.config import config
@@ -39,9 +38,8 @@ def main():
     # 显示可用提供者
     from core.multi_model_manager import MultiModelManager
     manager = MultiModelManager()
-    # 直接使用 keys() 视图，避免不必要的列表副本；
-    # 此处仅用于展示，无需后续修改同步到原字典
-    providers = manager.available_providers.keys()
+    # 使用列表切片创建副本，避免后续修改影响原列表
+    providers = list(manager.available_providers.keys())
 
     print(f"\n{'='*50}")
     print(f"  tailorCV 多模型工具")
