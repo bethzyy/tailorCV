@@ -17,7 +17,6 @@ from .base_provider import BaseModelProvider, ModelResponse
 
 logger = logging.getLogger(__name__)
 
-
 class AntiGravityProvider(BaseModelProvider):
     """AntiGravity 本地代理模型提供者"""
 
