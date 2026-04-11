@@ -62,12 +62,8 @@ class ResumeBuilder:
         Returns:
             str: 简历文本
         """
-        # 解析表单数据
         data = self._parse_form_data(form_data)
-
-        # 构建简历文本
         resume_text = self._build_resume_text(data)
-
         logger.info(f"简历构建完成: {len(resume_text)} 字符")
         return resume_text
 
@@ -82,7 +78,6 @@ class ResumeBuilder:
             Dict: 结构化简历数据
         """
         data = self._parse_form_data(form_data)
-
         return {
             'basic_info': {
                 'name': data.name,
@@ -115,7 +110,31 @@ class ResumeBuilder:
         data.location = form_data.get('location', '')
         data.political_status = form_data.get('political_status', '')
 
-        # 教育背景（可能有多条）
+        # 教育背景
+        self._parse_education(form_data, data)
+
+        # 工作经历
+        self._parse_work_experience(form_data, data)
+
+        # 项目经历
+        self._parse_projects(form_data, data)
+
+        # 技能
+        self._parse_skills(form_data, data)
+
+        # 奖项
+        self._parse_awards(form_data, data)
+
+        # 证书
+        self._parse_certificates(form_data, data)
+
+        # 自我评价
+        data.self_evaluation = form_data.get('self_evaluation', '')
+
+        return data
+
+    def _parse_education(self, form_data: Dict[str, Any], data: GuidedInputData):
+        """解析教育背景"""
         edu_count = int(form_data.get('edu_count', 0))
         for i in range(edu_count):
             edu = {
@@ -127,7 +146,6 @@ class ResumeBuilder:
             if edu['school']:
                 data.education.append(edu)
 
-        # 如果没有多条，检查单条
         if not data.education:
             edu = {
                 'school': form_data.get('school', ''),
@@ -138,7 +156,8 @@ class ResumeBuilder:
             if edu['school']:
                 data.education.append(edu)
 
-        # 工作经历
+    def _parse_work_experience(self, form_data: Dict[str, Any], data: GuidedInputData):
+        """解析工作经历"""
         work_count = int(form_data.get('work_count', 0))
         for i in range(work_count):
             work = {
@@ -150,7 +169,6 @@ class ResumeBuilder:
             if work['company']:
                 data.work_experience.append(work)
 
-        # 如果没有多条，检查单条
         if not data.work_experience:
             work = {
                 'company': form_data.get('company', ''),
@@ -161,7 +179,8 @@ class ResumeBuilder:
             if work['company']:
                 data.work_experience.append(work)
 
-        # 项目经历
+    def _parse_projects(self, form_data: Dict[str, Any], data: GuidedInputData):
+        """解析项目经历"""
         proj_count = int(form_data.get('proj_count', 0))
         for i in range(proj_count):
             proj = {
@@ -173,10 +192,10 @@ class ResumeBuilder:
             if proj['name']:
                 data.projects.append(proj)
 
-        # 技能
+    def _parse_skills(self, form_data: Dict[str, Any], data: GuidedInputData):
+        """解析技能"""
         skills_str = form_data.get('skills', '')
         if skills_str:
-            # 支持多种分隔符
             for sep in ['\n', '、', '，', ',']:
                 if sep in skills_str:
                     data.skills = [s.strip() for s in skills_str.split(sep) if s.strip()]
@@ -184,7 +203,8 @@ class ResumeBuilder:
             if not data.skills:
                 data.skills = [skills_str]
 
-        # 奖项
+    def _parse_awards(self, form_data: Dict[str, Any], data: GuidedInputData):
+        """解析奖项"""
         awards_str = form_data.get('awards', '')
         if awards_str:
             for sep in ['\n', '、', '，', ',']:
@@ -194,7 +214,8 @@ class ResumeBuilder:
             if not data.awards:
                 data.awards = [awards_str]
 
-        # 证书
+    def _parse_certificates(self, form_data: Dict[str, Any], data: GuidedInputData):
+        """解析证书"""
         cert_str = form_data.get('certificates', '')
         if cert_str:
             for sep in ['\n', '、', '，', ',']:
@@ -204,16 +225,38 @@ class ResumeBuilder:
             if not data.certificates:
                 data.certificates = [cert_str]
 
-        # 自我评价
-        data.self_evaluation = form_data.get('self_evaluation', '')
-
-        return data
-
     def _build_resume_text(self, data: GuidedInputData) -> str:
         """构建简历文本"""
         sections = []
 
         # 基本信息
+        sections.append(self._build_basic_info(data))
+
+        # 教育背景
+        sections.append(self._build_education(data))
+
+        # 工作经历
+        sections.append(self._build_work_experience(data))
+
+        # 项目经历
+        sections.append(self._build_projects(data))
+
+        # 专业技能
+        sections.append(self._build_skills(data))
+
+        # 奖项荣誉
+        sections.append(self._build_awards(data))
+
+        # 证书资质
+        sections.append(self._build_certificates(data))
+
+        # 自我评价
+        sections.append(self._build_self_evaluation(data))
+
+        return '\n'.join(sections)
+
+    def _build_basic_info(self, data: GuidedInputData) -> str:
+        """构建基本信息部分"""
         basic_parts = [data.name]
         if data.gender:
             basic_parts.append(f"性别: {data.gender}")
@@ -228,70 +271,89 @@ class ResumeBuilder:
         if data.political_status:
             basic_parts.append(f"政治面貌: {data.political_status}")
 
-        sections.append('\n'.join(basic_parts))
+        return '\n'.join(basic_parts)
 
-        # 教育背景
-        if data.education:
-            edu_lines = ['\n【教育背景】']
-            for edu in data.education:
-                line_parts = []
-                if edu.get('time'):
-                    line_parts.append(edu['time'])
-                if edu.get('school'):
-                    line_parts.append(edu['school'])
-                if edu.get('major'):
-                    line_parts.append(edu['major'])
-                if edu.get('degree'):
-                    line_parts.append(f"[{edu['degree']}]")
-                edu_lines.append(' | '.join(line_parts))
-            sections.append('\n'.join(edu_lines))
+    def _build_education(self, data: GuidedInputData) -> str:
+        """构建教育背景部分"""
+        if not data.education:
+            return ""
 
-        # 工作经历
-        if data.work_experience:
-            work_lines = ['\n【工作经历】']
-            for work in data.work_experience:
-                header_parts = []
-                if work.get('time'):
-                    header_parts.append(work['time'])
-                if work.get('company'):
-                    header_parts.append(work['company'])
-                if work.get('position'):
-                    header_parts.append(work['position'])
-                work_lines.append(' | '.join(header_parts))
-                if work.get('content'):
-                    work_lines.append(work['content'])
-            sections.append('\n'.join(work_lines))
+        edu_lines = ['\n【教育背景】']
+        for edu in data.education:
+            line_parts = []
+            if edu.get('time'):
+                line_parts.append(edu['time'])
+            if edu.get('school'):
+                line_parts.append(edu['school'])
+            if edu.get('major'):
+                line_parts.append(edu['major'])
+            if edu.get('degree'):
+                line_parts.append(f"[{edu['degree']}]")
+            edu_lines.append(' | '.join(line_parts))
+        return '\n'.join(edu_lines)
 
-        # 项目经历
-        if data.projects:
-            proj_lines = ['\n【项目经历】']
-            for proj in data.projects:
-                header_parts = []
-                if proj.get('time'):
-                    header_parts.append(proj['time'])
-                if proj.get('name'):
-                    header_parts.append(proj['name'])
-                if proj.get('role'):
-                    header_parts.append(proj['role'])
-                proj_lines.append(' | '.join(header_parts))
-                if proj.get('content'):
-                    proj_lines.append(proj['content'])
-            sections.append('\n'.join(proj_lines))
+    def _build_work_experience(self, data: GuidedInputData) -> str:
+        """构建工作经历部分"""
+        if not data.work_experience:
+            return ""
 
-        # 专业技能
-        if data.skills:
-            sections.append('\n【专业技能】\n' + '、'.join(data.skills))
+        work_lines = ['\n【工作经历】']
+        for work in data.work_experience:
+            header_parts = []
+            if work.get('time'):
+                header_parts.append(work['time'])
+            if work.get('company'):
+                header_parts.append(work['company'])
+            if work.get('position'):
+                header_parts.append(work['position'])
+            work_lines.append(' | '.join(header_parts))
+            if work.get('content'):
+                work_lines.append(work['content'])
+        return '\n'.join(work_lines)
 
-        # 奖项荣誉
-        if data.awards:
-            sections.append('\n【奖项荣誉】\n' + '\n'.join(data.awards))
+    def _build_projects(self, data: GuidedInputData) -> str:
+        """构建项目经历部分"""
+        if not data.projects:
+            return ""
 
-        # 证书资质
-        if data.certificates:
-            sections.append('\n【证书资质】\n' + '\n'.join(data.certificates))
+        proj_lines = ['\n【项目经历】']
+        for proj in data.projects:
+            header_parts = []
+            if proj.get('time'):
+                header_parts.append(proj['time'])
+            if proj.get('name'):
+                header_parts.append(proj['name'])
+            if proj.get('role'):
+                header_parts.append(proj['role'])
+            proj_lines.append(' | '.join(header_parts))
+            if proj.get('content'):
+                proj_lines.append(proj['content'])
+        return '\n'.join(proj_lines)
 
-        # 自我评价
-        if data.self_evaluation:
-            sections.append('\n【自我评价】\n' + data.self_evaluation)
+    def _build_skills(self, data: GuidedInputData) -> str:
+        """构建专业技能部分"""
+        if not data.skills:
+            return ""
 
-        return '\n'.join(sections)
+        return '\n【专业技能】\n' + '、'.join(data.skills)
+
+    def _build_awards(self, data: GuidedInputData) -> str:
+        """构建奖项荣誉部分"""
+        if not data.awards:
+            return ""
+
+        return '\n【奖项荣誉】\n' + '\n'.join(data.awards)
+
+    def _build_certificates(self, data: GuidedInputData) -> str:
+        """构建证书资质部分"""
+        if not data.certificates:
+            return ""
+
+        return '\n【证书资质】\n' + '\n'.join(data.certificates)
+
+    def _build_self_evaluation(self, data: GuidedInputData) -> str:
+        """构建自我评价部分"""
+        if not data.self_evaluation:
+            return ""
+
+        return '\n【自我评价】\n' + data.self_evaluation
