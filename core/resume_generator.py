@@ -27,68 +27,74 @@ from .resume_parser import StyleMetadata
 logger = logging.getLogger(__name__)
 
 
-class WordDocumentBuilder:
-    """负责构建和格式化 Word 文档的细节"""
+# ==============================================================================
+# Module: Word Document Styling & Formatting
+# ==============================================================================
 
-    def __init__(self):
-        pass
+class WordStyler:
+    """处理 Word 文档的样式设置（字体、边距等）"""
 
-    def create_document(self, tailored_resume: Dict[str, Any],
-                        style_metadata: StyleMetadata,
-                        add_content_fn) -> Document:
-        """
-        创建文档对象并设置基础样式
-        Args:
-            tailored_resume: 简历数据
-            style_metadata: 样式元数据
-            add_content_fn: 用于添加内容的回调函数
-        """
-        doc = Document()
-
-        # 使用传入的样式元数据或默认值
+    @staticmethod
+    def set_margins(doc: Document, style_metadata: StyleMetadata):
+        """设置页面边距"""
         if style_metadata is None:
             style_metadata = StyleMetadata()
-
-        # 设置页面边距（使用提取的边距）
+        
         for section in doc.sections:
             section.top_margin = Cm(style_metadata.margin_top)
             section.bottom_margin = Cm(style_metadata.margin_bottom)
             section.left_margin = Cm(style_metadata.margin_left)
             section.right_margin = Cm(style_metadata.margin_right)
 
-        self._set_document_font(doc, style_metadata)
+    @staticmethod
+    def set_default_font(doc: Document, style_metadata: StyleMetadata):
+        """设置文档默认字体"""
+        if style_metadata is None:
+            style_metadata = StyleMetadata()
 
-        # 调用回调函数添加内容
-        add_content_fn(doc, style_metadata)
-
-        return doc
-
-    def _set_document_font(self, doc: Document, style_metadata: StyleMetadata):
-        """设置文档默认字体（使用提取的样式）"""
-        # 设置正文样式
         style = doc.styles['Normal']
         font = style.font
         font.name = style_metadata.primary_font
         font.size = Pt(style_metadata.body_font_size)
-
         # 设置中文字体
         style._element.rPr.rFonts.set(qn('w:eastAsia'), style_metadata.primary_font)
 
-    def add_basic_info(self, doc: Document, basic_info: Dict[str, Any],
-                       style_metadata: StyleMetadata):
+    @staticmethod
+    def add_section_title(doc: Document, title: str, style_metadata: StyleMetadata):
+        """添加章节标题（使用动态字号）"""
+        if style_metadata is None:
+            style_metadata = StyleMetadata()
+
+        p = doc.add_paragraph()
+        run = p.add_run(title)
+        run.bold = True
+        run.font.size = Pt(style_metadata.get_section_title_font_size())
+        p.paragraph_format.space_before = Pt(12)
+        p.paragraph_format.space_after = Pt(6)
+        # 添加下划线
+        p.add_run('\n' + '─' * 20)
+
+
+class WordBasicInfoFormatter:
+    """格式化基本信息部分"""
+
+    def add(self, doc: Document, basic_info: Dict[str, Any], style_metadata: StyleMetadata):
         """添加基本信息（使用动态字号）"""
+        if style_metadata is None:
+            style_metadata = StyleMetadata()
+
         name = basic_info.get('name', '')
         if not name:
             return
 
-        # 姓名（标题）- 使用动态字号
+        # 姓名（标题）
         title = doc.add_paragraph()
         title_run = title.add_run(name)
         title_run.bold = True
         title_run.font.size = Pt(style_metadata.get_name_font_size())
         title.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        # 联系方式（一行）
+        # 联系方式
         contact_parts = []
         if basic_info.get('phone'):
             contact_parts.append(f"电话: {basic_info['phone']}")
@@ -113,40 +119,35 @@ class WordDocumentBuilder:
         # 分隔线
         doc.add_paragraph('─' * 40)
 
-    def add_summary(self, doc: Document, summary: str, style_metadata: StyleMetadata):
-        """添加个人简介"""
-        if not summary:
-            return
 
-        self._add_section_title(doc, '个人简介', style_metadata)
-        p = doc.add_paragraph(summary)
-        p.paragraph_format.first_line_indent = Cm(0.74)  # 两字符缩进
+class WordEducationFormatter:
+    """格式化教育背景部分"""
 
-    def add_education(self, doc: Document, education: List[Dict[str, Any]],
-                      style_metadata: StyleMetadata):
-        """添加教育背景 - 支持复杂对象格式"""
+    def __init__(self, styler: WordStyler):
+        self.styler = styler
+
+    def add(self, doc: Document, education: List[Dict[str, Any]], style_metadata: StyleMetadata):
+        """添加教育背景"""
         if not education:
             return
 
-        self._add_section_title(doc, '教育背景', style_metadata)
+        self.styler.add_section_title(doc, '教育背景', style_metadata)
 
         for edu in education:
             p = doc.add_paragraph()
 
-            # 如果有 tailored 字段（优化后内容），使用它
+            # 优先使用 tailored 字段
             tailored = edu.get('tailored', '')
             if tailored:
                 p.add_run(tailored)
                 continue
 
-            # 否则从各字段组装
-            # 时间
+            # 组装字段
             time = edu.get('time', '')
             if time:
                 run = p.add_run(time + '  ')
                 run.font.size = Pt(style_metadata.get_time_font_size())
 
-            # 学校和专业
             school = edu.get('school', '')
             major = edu.get('major', '')
             degree = edu.get('degree', '')
@@ -160,23 +161,29 @@ class WordDocumentBuilder:
                 run = p.add_run(f'  [{degree}]')
                 run.font.size = Pt(style_metadata.get_degree_font_size())
 
-            # 如果有 highlights，添加核心课程等信息
+            # 核心课程/亮点
             highlights = edu.get('highlights', [])
             if highlights:
                 p2 = doc.add_paragraph()
                 p2.add_run('核心课程/亮点: ' + ' | '.join(highlights))
                 p2.paragraph_format.left_indent = Cm(0.5)
 
-    def add_work_experience(self, doc: Document, work_experience: List[Dict[str, Any]],
-                            style_metadata: StyleMetadata):
+
+class WordWorkExperienceFormatter:
+    """格式化工作经历部分"""
+
+    def __init__(self, styler: WordStyler):
+        self.styler = styler
+
+    def add(self, doc: Document, work_experience: List[Dict[str, Any]], style_metadata: StyleMetadata):
         """添加工作经历"""
         if not work_experience:
             return
 
-        self._add_section_title(doc, '工作经历', style_metadata)
+        self.styler.add_section_title(doc, '工作经历', style_metadata)
 
         for exp in work_experience:
-            # 标题行：时间 公司 职位
+            # 标题行
             p = doc.add_paragraph()
 
             time = exp.get('time', '')
@@ -193,22 +200,17 @@ class WordDocumentBuilder:
             if position:
                 p.add_run(f'  |  {position}')
 
-            # 工作内容 - 优先使用 tailored，支持多格式降级
+            # 内容处理
             content = exp.get('tailored', '')
-
-            # 降级：如果 tailored 为空但有 tailored_bullets
             if not content and 'tailored_bullets' in exp:
                 bullets = exp.get('tailored_bullets', [])
                 if isinstance(bullets, list):
                     contents = [b.get('content', '') if isinstance(b, dict) else b for b in bullets]
                     content = '\n'.join(filter(None, contents))
-
-            # 最终降级：使用原始 content
             if not content:
                 content = exp.get('content', '')
 
             if content:
-                # 按行分割并添加
                 lines = content.split('\n')
                 for line in lines:
                     line = line.strip()
@@ -216,16 +218,21 @@ class WordDocumentBuilder:
                         p = doc.add_paragraph(line, style='List Bullet')
                         p.paragraph_format.left_indent = Cm(0.5)
 
-    def add_projects(self, doc: Document, projects: List[Dict[str, Any]],
-                     style_metadata: StyleMetadata):
+
+class WordProjectFormatter:
+    """格式化项目经历部分"""
+
+    def __init__(self, styler: WordStyler):
+        self.styler = styler
+
+    def add(self, doc: Document, projects: List[Dict[str, Any]], style_metadata: StyleMetadata):
         """添加项目经历"""
         if not projects:
             return
 
-        self._add_section_title(doc, '项目经历', style_metadata)
+        self.styler.add_section_title(doc, '项目经历', style_metadata)
 
         for idx, proj in enumerate(projects, 1):
-            # 标题行
             p = doc.add_paragraph()
 
             time = proj.get('time', '')
@@ -242,14 +249,10 @@ class WordDocumentBuilder:
             if role:
                 p.add_run(f'  |  {role}')
 
-            # 项目内容 - 优先使用 tailored，支持多格式降级
+            # 内容处理
             content = proj.get('tailored', '')
-
-            # 降级：如果 tailored 为空但有 tailored_description
             if not content and 'tailored_description' in proj:
                 content = proj['tailored_description']
-
-            # 最终降级：使用原始 content
             if not content:
                 content = proj.get('content', '')
 
@@ -261,15 +264,20 @@ class WordDocumentBuilder:
                         p = doc.add_paragraph(line, style='List Bullet')
                         p.paragraph_format.left_indent = Cm(0.5)
 
-    def add_skills(self, doc: Document, skills: List[Any],
-                   style_metadata: StyleMetadata):
+
+class WordOtherSectionsFormatter:
+    """格式化其他部分（技能、奖项、证书、自我评价）"""
+
+    def __init__(self, styler: WordStyler):
+        self.styler = styler
+
+    def add_skills(self, doc: Document, skills: List[Any], style_metadata: StyleMetadata):
         """添加专业技能"""
         if not skills:
             return
 
-        self._add_section_title(doc, '专业技能', style_metadata)
+        self.styler.add_section_title(doc, '专业技能', style_metadata)
 
-        # 处理不同的技能格式
         if isinstance(skills, list):
             skill_names = []
             for skill in skills:
@@ -277,75 +285,143 @@ class WordDocumentBuilder:
                     name = skill.get('name', '')
                     desc = skill.get('tailored_description', '')
                     if name:
-                        if desc:
-                            skill_names.append(f"{name}: {desc}")
-                        else:
-                            skill_names.append(name)
+                        skill_names.append(f"{name}: {desc}" if desc else name)
                 elif isinstance(skill, str):
                     skill_names.append(skill)
 
             if skill_names:
-                p = doc.add_paragraph(' | '.join(skill_names))
+                doc.add_paragraph(' | '.join(skill_names))
 
-    def add_awards(self, doc: Document, awards: List[Any],
-                   style_metadata: StyleMetadata):
-        """添加奖项荣誉 - 支持字符串和对象格式"""
+    def add_awards(self, doc: Document, awards: List[Any], style_metadata: StyleMetadata):
+        """添加奖项荣誉"""
         if not awards:
             return
 
-        self._add_section_title(doc, '奖项荣誉', style_metadata)
+        self.styler.add_section_title(doc, '奖项荣誉', style_metadata)
 
         for award in awards:
             if isinstance(award, dict):
-                # 对象格式：提取 name 字段
                 name = award.get('name', '')
                 if name:
-                    p = doc.add_paragraph(name, style='List Bullet')
+                    doc.add_paragraph(name, style='List Bullet')
             elif isinstance(award, str) and award:
-                # 字符串格式：直接使用
-                p = doc.add_paragraph(award, style='List Bullet')
+                doc.add_paragraph(award, style='List Bullet')
 
-    def add_certificates(self, doc: Document, certificates: List[Any],
-                         style_metadata: StyleMetadata):
-        """添加证书资质 - 支持字符串和对象格式"""
+    def add_certificates(self, doc: Document, certificates: List[Any], style_metadata: StyleMetadata):
+        """添加证书资质"""
         if not certificates:
             return
 
-        self._add_section_title(doc, '证书资质', style_metadata)
+        self.styler.add_section_title(doc, '证书资质', style_metadata)
 
         for cert in certificates:
             if isinstance(cert, dict):
-                # 对象格式：提取 name 字段
                 name = cert.get('name', '')
                 if name:
-                    p = doc.add_paragraph(name, style='List Bullet')
+                    doc.add_paragraph(name, style='List Bullet')
             elif isinstance(cert, str) and cert:
-                # 字符串格式：直接使用
-                p = doc.add_paragraph(cert, style='List Bullet')
+                doc.add_paragraph(cert, style='List Bullet')
 
-    def add_self_evaluation(self, doc: Document, self_evaluation: str,
-                            style_metadata: StyleMetadata):
+    def add_self_evaluation(self, doc: Document, self_evaluation: str, style_metadata: StyleMetadata):
         """添加自我评价"""
         if not self_evaluation:
             return
 
-        self._add_section_title(doc, '自我评价', style_metadata)
+        self.styler.add_section_title(doc, '自我评价', style_metadata)
         p = doc.add_paragraph(self_evaluation)
         p.paragraph_format.first_line_indent = Cm(0.74)
+    
+    def add_summary(self, doc: Document, summary: str, style_metadata: StyleMetadata):
+        """添加个人简介"""
+        if not summary:
+            return
 
-    def _add_section_title(self, doc: Document, title: str,
-                           style_metadata: StyleMetadata):
-        """添加章节标题（使用动态字号）"""
-        p = doc.add_paragraph()
-        run = p.add_run(title)
-        run.bold = True
-        run.font.size = Pt(style_metadata.get_section_title_font_size())
-        p.paragraph_format.space_before = Pt(12)
-        p.paragraph_format.space_after = Pt(6)
+        self.styler.add_section_title(doc, '个人简介', style_metadata)
+        p = doc.add_paragraph(summary)
+        p.paragraph_format.first_line_indent = Cm(0.74)
 
-        # 添加下划线
-        p.add_run('\n' + '─' * 20)
 
+class WordDocumentBuilder:
+    """负责构建和格式化 Word 文档的细节 (重构后)"""
+
+    def __init__(self):
+        # 组合各个格式化器
+        self.styler = WordStyler()
+        self.basic_info_formatter = WordBasicInfoFormatter()
+        self.education_formatter = WordEducationFormatter(self.styler)
+        self.work_formatter = WordWorkExperienceFormatter(self.styler)
+        self.project_formatter = WordProjectFormatter(self.styler)
+        self.other_formatter = WordOtherSectionsFormatter(self.styler)
+
+    def create_document(self, tailored_resume: Dict[str, Any],
+                        style_metadata: StyleMetadata,
+                        add_content_fn) -> Document:
+        """
+        创建文档对象并设置基础样式
+        Args:
+            tailored_resume: 简历数据
+            style_metadata: 样式元数据
+            add_content_fn: 用于添加内容的回调函数
+        """
+        doc = Document()
+
+        # 设置页面样式
+        self.styler.set_margins(doc, style_metadata)
+        self.styler.set_default_font(doc, style_metadata)
+
+        # 调用回调函数添加内容
+        add_content_fn(doc, style_metadata)
+
+        return doc
+
+    def add_basic_info(self, doc: Document, basic_info: Dict[str, Any],
+                       style_metadata: StyleMetadata):
+        """添加基本信息"""
+        self.basic_info_formatter.add(doc, basic_info, style_metadata)
+
+    def add_summary(self, doc: Document, summary: str, style_metadata: StyleMetadata):
+        """添加个人简介"""
+        self.other_formatter.add_summary(doc, summary, style_metadata)
+
+    def add_education(self, doc: Document, education: List[Dict[str, Any]],
+                      style_metadata: StyleMetadata):
+        """添加教育背景"""
+        self.education_formatter.add(doc, education, style_metadata)
+
+    def add_work_experience(self, doc: Document, work_experience: List[Dict[str, Any]],
+                            style_metadata: StyleMetadata):
+        """添加工作经历"""
+        self.work_formatter.add(doc, work_experience, style_metadata)
+
+    def add_projects(self, doc: Document, projects: List[Dict[str, Any]],
+                     style_metadata: StyleMetadata):
+        """添加项目经历"""
+        self.project_formatter.add(doc, projects, style_metadata)
+
+    def add_skills(self, doc: Document, skills: List[Any],
+                   style_metadata: StyleMetadata):
+        """添加专业技能"""
+        self.other_formatter.add_skills(doc, skills, style_metadata)
+
+    def add_awards(self, doc: Document, awards: List[Any],
+                   style_metadata: StyleMetadata):
+        """添加奖项荣誉"""
+        self.other_formatter.add_awards(doc, awards, style_metadata)
+
+    def add_certificates(self, doc: Document, certificates: List[Any],
+                         style_metadata: StyleMetadata):
+        """添加证书资质"""
+        self.other_formatter.add_certificates(doc, certificates, style_metadata)
+
+    def add_self_evaluation(self, doc: Document, self_evaluation: str,
+                            style_metadata: StyleMetadata):
+        """添加自我评价"""
+        self.other_formatter.add_self_evaluation(doc, self_evaluation, style_metadata)
+
+
+# ==============================================================================
+# Module: ATS HTML Builder
+# ==============================================================================
 
 class AtsHtmlBuilder:
     """负责构建 ATS 优化的 HTML 内容"""
@@ -578,6 +654,10 @@ class AtsHtmlBuilder:
                 .replace('>', '&gt;')
                 .replace('"', '&quot;'))
 
+
+# ==============================================================================
+# Module: Resume Generator (Facade)
+# ==============================================================================
 
 class ResumeGenerator:
     """简历生成器 - Word 文档输出"""

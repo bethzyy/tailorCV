@@ -5,9 +5,6 @@
 """
 
 from .base_provider import BaseModelProvider, ModelResponse
-from .zhipu_provider import ZhipuProvider
-from .alibaba_provider import AlibabaProvider
-from .antigravity_provider import AntiGravityProvider
 
 __all__ = [
     'BaseModelProvider',
@@ -29,6 +26,11 @@ def get_provider(provider_name: str, config: dict) -> BaseModelProvider:
     Returns:
         BaseModelProvider: 模型提供者实例
     """
+    # 延迟导入具体提供者实现，避免循环导入
+    from .zhipu_provider import ZhipuProvider
+    from .alibaba_provider import AlibabaProvider
+    from .antigravity_provider import AntiGravityProvider
+    
     providers = {
         'zhipu': ZhipuProvider,
         'alibaba': AlibabaProvider,
@@ -40,3 +42,4 @@ def get_provider(provider_name: str, config: dict) -> BaseModelProvider:
         raise ValueError(f"Unknown provider: {provider_name}")
     
     return provider_class(config)
+

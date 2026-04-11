@@ -218,10 +218,11 @@ def create_app() -> Flask:
 
                 save_multi_result(word_bytes, session_id, provider_id)
 
+                # 修复: 仅返回文件引用，不返回 base64 编码的文件内容
                 results[provider_id] = {
                     'model_used': gen_result.model_used,
                     'provider_id': provider_id,
-                    'tailored_word': base64.b64encode(word_bytes).decode('utf-8'),
+                    'file_path': f'/api/download/{session_id}/{provider_id}',
                     'analysis': {
                         'match_score': analysis_result.results.get(provider_id, {}).matching_strategy.get('match_score', 0) if provider_id in analysis_result.results else 0,
                         'match_level': analysis_result.results.get(provider_id, {}).matching_strategy.get('match_level', '') if provider_id in analysis_result.results else '',
@@ -301,13 +302,14 @@ def create_app() -> Flask:
 
             processing_time_ms = int((time.time() - start_time) * 1000)
 
+            # 修复: 仅返回文件引用，不返回 base64 编码的文件内容
             return jsonify({
                 'session_id': session_id,
                 'status': 'completed',
                 'processing_time': processing_time_ms,
                 'provider_id': provider_id,
                 'model_used': generation.model_used,
-                'tailored_word': base64.b64encode(word_bytes).decode('utf-8'),
+                'file_path': f'/api/download/{session_id}/{provider_id}',
                 'analysis': {
                     'match_score': analysis.matching_strategy.get('match_score', 0),
                     'match_level': analysis.matching_strategy.get('match_level', ''),

@@ -16,7 +16,6 @@ from .. import config
 
 logger = logging.getLogger(__name__)
 
-
 class AlipayProvider(BasePaymentProvider):
     """支付宝当面付"""
 

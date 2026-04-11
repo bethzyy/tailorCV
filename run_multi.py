@@ -16,7 +16,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-if __name__ == '__main__':
+
+def main():
+    """主入口函数，使用延迟导入避免循环依赖 run_multi.py <-> core.auth.py"""
     from core.config import config
 
     # 验证配置
@@ -37,7 +39,9 @@ if __name__ == '__main__':
     # 显示可用提供者
     from core.multi_model_manager import MultiModelManager
     manager = MultiModelManager()
-    providers = list(manager.available_providers.keys())
+    # 直接使用 keys() 视图，避免不必要的列表副本；
+    # 此处仅用于展示，无需后续修改同步到原字典
+    providers = manager.available_providers.keys()
 
     print(f"\n{'='*50}")
     print(f"  tailorCV 多模型工具")
@@ -46,3 +50,7 @@ if __name__ == '__main__':
     print(f"{'='*50}\n")
 
     app.run(host='0.0.0.0', port=port, debug=True)
+
+
+if __name__ == '__main__':
+    main()

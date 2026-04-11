@@ -11,6 +11,7 @@ import logging
 import urllib.request
 import urllib.error
 from typing import Dict, Any
+from urllib.parse import urlparse
 
 from .base_provider import BaseModelProvider, ModelResponse
 
@@ -73,8 +74,6 @@ class AntiGravityProvider(BaseModelProvider):
 
     def _validate_url(self, url: str) -> bool:
         """验证 URL 是否为合法的内网地址，防止 SSRF 攻击"""
-        from urllib.parse import urlparse
-
         parsed = urlparse(url)
         hostname = parsed.hostname
 

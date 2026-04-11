@@ -10,7 +10,7 @@
 import re
 import json
 import logging
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, Protocol
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 
@@ -152,10 +152,18 @@ class ConfidenceCalculator:
 
         return min(1.0, max(0.0, confidence))
 
+# 定义 ModelManager 协议以避免循环导入
+class ModelManagerProtocol(Protocol):
+    """模型管理器协议"""
+    
+    def call(self, prompt: str, task_type: str, max_tokens: int, temperature: float) -> Any:
+        """调用模型"""
+        ...
+
 class AIValidator:
     """AI验证器：负责调用模型进行验证"""
 
-    def __init__(self, model_manager, ai_validation_config: Dict[str, Any]):
+    def __init__(self, model_manager: Optional[ModelManagerProtocol], ai_validation_config: Dict[str, Any]):
         self.model_manager = model_manager
         self.ai_validation_config = ai_validation_config
 
@@ -242,7 +250,7 @@ class EvidenceTracker:
     # 从配置加载可疑关键词模式
     SUSPICIOUS_PATTERNS = config.get_suspicious_patterns()
 
-    def __init__(self, model_manager=None):
+    def __init__(self, model_manager: Optional[ModelManagerProtocol] = None):
         """
         初始化依据追踪器
 

@@ -9,7 +9,7 @@ import os
 import time
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Callable
 
 from .base_provider import BaseModelProvider, ModelResponse
 
@@ -33,15 +33,17 @@ class AlibabaProvider(BaseModelProvider):
     BASE_URL = 'https://coding.dashscope.aliyuncs.com/v1'
     API_KEY_PATH = r'C:\D\CAIE_tool\LLM_Configs\ali\apikey.txt'
 
-    def __init__(self, api_key: str = None):
+    def __init__(self, api_key: str = None, client_factory: Callable = None):
         """
         初始化阿里云提供者
 
         Args:
             api_key: API密钥（可选，默认从文件或环境变量读取）
+            client_factory: 客户端工厂函数（可选，用于依赖注入以避免循环导入）
         """
         self._api_key = api_key or self._load_api_key()
         self._client = None
+        self._client_factory = client_factory
 
         # 调用统计
         self.stats = {
@@ -92,11 +94,17 @@ class AlibabaProvider(BaseModelProvider):
         """确保客户端已初始化"""
         if self._client is None and self._api_key:
             try:
-                from openai import OpenAI
-                self._client = OpenAI(
-                    api_key=self._api_key,
-                    base_url=self.BASE_URL
-                )
+                if self._client_factory:
+                    self._client = self._client_factory(
+                        api_key=self._api_key,
+                        base_url=self.BASE_URL
+                    )
+                else:
+                    from openai import OpenAI
+                    self._client = OpenAI(
+                        api_key=self._api_key,
+                        base_url=self.BASE_URL
+                    )
             except ImportError:
                 logger.error("openai 未安装，请运行: pip install openai")
                 raise
@@ -140,6 +148,14 @@ class AlibabaProvider(BaseModelProvider):
 
         self.stats['total_calls'] += 1
 
+        return self._call_with_retry(
+            prompt, model_id, model_name, max_tokens, temperature, max_retries
+        )
+
+    def _call_with_retry(self, prompt: str, model_id: str, model_name: str,
+                         max_tokens: int, temperature: float,
+                         max_retries: int) -> ModelResponse:
+        """带重试机制的模型调用"""
         last_error = None
         for attempt in range(max_retries):
             try:
@@ -155,16 +171,20 @@ class AlibabaProvider(BaseModelProvider):
                 if not should_retry:
                     break
 
-        # 失败
+        return self._build_failure_response(model_id, model_name, last_error)
+
+    def _build_failure_response(self, model_id: str, model_name: str,
+                                error: Exception) -> ModelResponse:
+        """构建失败响应"""
         self.stats['failed_calls'] += 1
-        logger.error(f"阿里云调用最终失败: {last_error}")
+        logger.error(f"阿里云调用最终失败: {error}")
 
         return ModelResponse(
             success=False,
             content="",
             model_id=model_id,
             model_name=model_name,
-            error_message=str(last_error)
+            error_message=str(error)
         )
 
     def _execute_request(self, prompt: str, model_id: str,

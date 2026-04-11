@@ -81,10 +81,8 @@ class ParsedResume:
     style_metadata: StyleMetadata = field(default_factory=StyleMetadata)  # 样式元数据
 
 
-class ResumeParser:
-    """简历解析器 - 多级 fallback 机制"""
-
-    SUPPORTED_FORMATS = ['.pdf', '.docx', '.doc', '.txt', '.md']
+class FileParser:
+    """文件解析器 - 负责将二进制流转换为文本"""
 
     def __init__(self):
         self.parse_stats = {
@@ -95,61 +93,7 @@ class ResumeParser:
             'failed': 0
         }
 
-    def parse(self, file_path: str = None, file_content: bytes = None,
-              filename: str = None) -> ParsedResume:
-        """
-        解析简历文件
-
-        Args:
-            file_path: 文件路径
-            file_content: 文件二进制内容
-            filename: 文件名（用于判断格式）
-
-        Returns:
-            ParsedResume: 解析后的简历数据
-        """
-        # 确定文件格式
-        if file_path:
-            suffix = Path(file_path).suffix.lower()
-            with open(file_path, 'rb') as f:
-                content = f.read()
-        elif file_content and filename:
-            suffix = Path(filename).suffix.lower()
-            content = file_content
-        else:
-            raise ValueError("必须提供 file_path 或 (file_content + filename)")
-
-        if suffix not in self.SUPPORTED_FORMATS:
-            raise ValueError(f"不支持的文件格式: {suffix}")
-
-        # 根据格式选择解析方法
-        style_metadata = StyleMetadata()  # 默认样式
-        if suffix == '.pdf':
-            text = self._parse_pdf(content)
-            source_format = 'pdf'
-            style_metadata.source = 'pdf'
-        elif suffix in ['.docx', '.doc']:
-            doc, text = self._parse_word(content)
-            source_format = 'word'
-            # 提取 Word 文档的样式元数据
-            style_metadata = self._extract_style_metadata(doc)
-            style_metadata.source = 'word'
-        else:
-            text = content.decode('utf-8', errors='ignore')
-            source_format = 'text'
-            style_metadata.source = 'default'
-
-        if not text or len(text.strip()) < 50:
-            raise ValueError("解析结果内容过少，可能解析失败")
-
-        # 解析结构化信息
-        parsed = self._extract_structured_info(text)
-        parsed.source_format = source_format
-        parsed.style_metadata = style_metadata
-
-        return parsed
-
-    def _parse_pdf(self, content: bytes) -> str:
+    def parse_pdf(self, content: bytes) -> str:
         """PDF 解析 - 多级 fallback"""
         text = ""
 
@@ -195,7 +139,7 @@ class ResumeParser:
         self.parse_stats['failed'] += 1
         raise ValueError("PDF 解析失败，请尝试上传 Word 或文本格式")
 
-    def _parse_word(self, content: bytes) -> tuple:
+    def parse_word(self, content: bytes) -> tuple:
         """
         Word 文档解析
 
@@ -224,7 +168,16 @@ class ResumeParser:
             self.parse_stats['failed'] += 1
             raise ValueError(f"Word 解析失败: {e}")
 
-    def _extract_style_metadata(self, doc: 'Document') -> StyleMetadata:
+    def get_stats(self) -> Dict[str, int]:
+        """获取解析统计信息"""
+        return self.parse_stats.copy()
+
+
+class StyleExtractor:
+    """样式提取器 - 从文档对象中提取样式元数据"""
+
+    @staticmethod
+    def extract_from_word(doc: 'Document') -> StyleMetadata:
         """
         从 Word 文档提取样式元数据
 
@@ -317,8 +270,12 @@ class ResumeParser:
             logger.warning(f"样式提取失败，使用默认样式: {e}")
             return StyleMetadata(source='default')
 
-    def _extract_structured_info(self, text: str) -> ParsedResume:
-        """从文本中提取结构化信息"""
+
+class InfoExtractor:
+    """信息提取器 - 从文本中提取结构化简历信息"""
+
+    def extract_all(self, text: str) -> ParsedResume:
+        """从文本中提取所有结构化信息"""
         parsed = ParsedResume(raw_text=text)
 
         # 提取基本信息
@@ -730,6 +687,72 @@ class ResumeParser:
 
         return min(1.0, score)
 
+
+class ResumeParser:
+    """简历解析器 - 组合各个子模块完成解析"""
+
+    SUPPORTED_FORMATS = ['.pdf', '.docx', '.doc', '.txt', '.md']
+
+    def __init__(self):
+        # 使用组合替代继承，将职责委托给专门的类
+        self.file_parser = FileParser()
+        self.style_extractor = StyleExtractor()
+        self.info_extractor = InfoExtractor()
+
+    def parse(self, file_path: str = None, file_content: bytes = None,
+              filename: str = None) -> ParsedResume:
+        """
+        解析简历文件
+
+        Args:
+            file_path: 文件路径
+            file_content: 文件二进制内容
+            filename: 文件名（用于判断格式）
+
+        Returns:
+            ParsedResume: 解析后的简历数据
+        """
+        # 确定文件格式
+        if file_path:
+            suffix = Path(file_path).suffix.lower()
+            with open(file_path, 'rb') as f:
+                content = f.read()
+        elif file_content and filename:
+            suffix = Path(filename).suffix.lower()
+            content = file_content
+        else:
+            raise ValueError("必须提供 file_path 或 (file_content + filename)")
+
+        if suffix not in self.SUPPORTED_FORMATS:
+            raise ValueError(f"不支持的文件格式: {suffix}")
+
+        # 根据格式选择解析方法
+        style_metadata = StyleMetadata()  # 默认样式
+        if suffix == '.pdf':
+            text = self.file_parser.parse_pdf(content)
+            source_format = 'pdf'
+            style_metadata.source = 'pdf'
+        elif suffix in ['.docx', '.doc']:
+            doc, text = self.file_parser.parse_word(content)
+            source_format = 'word'
+            # 提取 Word 文档的样式元数据
+            style_metadata = self.style_extractor.extract_from_word(doc)
+            style_metadata.source = 'word'
+        else:
+            text = content.decode('utf-8', errors='ignore')
+            source_format = 'text'
+            style_metadata.source = 'default'
+
+        if not text or len(text.strip()) < 50:
+            raise ValueError("解析结果内容过少，可能解析失败")
+
+        # 解析结构化信息
+        parsed = self.info_extractor.extract_all(text)
+        parsed.source_format = source_format
+        parsed.style_metadata = style_metadata
+
+        return parsed
+
     def get_stats(self) -> Dict[str, int]:
         """获取解析统计信息"""
-        return self.parse_stats.copy()
+        return self.file_parser.get_stats()

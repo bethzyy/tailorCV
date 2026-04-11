@@ -9,7 +9,7 @@ import os
 import time
 import logging
 import traceback
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Callable
 
 from .base_provider import BaseModelProvider, ModelResponse
 
@@ -32,16 +32,19 @@ class ZhipuProvider(BaseModelProvider):
         'glm-4-air': 'GLM-4-Air',
     }
 
-    def __init__(self, api_key: str = None, client=None):
+    def __init__(self, api_key: str = None, client=None,
+                 client_factory: Callable = None):
         """
         初始化智谱AI提供者
 
         Args:
             api_key: API密钥（可选，默认从环境变量读取）
             client: 外部注入的Anthropic客户端（可选，用于依赖注入避免循环导入）
+            client_factory: 客户端工厂函数（可选，用于延迟创建客户端避免循环导入）
         """
         self._api_key = api_key or os.getenv('ZHIPU_API_KEY', '')
         self._client = client
+        self._client_factory = client_factory
 
         # 调用统计
         self.stats = {
@@ -55,16 +58,21 @@ class ZhipuProvider(BaseModelProvider):
     def _ensure_client(self):
         """确保客户端已初始化"""
         if self._client is None and self._api_key:
-            try:
-                from anthropic import Anthropic
-                self._client = Anthropic(
-                    api_key=self._api_key,
-                    base_url=self.BASE_URL
-                )
-                logger.info(f"智谱AI客户端初始化成功 (Anthropic兼容端点: {self.BASE_URL})")
-            except ImportError:
-                logger.error("anthropic 未安装，请运行: pip install anthropic")
-                raise
+            # 优先使用注入的工厂函数，避免循环导入
+            if self._client_factory is not None:
+                self._client = self._client_factory(self._api_key)
+                logger.info(f"智谱AI客户端初始化成功 (通过工厂函数, Anthropic兼容端点: {self.BASE_URL})")
+            else:
+                try:
+                    from anthropic import Anthropic
+                    self._client = Anthropic(
+                        api_key=self._api_key,
+                        base_url=self.BASE_URL
+                    )
+                    logger.info(f"智谱AI客户端初始化成功 (Anthropic兼容端点: {self.BASE_URL})")
+                except ImportError:
+                    logger.error("anthropic 未安装，请运行: pip install anthropic")
+                    raise
 
     @property
     def provider_id(self) -> str:
@@ -143,29 +151,22 @@ class ZhipuProvider(BaseModelProvider):
             latency_ms=latency_ms
         )
 
-    def call(self, prompt: str, model_id: str = None,
-             max_tokens: int = 4096, temperature: float = 0.7,
-             max_retries: int = 3, **kwargs) -> ModelResponse:
+    def _call_with_retry(self, model_id: str, prompt: str,
+                         max_tokens: int, max_retries: int,
+                         model_name: str) -> ModelResponse:
         """
-        调用智谱AI模型
+        带重试逻辑的模型调用
 
         Args:
+            model_id: 模型ID
             prompt: 输入提示词
-            model_id: 模型ID（默认 glm-5）
             max_tokens: 最大输出token数
-            temperature: 温度参数
             max_retries: 最大重试次数
+            model_name: 模型名称
 
         Returns:
             ModelResponse: 模型响应
         """
-        self._ensure_client()
-
-        model_id = model_id or 'glm-5'
-        model_name = self.get_model_name(model_id)
-
-        self.stats['total_calls'] += 1
-
         last_error = None
         for attempt in range(max_retries):
             try:
@@ -199,6 +200,33 @@ class ZhipuProvider(BaseModelProvider):
             model_id=model_id,
             model_name=model_name,
             error_message=str(last_error)
+        )
+
+    def call(self, prompt: str, model_id: str = None,
+             max_tokens: int = 4096, temperature: float = 0.7,
+             max_retries: int = 3, **kwargs) -> ModelResponse:
+        """
+        调用智谱AI模型
+
+        Args:
+            prompt: 输入提示词
+            model_id: 模型ID（默认 glm-5）
+            max_tokens: 最大输出token数
+            temperature: 温度参数
+            max_retries: 最大重试次数
+
+        Returns:
+            ModelResponse: 模型响应
+        """
+        self._ensure_client()
+
+        model_id = model_id or 'glm-5'
+        model_name = self.get_model_name(model_id)
+
+        self.stats['total_calls'] += 1
+
+        return self._call_with_retry(
+            model_id, prompt, max_tokens, max_retries, model_name
         )
 
     def _is_quota_error(self, error: Exception) -> bool:
