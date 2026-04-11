@@ -103,6 +103,7 @@ def save_uploaded_bytes(content: bytes, filename: str, session_id: str) -> str:
     ext = Path(filename).suffix.lower()
     file_path = upload_dir / f'original{ext}'
 
+    # 修复 [1]: 使用 with 语句自动管理资源
     with open(file_path, 'wb') as f:
         f.write(content)
 
@@ -125,6 +126,7 @@ def save_tailored_file(content: bytes, session_id: str) -> str:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     file_path = output_dir / 'tailored.docx'
+    # 修复 [2]: 使用 with 语句自动管理资源
     with open(file_path, 'wb') as f:
         f.write(content)
 
@@ -361,6 +363,7 @@ def tailor_file():
                         capture_output=True, text=True, timeout=30
                     )
                     if proc.returncode == 0:
+                        # 修复 [5]: 使用 with 语句自动管理资源
                         with open(ats_pdf_path, 'rb') as f:
                             ats_pdf_bytes = f.read()
                         task_status[session_id]['progress'] = 100

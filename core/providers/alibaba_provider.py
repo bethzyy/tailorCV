@@ -15,7 +15,6 @@ from .base_provider import BaseModelProvider, ModelResponse
 
 logger = logging.getLogger(__name__)
 
-
 class AlibabaProvider(BaseModelProvider):
     """阿里云 Coding Plan 模型提供者"""
 
