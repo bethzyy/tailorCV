@@ -71,16 +71,24 @@ def create_app() -> Flask:
         upload_dir.mkdir(parents=True, exist_ok=True)
         ext = Path(filename).suffix.lower()
         file_path = upload_dir / f'original{ext}'
-        with open(file_path, 'wb') as f:
-            f.write(content)
+        try:
+            with open(file_path, 'wb') as f:
+                f.write(content)
+        except IOError as e:
+            logger.error(f"保存上传文件失败: {e}")
+            raise
         return str(file_path)
 
     def save_multi_result(content: bytes, session_id: str, provider_id: str) -> str:
         output_dir = Path('storage/multi_results') / session_id
         output_dir.mkdir(parents=True, exist_ok=True)
         file_path = output_dir / f'{provider_id}_tailored.docx'
-        with open(file_path, 'wb') as f:
-            f.write(content)
+        try:
+            with open(file_path, 'wb') as f:
+                f.write(content)
+        except IOError as e:
+            logger.error(f"保存多模型结果失败: {e}")
+            raise
         return str(file_path)
 
     def allowed_file(filename: str) -> bool:
