@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.template_manager import TemplateManager
+from core.auth import auth  # 修复1: 引入auth模块
 from core.database import db
 
 
