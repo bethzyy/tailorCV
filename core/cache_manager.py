@@ -1,7 +1,7 @@
 """
 缓存管理器模块
 
-基于 MD5 的缓存机制，避免重复处理相同的简历-JD组合。
+基于 SHA256 的缓存机制，避免重复处理相同的简历-JD组合。
 参考 jobMatchTool 的缓存实现。
 """
 
@@ -14,26 +14,29 @@ from typing import Dict, Any, Optional
 from pathlib import Path
 from datetime import datetime, timedelta
 
-from .config import config
+# 注意：移除了对 .config 的直接导入，改用依赖注入以避免循环导入
 
 logger = logging.getLogger(__name__)
 
 
 class CacheManager:
-    """缓存管理器 - MD5 哈希缓存"""
+    """缓存管理器 - SHA256 哈希缓存"""
 
-    def __init__(self, cache_dir: Optional[str] = None):
+    def __init__(self, cache_dir: Optional[str] = None, base_dir: Optional[str] = None, expiry_days: Optional[int] = None):
         """
         初始化缓存管理器
 
         Args:
             cache_dir: 缓存目录（可选）
+            base_dir: 项目基础目录（可选），用于定位版本文件
+            expiry_days: 缓存过期天数（可选）
         """
-        self.cache_dir = Path(cache_dir) if cache_dir else config.BASE_DIR / 'cache'
+        self.base_dir = Path(base_dir) if base_dir else Path('.')
+        self.cache_dir = Path(cache_dir) if cache_dir else self.base_dir / 'cache'
         self.cache_dir.mkdir(exist_ok=True)
 
         # 缓存过期时间（天）
-        self.expiry_days = config.HISTORY_RETENTION_DAYS
+        self.expiry_days = expiry_days if expiry_days is not None else 30
 
         # 缓存容量上限（文件数量），超过时淘汰最旧的
         self.max_entries = 200
@@ -58,9 +61,9 @@ class CacheManager:
             'core/expert_team.py',
             'core/cache_manager.py',
         ]
-        h = hashlib.md5()
+        h = hashlib.sha256()
         for f in version_files:
-            path = config.BASE_DIR / f
+            path = self.base_dir / f
             if path.exists():
                 h.update(path.read_bytes())
         return h.hexdigest()[:8]
@@ -74,10 +77,10 @@ class CacheManager:
             jd_content: JD内容
 
         Returns:
-            str: MD5 哈希键
+            str: SHA256 哈希键
         """
         combined = resume_content + jd_content + self._get_code_version_hash()
-        return hashlib.md5(combined.encode('utf-8')).hexdigest()
+        return hashlib.sha256(combined.encode('utf-8')).hexdigest()
 
     def get(self, resume_content: str, jd_content: str) -> Optional[Dict[str, Any]]:
         """
@@ -206,6 +209,8 @@ class CacheManager:
         Returns:
             int: 淘汰的条目数
         """
+        # list() 将 glob 生成器物化为列表，以便检查长度和排序；
+        # 此列表为局部副本，后续删除操作通过 unlink 直接作用于磁盘文件
         cache_files = list(self.cache_dir.glob("*.json"))
         if len(cache_files) <= self.max_entries:
             return 0
