@@ -1,0 +1,81 @@
+name: Code Quality
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Ruff Lint & Format
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: pip
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Ruff lint check
+        run: ruff check core/ apps/ --ignore E501 --output-format=github
+
+      - name: Ruff format check
+        run: ruff format --check core/ apps/
+
+  security:
+    name: Dependency Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Run pip-audit
+        run: pip-audit -r requirements.txt --strict
+        continue-on-error: true
+
+  imports:
+    name: Import Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Validate core imports
+        run: python -c "
+          modules = [
+            'core.config', 'core.database', 'core.model_manager',
+            'core.resume_parser', 'core.resume_generator', 'core.template_processor',
+            'core.evidence_tracker', 'core.structure_detector', 'core.response_parser',
+            'core.expert_team', 'core.auth', 'core.quota',
+          ]
+          for m in modules:
+            __import__(m)
+            print(f'  OK: {m}')
+          print('All core modules imported successfully')
+        "
