@@ -280,7 +280,7 @@ class ResumeParser:
                                 rFonts = rPr.find(qn('w:rFonts'))
                                 if rFonts is not None:
                                     east_asia_font = rFonts.get(qn('w:eastAsia'))
-                        except:
+                        except AttributeError:
                             pass
 
                         # 优先使用东亚字体（中文字体）

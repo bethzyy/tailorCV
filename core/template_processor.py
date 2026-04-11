@@ -297,7 +297,15 @@ class TemplateProcessor:
         logger.info("使用样式元数据方案渲染")
 
         # 使用原有的 ResumeGenerator 逻辑
-        from .resume_generator import ResumeGenerator
+        # 使用 TYPE_CHECKING 避免运行时循环导入
+        from typing import TYPE_CHECKING
+        if TYPE_CHECKING:
+            from .resume_generator import ResumeGenerator
+        else:
+            # 运行时导入
+            from .resume_generator import ResumeGenerator as RG
+            ResumeGenerator = RG
+            
         generator = ResumeGenerator()
         word_bytes = generator.generate_bytes(context, style_metadata=style_metadata)
 
@@ -501,7 +509,7 @@ class TemplateProcessor:
         """
         生成模板ID - 基于内容哈希
 
-        如果提供 original_content，使用 MD5 哈希（用于去重）
+        如果提供 original_content，使用 SHA256 哈希（用于去重）
         否则回退到时间戳+UUID（兼容旧逻辑）
 
         Args:
@@ -513,7 +521,8 @@ class TemplateProcessor:
         """
         if original_content:
             # 基于内容哈希生成 ID（用于去重）
-            content_hash = hashlib.md5(original_content).hexdigest()[:16]
+            # 使用 SHA256 替代 MD5 以提高安全性，截取前16位保持ID长度一致
+            content_hash = hashlib.sha256(original_content).hexdigest()[:16]
             return content_hash
         else:
             # 回退方案：时间戳+UUID（兼容旧逻辑）
@@ -527,7 +536,14 @@ class TemplateProcessor:
 
         复用 ResumeParser 的逻辑
         """
-        from .resume_parser import ResumeParser
+        # 使用 TYPE_CHECKING 避免运行时循环导入
+        from typing import TYPE_CHECKING
+        if TYPE_CHECKING:
+            from .resume_parser import ResumeParser
+        else:
+            from .resume_parser import ResumeParser as RP
+            ResumeParser = RP
+            
         parser = ResumeParser()
         return parser._extract_style_metadata(doc)
 
@@ -660,7 +676,14 @@ class TemplateProcessor:
             Tuple[bool, List[str]]: (是否兼容, 缺失字段列表)
         """
         # 获取模板所需变量
-        from .template_manager import template_manager
+        # 使用 TYPE_CHECKING 避免运行时循环导入
+        from typing import TYPE_CHECKING
+        if TYPE_CHECKING:
+            from .template_manager import template_manager
+        else:
+            from .template_manager import template_manager as tm
+            template_manager = tm
+            
         template = template_manager.get_template(template_id)
         if not template:
             return False, ["模板不存在"]
@@ -703,8 +726,16 @@ class TemplateProcessor:
         """
         try:
             import json as json_module
-            from .model_manager import ModelManager
-            from .providers.zhipu_provider import ZhipuProvider
+            # 使用 TYPE_CHECKING 避免运行时循环导入
+            from typing import TYPE_CHECKING
+            if TYPE_CHECKING:
+                from .model_manager import ModelManager
+                from .providers.zhipu_provider import ZhipuProvider
+            else:
+                from .model_manager import ModelManager as MM
+                from .providers.zhipu_provider import ZhipuProvider as ZP
+                ModelManager = MM
+                ZhipuProvider = ZP
 
             # 构建结构快照
             paragraphs_text = [p.text for p in doc.paragraphs]

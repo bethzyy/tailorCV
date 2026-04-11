@@ -158,8 +158,8 @@ class TemplateManager:
             with open(file_path, 'rb') as f:
                 file_content = f.read()
 
-            # 计算内容哈希
-            content_hash = hashlib.md5(file_content).hexdigest()
+            # 计算内容哈希 (使用 SHA256 替代 MD5)
+            content_hash = hashlib.sha256(file_content).hexdigest()
 
             # 检测模板结构
             sections, confidence = self._detect_template_structure(file_path)
@@ -250,7 +250,8 @@ class TemplateManager:
                     continue
                 try:
                     content = file_path.read_bytes()
-                    content_hash = hashlib.md5(content).hexdigest()
+                    # 计算内容哈希 (使用 SHA256 替代 MD5)
+                    content_hash = hashlib.sha256(content).hexdigest()
                     # 检查文件名是否与哈希匹配（旧格式文件名就是哈希）
                     if template_id == content_hash[:16]:
                         logger.info(f"恢复自建模板 [{source_type}]: {file_path.name}")
@@ -328,8 +329,8 @@ class TemplateManager:
         if len(file_content) > 5 * 1024 * 1024:  # 5MB
             return None, "文件大小不能超过 5MB"
 
-        # 计算内容哈希
-        content_hash = hashlib.md5(file_content).hexdigest()
+        # 计算内容哈希 (使用 SHA256 替代 MD5)
+        content_hash = hashlib.sha256(file_content).hexdigest()
 
         # 检查是否已存在相同模板
         existing = db.get_template_by_hash(content_hash)
@@ -426,8 +427,8 @@ class TemplateManager:
         if ext not in ['.docx', '.doc']:
             return None, "仅支持 .docx 格式的简历"
 
-        # 计算内容哈希
-        content_hash = hashlib.md5(file_content).hexdigest()
+        # 计算内容哈希 (使用 SHA256 替代 MD5)
+        content_hash = hashlib.sha256(file_content).hexdigest()
 
         # 检查是否已存在相同模板
         existing = db.get_template_by_hash(content_hash)
@@ -727,9 +728,9 @@ class TemplateManager:
         return base_reason
 
     def _calculate_file_hash(self, file_path: Path) -> str:
-        """计算文件内容哈希"""
+        """计算文件内容哈希 (使用 SHA256 替代 MD5)"""
         with open(file_path, 'rb') as f:
-            return hashlib.md5(f.read()).hexdigest()
+            return hashlib.sha256(f.read()).hexdigest()
 
     def _detect_template_structure(self, file_path: Path) -> Tuple[List[str], float]:
         """从文件检测模板结构"""
