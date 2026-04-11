@@ -12,9 +12,9 @@ from pathlib import Path
 from flask import Request
 
 from .base import BasePaymentProvider
+from . import config  # 引入配置模块，避免循环导入
 
 logger = logging.getLogger(__name__)
-
 
 class WechatProvider(BasePaymentProvider):
     """微信支付"""
