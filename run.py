@@ -16,6 +16,7 @@ import os
 import signal
 from flask import Flask, render_template, jsonify, request
 from pathlib import Path
+from functools import wraps
 
 # 配置日志
 logging.basicConfig(
@@ -30,6 +31,17 @@ server_status = {
     'simple': {'running': False, 'port': 5001, 'script': 'run_simple.py'},
     'multi': {'running': False, 'port': 5002, 'script': 'run_multi.py'}
 }
+
+
+def require_auth(f):
+    """访问控制装饰器 - 使用延迟导入避免循环依赖 (run.py <-> core.auth)"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        from core.auth import authenticate_request
+        if not authenticate_request(request):
+            return jsonify({'status': 'error', 'message': 'Unauthorized access'}), 401
+        return f(*args, **kwargs)
+    return decorated
 
 
 def start_server(tool_id):
@@ -85,7 +97,7 @@ def check_server_health(port, timeout=15):
             response = requests.get(f'http://localhost:{port}/api/health', timeout=1)
             if response.status_code == 200:
                 return True
-        except:
+        except Exception:
             pass
         time.sleep(0.5)
     return False
@@ -132,11 +144,13 @@ if __name__ == '__main__':
     app.config['SECRET_KEY'] = config.SECRET_KEY
 
     @app.route('/')
+    @require_auth
     def index():
         """工具选择器主页"""
         return render_template('index.html')
 
     @app.route('/api/start/<tool_id>', methods=['POST'])
+    @require_auth
     def api_start_tool(tool_id):
         """启动指定工具"""
         if tool_id not in server_status:
@@ -169,6 +183,7 @@ if __name__ == '__main__':
         })
 
     @app.route('/api/stop/<tool_id>', methods=['POST'])
+    @require_auth
     def api_stop_tool(tool_id):
         """停止指定工具"""
         if tool_id not in server_status:
@@ -185,14 +200,14 @@ if __name__ == '__main__':
                 try:
                     import requests
                     requests.post(f'http://localhost:{port}/api/shutdown', timeout=2)
-                except:
+                except Exception:
                     pass
 
                 # 强制终止进程
                 proc.terminate()
                 try:
                     proc.wait(timeout=5)
-                except:
+                except subprocess.TimeoutExpired:
                     proc.kill()
 
                 logger.info(f"Stopped {tool_id} server")
@@ -207,6 +222,7 @@ if __name__ == '__main__':
         return jsonify({'status': 'stopped'})
 
     @app.route('/api/status', methods=['GET'])
+    @require_auth
     def api_status():
         """获取所有服务状态"""
         status = {}
@@ -219,6 +235,7 @@ if __name__ == '__main__':
         return jsonify(status)
 
     @app.route('/api/tools')
+    @require_auth
     def get_tools():
         """获取可用工具列表"""
         return {
@@ -241,6 +258,7 @@ if __name__ == '__main__':
         }
 
     @app.route('/api/shutdown', methods=['POST'])
+    @require_auth
     def api_shutdown():
         """关闭工具选择器服务器"""
         def shutdown():
