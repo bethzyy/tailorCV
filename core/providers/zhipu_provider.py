@@ -11,11 +11,12 @@ import logging
 import traceback
 from typing import Dict, Any, Optional, Callable
 
+# 将 ZhipuProvider 的引用移动到文件顶部，避免循环导入
 from .base_provider import BaseModelProvider, ModelResponse
 
 logger = logging.getLogger(__name__)
 
-
+# 将 Anthropic 客户端导入移动到 _ensure_client 方法中，避免循环导入
 class ZhipuProvider(BaseModelProvider):
     """智谱AI 模型提供者 - Anthropic 兼容端点"""
 

@@ -30,6 +30,27 @@ from core.config import config
 from core.database import db
 from apps.simple_app import create_app
 
+# Import test modules to ensure they are discovered and run
+import tests.test_app
+import tests.test_run
+import tests.test_run_multi
+import tests.test_run_simple
+import tests.test_multi_app
+import tests.test_simple_app
+import tests.test___init__
+import tests.test_multi_expert_team
+import tests.test_quota
+import tests.test_alipay
+import tests.test_base
+import tests.test_wechat
+import tests.test_alibaba_provider
+import tests.test_antigravity_provider
+import tests.test_base_provider
+import tests.test_zhipu_provider
+import tests.test_create_builtin_templates
+import tests.test_generate_template_previews
+import tests.test_test_template_manager
+
 def clear_pycache(project_root: Path) -> int:
     """清理所有 __pycache__ 目录"""
     count = 0
