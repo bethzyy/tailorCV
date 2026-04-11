@@ -134,8 +134,6 @@ def clear_all_caches(is_development: bool):
 
 
 if __name__ == '__main__':
-    from core.config import config
-
     # 判断运行模式
     flask_env = os.getenv('FLASK_ENV', 'production').lower()
     is_development = flask_env == 'development'
@@ -145,6 +143,7 @@ if __name__ == '__main__':
 
     # 验证配置
     try:
+        from core.config import config
         config.validate()
     except ValueError as e:
         logger.error(f"配置验证失败: {e}")
@@ -156,7 +155,13 @@ if __name__ == '__main__':
     from apps.simple_app import create_app
 
     app = create_app()
-    port = config.SIMPLE_APP_PORT
+    
+    # 获取端口配置
+    try:
+        port = config.SIMPLE_APP_PORT
+    except NameError:
+        # 如果 config.validate() 失败导致 config 未定义，使用默认值
+        port = 5001
 
     mode_label = "开发模式" if is_development else "应用模式"
     print(f"\n{'='*50}")
