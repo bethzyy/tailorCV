@@ -81,12 +81,10 @@ COLOR_SCHEMES = {
     }
 }
 
-
 def hex_to_rgb(hex_color):
     """将十六进制颜色转换为 RGB"""
     hex_color = hex_color.lstrip('#')
     return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-
 
 def get_font(size, bold=False):
     """获取字体 - 使用 Windows 系统字体绝对路径"""
@@ -128,7 +126,6 @@ def get_font(size, bold=False):
     # 最后回退到默认字体
     return ImageFont.load_default()
 
-
 def _read_template_content(template_path):
     """读取模板文件内容"""
     try:
@@ -137,7 +134,6 @@ def _read_template_content(template_path):
     except Exception as e:
         logging.warning(f"无法读取模板文件 {template_path}: {e}")
         return []
-
 
 def _draw_wrapped_text(draw, text, x, y, max_width, font, color, line_height=16):
     """绘制自动换行的文本"""
@@ -156,7 +152,6 @@ def _draw_wrapped_text(draw, text, x, y, max_width, font, color, line_height=16)
             y += line_height
     
     return y
-
 
 def _draw_resume_sections(draw, width, colors, fonts):
     """绘制简历的各个部分"""
@@ -191,7 +186,6 @@ def _draw_resume_sections(draw, width, colors, fonts):
             break
     
     return y
-
 
 def generate_preview(template_id: str, template_path: Path, output_path: Path):
     """生成单个模板的预览图"""
@@ -238,7 +232,6 @@ def generate_preview(template_id: str, template_path: Path, output_path: Path):
     img.save(str(output_path), 'PNG')
     logging.info(f'  Generated: {output_path.name}')
 
-
 def main():
     """生成所有模板的预览图"""
     builtin_dir = Path(__file__).parent.parent / 'templates' / 'builtin'
@@ -271,7 +264,6 @@ def main():
 
     logging.info('')
     logging.info('Done!')
-
 
 if __name__ == '__main__':
     main()
