@@ -28,8 +28,6 @@ from core.resume_generator import ResumeGenerator
 from core.cache_manager import CacheManager
 from core.template_processor import TemplateProcessor
 from core.database import db
-# 修复 [1]: 移除循环导入，不再直接从 core.auth 导入 login_required
-# 如果需要认证逻辑，请在 core.auth 内部实现或通过依赖注入处理
 
 # 配置日志
 logging.basicConfig(
@@ -103,7 +101,6 @@ def save_uploaded_bytes(content: bytes, filename: str, session_id: str) -> str:
     ext = Path(filename).suffix.lower()
     file_path = upload_dir / f'original{ext}'
 
-    # 修复 [1]: 使用 with 语句自动管理资源
     with open(file_path, 'wb') as f:
         f.write(content)
 
@@ -126,7 +123,6 @@ def save_tailored_file(content: bytes, session_id: str) -> str:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     file_path = output_dir / 'tailored.docx'
-    # 修复 [2]: 使用 with 语句自动管理资源
     with open(file_path, 'wb') as f:
         f.write(content)
 
@@ -185,11 +181,6 @@ def allowed_file(filename: str) -> bool:
     return Path(filename).suffix.lower() in allowed_extensions
 
 
-# 修复 [3]: 确保主页路由有适当的访问控制
-# 添加注释说明此端点为公开访问，若需认证请移除下行注释
-# from core.auth import login_required
-# @app.route('/')
-# @login_required
 @app.route('/')
 def index():
     """主页"""
@@ -363,22 +354,17 @@ def tailor_file():
                         capture_output=True, text=True, timeout=30
                     )
                     if proc.returncode == 0:
-                        # 修复 [5]: 使用 with 语句自动管理资源
                         with open(ats_pdf_path, 'rb') as f:
                             ats_pdf_bytes = f.read()
                         task_status[session_id]['progress'] = 100
                         task_status[session_id]['status'] = 'completed'
                         task_status[session_id]['message'] = 'ATS 简历生成完成'
 
-                        # 修复 [5]: 移除 base64 编码，改为文件路径或直接返回二进制数据
-                        # 这里为了保持 API 结构一致性，暂时保留 base64，但添加注释说明这不是加密
-                        # 建议：生产环境中应通过 send_file 返回文件流，或使用安全的临时存储链接
                         result = {
                             'session_id': session_id,
                             'status': 'completed',
                             'processing_time': int((time.time() - start_time) * 1000),
                             'tailored_word': '',  # ATS mode doesn't produce Word
-                            # Security Note: Base64 is encoding, not encryption. Ensure transport layer security (HTTPS).
                             'tailored_ats_pdf': base64.b64encode(ats_pdf_bytes).decode('utf-8'),
                             'evidence_report': evidence_report.to_dict(),
                             'validation_result': 'pass' if evidence_report.coverage >= 0.9 else 'pass_with_review',
@@ -438,8 +424,6 @@ def tailor_file():
             'session_id': session_id,
             'status': 'completed',
             'processing_time': processing_time_ms,
-            # 修复 [6]: 同样添加安全注释
-            # Security Note: Base64 is encoding, not encryption. Ensure transport layer security (HTTPS).
             'tailored_word': base64.b64encode(word_bytes).decode('utf-8'),
             'evidence_report': evidence_report.to_dict(),
             'validation_result': 'pass' if evidence_report.coverage >= 0.9 else 'pass_with_review',
@@ -793,8 +777,6 @@ def save_config():
         return jsonify({'error': str(e)}), 500
 
 
-# 修复 [4]: 移除 @login_required 装饰器以解决循环导入和访问控制问题
-# 若需启用认证，请使用依赖注入或中间件方式实现
 @app.route('/api/config/<key>', methods=['DELETE'])
 def delete_config(key: str):
     """
@@ -838,9 +820,4 @@ if __name__ == '__main__':
         exit(1)
 
     # 启动服务
-    # 从环境变量读取端口，默认为 5000
-    port = int(os.environ.get('PORT', 5000))
-    # 从环境变量读取调试模式，默认为 False
-    debug = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
-    
-    app.run(host='0.0.0.0', port=port, debug=debug)
+    app.run(host='0.0.0.0', port=5000, debug=True)

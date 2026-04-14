@@ -24,29 +24,17 @@ from flask import Request
 from ..database import db
 from ..config import config
 from .base import BasePaymentProvider
+from .alipay import AlipayProvider
+from .wechat import WechatProvider
 
 logger = logging.getLogger(__name__)
 
 # 注册所有支付 provider
-_providers: Dict[str, BasePaymentProvider] = {}
+_providers: Dict[str, BasePaymentProvider] = {
+    'alipay': AlipayProvider(),
+    'wechat': WechatProvider(),
+}
 
-def _init_providers():
-    """
-    初始化支付提供商。
-    延迟导入具体实现类以避免循环导入。
-    """
-    if not _providers:
-        try:
-            from .alipay import AlipayProvider
-            _providers['alipay'] = AlipayProvider()
-        except ImportError:
-            logger.warning("AlipayProvider 导入失败")
-
-        try:
-            from .wechat import WechatProvider
-            _providers['wechat'] = WechatProvider()
-        except ImportError:
-            logger.warning("WechatProvider 导入失败")
 
 def get_available_providers() -> List[Dict[str, Any]]:
     """
@@ -55,7 +43,6 @@ def get_available_providers() -> List[Dict[str, Any]]:
     Returns:
         list: [{provider_id, provider_name, available}]
     """
-    _init_providers()
     result = []
     order = ['alipay', 'wechat']
     for pid in order:
@@ -65,6 +52,7 @@ def get_available_providers() -> List[Dict[str, Any]]:
             if info['available']:
                 result.append(info)
     return result
+
 
 def _get_provider(provider_id: str = None) -> BasePaymentProvider:
     """
@@ -76,7 +64,6 @@ def _get_provider(provider_id: str = None) -> BasePaymentProvider:
     Returns:
         BasePaymentProvider 实例
     """
-    _init_providers()
     if not provider_id:
         provider_id = config.DEFAULT_PAYMENT_PROVIDER
 
@@ -88,82 +75,6 @@ def _get_provider(provider_id: str = None) -> BasePaymentProvider:
 
     return provider
 
-def _resolve_provider(provider_id: str = None) -> BasePaymentProvider:
-    """
-    解析并获取可用的支付 provider，支持回退逻辑
-
-    Args:
-        provider_id: 首选 provider 标识
-
-    Returns:
-        BasePaymentProvider 实例
-    """
-    try:
-        return _get_provider(provider_id)
-    except (ValueError, RuntimeError):
-        available = get_available_providers()
-        if not available:
-            raise RuntimeError("没有可用的支付方式")
-        fallback_provider = _get_provider(available[0]['provider_id'])
-        logger.warning(f"支付方式 {provider_id} 不可用，回退到 {fallback_provider.provider_name}")
-        return fallback_provider
-
-def _ensure_pending_order(user_id: int, plan_type: str, plan_config: Dict[str, Any],
-                          provider_id: str, amount: float) -> str:
-    """
-    确保存在待支付订单（复用或创建）
-
-    Args:
-        user_id: 用户ID
-        plan_type: 套餐类型
-        plan_config: 套餐配置
-        provider_id: 支付方式标识
-        amount: 金额
-
-    Returns:
-        str: 订单号
-    """
-    # 检查是否有未支付的待处理订单（同一 provider + 同一套餐）
-    try:
-        pending_order = db.get_pending_order(user_id, plan_type)
-        if pending_order and pending_order.get('provider') == provider_id:
-            order_no = pending_order['order_no']
-            logger.info(f"复用待支付订单: {order_no}")
-            return order_no
-
-        order_no = _generate_order_no()
-        db.create_order(order_no, user_id, plan_type, plan_config['name'],
-                        amount, provider=provider_id)
-        return order_no
-    except Exception as e:
-        logger.error(f"确保待支付订单失败: {e}")
-        raise
-
-def _create_payment_qr(provider: BasePaymentProvider, order_no: str,
-                       amount: float, description: str) -> Dict[str, Any]:
-    """
-    调用支付接口创建二维码订单
-
-    Args:
-        provider: 支付 provider 实例
-        order_no: 订单号
-        amount: 金额
-        description: 订单描述
-
-    Returns:
-        dict: 包含 code_url, sandbox 等信息的字典
-    """
-    result = provider.create_qr_order(order_no, amount, description)
-    code_url = result.get('code_url', '')
-
-    # 用 Python qrcode 包生成 base64 二维码图片
-    qr_image = _generate_qr_base64(code_url)
-
-    return {
-        'code_url': code_url,
-        'qr_image': qr_image,
-        'sandbox': result.get('sandbox', False),
-    }
 
 def create_payment(user_id: int, plan_type: str,
                    provider_id: str = None) -> Dict[str, Any]:
@@ -187,16 +98,35 @@ def create_payment(user_id: int, plan_type: str,
         raise ValueError("免费套餐无需支付")
 
     # 获取 provider（支持回退）
-    provider = _resolve_provider(provider_id)
+    try:
+        provider = _get_provider(provider_id)
+    except (ValueError, RuntimeError):
+        available = get_available_providers()
+        if not available:
+            raise RuntimeError("没有可用的支付方式")
+        provider = _get_provider(available[0]['provider_id'])
+        logger.warning(f"支付方式 {provider_id} 不可用，回退到 {provider.provider_name}")
+
     actual_provider_id = provider.provider_id
 
-    # 确保订单存在
-    order_no = _ensure_pending_order(user_id, plan_type, plan_config, actual_provider_id, amount)
+    # 检查是否有未支付的待处理订单（同一 provider + 同一套餐）
+    pending_order = db.get_pending_order(user_id, plan_type)
+    if pending_order and pending_order.get('provider') == actual_provider_id:
+        order_no = pending_order['order_no']
+        logger.info(f"复用待支付订单: {order_no}")
+    else:
+        order_no = _generate_order_no()
+        db.create_order(order_no, user_id, plan_type, plan_config['name'],
+                        amount, provider=actual_provider_id)
 
     # 调用 provider 创建预付单
     description = f"智能简历定制 - {plan_config['name']}"
     try:
-        qr_result = _create_payment_qr(provider, order_no, amount, description)
+        result = provider.create_qr_order(order_no, amount, description)
+        code_url = result.get('code_url', '')
+
+        # 用 Python qrcode 包生成 base64 二维码图片
+        qr_image = _generate_qr_base64(code_url)
 
         return {
             'order_no': order_no,
@@ -205,11 +135,14 @@ def create_payment(user_id: int, plan_type: str,
             'plan_type': plan_type,
             'provider': actual_provider_id,
             'provider_name': provider.provider_name,
-            **qr_result,
+            'code_url': code_url,
+            'qr_image': qr_image,
+            'sandbox': result.get('sandbox', False),
         }
     except Exception as e:
         logger.error(f"创建支付订单失败: {e}")
         raise
+
 
 def handle_payment_notify(request: Request, provider_id: str) -> bool:
     """
@@ -222,7 +155,6 @@ def handle_payment_notify(request: Request, provider_id: str) -> bool:
     Returns:
         bool: 处理是否成功
     """
-    _init_providers()
     provider = _providers.get(provider_id)
     if not provider:
         logger.error(f"未知支付方式回调: {provider_id}")
@@ -238,33 +170,30 @@ def handle_payment_notify(request: Request, provider_id: str) -> bool:
         transaction_id = notify_data.get('transaction_id', '')
 
         # 查询订单
-        try:
-            order = db.get_order(order_no)
-            if not order:
-                logger.error(f"订单不存在: {order_no}")
-                return False
-
-            if order['status'] == 'paid':
-                logger.info(f"订单已处理，跳过: {order_no}")
-                return True  # 幂等处理
-
-            # 更新订单状态
-            db.update_order_paid(order_no, transaction_id)
-
-            # 激活套餐
-            from ..quota import activate_plan
-            activate_plan(order['user_id'], order['plan_type'])
-
-            logger.info(f"支付成功: {order_no}, provider={provider_id}, "
-                         f"用户={order['user_id']}, 套餐={order['plan_type']}")
-            return True
-        except Exception as db_err:
-            logger.error(f"处理支付回调数据库操作异常: {provider_id}, {db_err}")
+        order = db.get_order(order_no)
+        if not order:
+            logger.error(f"订单不存在: {order_no}")
             return False
+
+        if order['status'] == 'paid':
+            logger.info(f"订单已处理，跳过: {order_no}")
+            return True  # 幂等处理
+
+        # 更新订单状态
+        db.update_order_paid(order_no, transaction_id)
+
+        # 激活套餐
+        from ..quota import activate_plan
+        activate_plan(order['user_id'], order['plan_type'])
+
+        logger.info(f"支付成功: {order_no}, provider={provider_id}, "
+                     f"用户={order['user_id']}, 套餐={order['plan_type']}")
+        return True
 
     except Exception as e:
         logger.error(f"处理支付回调异常: {provider_id}, {e}")
         return False
+
 
 def query_payment(order_no: str) -> Dict[str, Any]:
     """
@@ -276,67 +205,61 @@ def query_payment(order_no: str) -> Dict[str, Any]:
     Returns:
         dict: {status, paid_at, ...}
     """
-    _init_providers()
-    try:
-        order = db.get_order(order_no)
-        if not order:
-            return {'status': 'not_found'}
+    order = db.get_order(order_no)
+    if not order:
+        return {'status': 'not_found'}
 
-        # 如果订单未支付且未过期，主动查询支付平台
-        if order['status'] == 'pending':
-            provider_id = order.get('provider', '')
-            provider = _providers.get(provider_id)
+    # 如果订单未支付且未过期，主动查询支付平台
+    if order['status'] == 'pending':
+        provider_id = order.get('provider', '')
+        provider = _providers.get(provider_id)
 
-            if provider and provider.is_available():
-                try:
-                    platform_status = provider.query_order(order_no)
-                    if platform_status == 'SUCCESS':
-                        transaction_id = f'query_{order_no}'
-                        db.update_order_paid(order_no, transaction_id)
-                        from ..quota import activate_plan
-                        activate_plan(order['user_id'], order['plan_type'])
-                        order = db.get_order(order_no)
-                except Exception as e:
-                    logger.error(f"查询支付状态失败: {order_no}, {e}")
+        if provider and provider.is_available():
+            try:
+                platform_status = provider.query_order(order_no)
+                if platform_status == 'SUCCESS':
+                    transaction_id = f'query_{order_no}'
+                    db.update_order_paid(order_no, transaction_id)
+                    from ..quota import activate_plan
+                    activate_plan(order['user_id'], order['plan_type'])
+                    order = db.get_order(order_no)
+            except Exception as e:
+                logger.error(f"查询支付状态失败: {order_no}, {e}")
 
-        return {
-            'order_no': order['order_no'],
-            'status': order['status'],
-            'plan_type': order['plan_type'],
-            'plan_name': order['plan_name'],
-            'amount': order['amount'],
-            'provider': order.get('provider', ''),
-            'paid_at': order.get('paid_at'),
-            'created_at': order['created_at'],
-        }
-    except Exception as e:
-        logger.error(f"查询支付订单数据库异常: {order_no}, {e}")
-        return {'status': 'error', 'message': '查询失败'}
+    return {
+        'order_no': order['order_no'],
+        'status': order['status'],
+        'plan_type': order['plan_type'],
+        'plan_name': order['plan_name'],
+        'amount': order['amount'],
+        'provider': order.get('provider', ''),
+        'paid_at': order.get('paid_at'),
+        'created_at': order['created_at'],
+    }
+
 
 def simulate_payment(order_no: str) -> bool:
     """
     模拟支付成功（仅沙箱环境使用）
     """
-    try:
-        order = db.get_order(order_no)
-        if not order or order['status'] != 'pending':
-            return False
-
-        transaction_id = f'sandbox_sim_{order_no}'
-        db.update_order_paid(order_no, transaction_id)
-
-        from ..quota import activate_plan
-        activate_plan(order['user_id'], order['plan_type'])
-
-        logger.info(f"[沙箱] 模拟支付成功: {order_no}")
-        return True
-    except Exception as e:
-        logger.error(f"模拟支付失败: {order_no}, {e}")
+    order = db.get_order(order_no)
+    if not order or order['status'] != 'pending':
         return False
+
+    transaction_id = f'sandbox_sim_{order_no}'
+    db.update_order_paid(order_no, transaction_id)
+
+    from ..quota import activate_plan
+    activate_plan(order['user_id'], order['plan_type'])
+
+    logger.info(f"[沙箱] 模拟支付成功: {order_no}")
+    return True
+
 
 def _generate_order_no() -> str:
     """生成唯一订单号"""
     return f"TCV{int(time.time() * 1000)}{uuid.uuid4().hex[:8].upper()}"
+
 
 def _generate_qr_base64(code_url: str) -> str:
     """
@@ -355,11 +278,11 @@ def _generate_qr_base64(code_url: str) -> str:
         img = qr.make_image(fill_color='black', back_color='white')
         buf = io.BytesIO()
         img.save(buf, format='PNG')
-        # 修复说明：此处仅用于生成二维码图片展示，不涉及敏感数据加密或存储，故保留 base64 编码方式。
         return base64.b64encode(buf.getvalue()).decode('utf-8')
     except Exception as e:
         logger.error(f"生成二维码失败: {e}")
         return ''
+
 
 __all__ = [
     'BasePaymentProvider',

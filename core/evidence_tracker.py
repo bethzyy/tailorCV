@@ -10,7 +10,7 @@
 import re
 import json
 import logging
-from typing import Dict, Any, List, Optional, Tuple, Protocol
+from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 
@@ -18,25 +18,27 @@ from .config import config
 
 logger = logging.getLogger(__name__)
 
+
+@dataclass
 class ValidationResult:
     """验证结果"""
-    def __init__(self, item_id: str, valid: bool, confidence: float, action: str, reason: str = "", details: Dict[str, Any] = None):
-        self.item_id = item_id
-        self.valid = valid
-        self.confidence = confidence
-        self.action = action  # pass / needs_review / reject
-        self.reason = reason
-        self.details = details if details is not None else {}
+    item_id: str
+    valid: bool
+    confidence: float
+    action: str  # pass / needs_review / reject
+    reason: str = ""
+    details: Dict[str, Any] = field(default_factory=dict)
 
+
+@dataclass
 class EvidenceReport:
     """依据报告"""
-    def __init__(self):
-        self.total_items = 0
-        self.validated = 0
-        self.needs_review = 0
-        self.rejected = 0
-        self.coverage = 0.0
-        self.items: List[ValidationResult] = []
+    total_items: int = 0
+    validated: int = 0
+    needs_review: int = 0
+    rejected: int = 0
+    coverage: float = 0.0
+    items: List[ValidationResult] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -56,14 +58,175 @@ class EvidenceReport:
             ]
         }
 
-class TextAnalyzer:
-    """文本分析器：负责相似度计算和关键词检查"""
-    
-    def __init__(self, similarity_threshold: float, suspicious_patterns: List[str]):
-        self.similarity_threshold = similarity_threshold
-        self.suspicious_patterns = suspicious_patterns
 
-    def fuzzy_match(self, text1: str, text2: str) -> float:
+class EvidenceTracker:
+    """依据追踪器 - 混合验证机制"""
+
+    SIMILARITY_THRESHOLD = config.SIMILARITY_THRESHOLD
+    CONFIDENCE_THRESHOLD = config.CONFIDENCE_THRESHOLD
+
+    # 从配置加载可疑关键词模式
+    SUSPICIOUS_PATTERNS = config.get_suspicious_patterns()
+
+    def __init__(self, model_manager=None):
+        """
+        初始化依据追踪器
+
+        Args:
+            model_manager: 模型管理器（用于AI验证）
+        """
+        self.model_manager = model_manager
+        self.ai_validation_config = config.get_ai_validation_config()
+        self.validation_stats = {
+            'local_checks': 0,
+            'ai_checks': 0,
+            'passed': 0,
+            'needs_review': 0,
+            'rejected': 0
+        }
+
+    def validate_content(self, original_resume: str,
+                         tailored_content: Dict[str, Any]) -> ValidationResult:
+        """
+        验证定制内容
+
+        Args:
+            original_resume: 原版简历文本
+            tailored_content: 定制内容（包含 original, tailored, evidence）
+
+        Returns:
+            ValidationResult: 验证结果
+        """
+        item_id = tailored_content.get('id', 'unknown')
+        evidence = tailored_content.get('evidence', {})
+        original = tailored_content.get('original', '')
+        tailored = tailored_content.get('tailored', '')
+
+        self.validation_stats['local_checks'] += 1
+
+        # 第一重：本地文本相似度
+        similarity = self._fuzzy_match(original, tailored)
+        if similarity < self.SIMILARITY_THRESHOLD:
+            self.validation_stats['rejected'] += 1
+            return ValidationResult(
+                item_id=item_id,
+                valid=False,
+                confidence=evidence.get('confidence', 0.5),
+                action='reject',
+                reason=f'原文匹配度{similarity:.0%}低于阈值{self.SIMILARITY_THRESHOLD:.0%}',
+                details={'similarity': similarity}
+            )
+
+        # 第二重：可疑关键词检查
+        added_keywords = evidence.get('added_keywords', [])
+        suspicious = self._check_suspicious_keywords(tailored)
+
+        # 第三重：AI验证（仅对可疑内容）
+        if suspicious and evidence.get('confidence', 1.0) < self.CONFIDENCE_THRESHOLD:
+            if self.model_manager:
+                self.validation_stats['ai_checks'] += 1
+                ai_result = self._ai_validate(tailored, original_resume)
+                if not ai_result['valid']:
+                    self.validation_stats['rejected'] += 1
+                    return ValidationResult(
+                        item_id=item_id,
+                        valid=False,
+                        confidence=ai_result['confidence'],
+                        action='reject',
+                        reason=ai_result['reason'],
+                        details={'suspicious_keywords': suspicious}
+                    )
+
+        # 计算最终置信度
+        final_confidence = self._calculate_final_confidence(
+            evidence.get('confidence', 0.8),
+            similarity,
+            suspicious
+        )
+
+        # 判断是否需要人工确认
+        if final_confidence < self.CONFIDENCE_THRESHOLD:
+            self.validation_stats['needs_review'] += 1
+            return ValidationResult(
+                item_id=item_id,
+                valid=True,
+                confidence=final_confidence,
+                action='needs_review',
+                reason='置信度较低，建议人工确认',
+                details={'similarity': similarity, 'suspicious_keywords': suspicious}
+            )
+
+        self.validation_stats['passed'] += 1
+        return ValidationResult(
+            item_id=item_id,
+            valid=True,
+            confidence=final_confidence,
+            action='pass',
+            details={'similarity': similarity}
+        )
+
+    def validate_resume(self, original_resume: str,
+                        tailored_resume: Dict[str, Any]) -> EvidenceReport:
+        """
+        验证整个定制简历
+
+        Args:
+            original_resume: 原版简历文本
+            tailored_resume: 定制简历结构
+
+        Returns:
+            EvidenceReport: 依据报告
+        """
+        report = EvidenceReport()
+
+        # 验证工作经历
+        work_exp = tailored_resume.get('work_experience', [])
+        for item in work_exp:
+            result = self.validate_content(original_resume, item)
+            report.items.append(result)
+            report.total_items += 1
+
+        # 验证项目经历
+        projects = tailored_resume.get('projects', [])
+        for item in projects:
+            result = self.validate_content(original_resume, item)
+            report.items.append(result)
+            report.total_items += 1
+
+        # 验证技能
+        skills = tailored_resume.get('skills', [])
+        for item in skills:
+            result = self.validate_content(original_resume, item)
+            report.items.append(result)
+            report.total_items += 1
+
+        # 验证教育背景
+        education = tailored_resume.get('education', [])
+        for item in education:
+            result = self.validate_content(original_resume, item)
+            report.items.append(result)
+            report.total_items += 1
+
+        # 统计结果
+        for item in report.items:
+            if item.action == 'pass':
+                report.validated += 1
+            elif item.action == 'needs_review':
+                report.needs_review += 1
+            else:
+                report.rejected += 1
+
+        # 计算覆盖率
+        if report.total_items > 0:
+            report.coverage = report.validated / report.total_items
+
+        logger.info(f"验证完成: 总数={report.total_items}, 通过={report.validated}, "
+                   f"需确认={report.needs_review}, 拒绝={report.rejected}, "
+                   f"覆盖率={report.coverage:.0%}")
+
+        return report
+
+    def _fuzzy_match(self, text1: str, text2: str) -> float:
         """
         模糊匹配两个文本的相似度
 
@@ -105,7 +268,7 @@ class TextAnalyzer:
         keywords = [w for w in words if len(w) >= 2]
         return keywords
 
-    def check_suspicious_keywords(self, text: str) -> List[str]:
+    def _check_suspicious_keywords(self, text: str) -> List[str]:
         """
         检查可疑关键词
 
@@ -116,19 +279,15 @@ class TextAnalyzer:
             List[str]: 可疑关键词列表
         """
         suspicious = []
-        for pattern in self.suspicious_patterns:
+        for pattern in self.SUSPICIOUS_PATTERNS:
             if re.search(pattern, text):
                 suspicious.append(pattern)
 
         return suspicious
 
-class ConfidenceCalculator:
-    """置信度计算器"""
-
-    @staticmethod
-    def calculate(base_confidence: float,
-                  similarity: float,
-                  suspicious: List[str]) -> float:
+    def _calculate_final_confidence(self, base_confidence: float,
+                                    similarity: float,
+                                    suspicious: List[str]) -> float:
         """
         计算最终置信度
 
@@ -152,22 +311,7 @@ class ConfidenceCalculator:
 
         return min(1.0, max(0.0, confidence))
 
-# 定义 ModelManager 协议以避免循环导入
-class ModelManagerProtocol(Protocol):
-    """模型管理器协议"""
-    
-    def call(self, prompt: str, task_type: str, max_tokens: int, temperature: float) -> Any:
-        """调用模型"""
-        ...
-
-class AIValidator:
-    """AI验证器：负责调用模型进行验证"""
-
-    def __init__(self, model_manager: Optional[ModelManagerProtocol], ai_validation_config: Dict[str, Any]):
-        self.model_manager = model_manager
-        self.ai_validation_config = ai_validation_config
-
-    def validate(self, tailored_text: str, original_resume: str) -> Dict[str, Any]:
+    def _ai_validate(self, tailored_text: str, original_resume: str) -> Dict[str, Any]:
         """
         AI 验证（对可疑内容）- 优化版
 
@@ -240,173 +384,6 @@ class AIValidator:
 
         # 默认返回
         return {'valid': True, 'confidence': 0.5, 'reason': '验证异常，默认通过'}
-
-class EvidenceTracker:
-    """依据追踪器 - 混合验证机制"""
-
-    SIMILARITY_THRESHOLD = config.SIMILARITY_THRESHOLD
-    CONFIDENCE_THRESHOLD = config.CONFIDENCE_THRESHOLD
-
-    # 从配置加载可疑关键词模式
-    SUSPICIOUS_PATTERNS = config.get_suspicious_patterns()
-
-    def __init__(self, model_manager: Optional[ModelManagerProtocol] = None):
-        """
-        初始化依据追踪器
-
-        Args:
-            model_manager: 模型管理器（用于AI验证）
-        """
-        self.model_manager = model_manager
-        self.ai_validation_config = config.get_ai_validation_config()
-        self.validation_stats = {
-            'local_checks': 0,
-            'ai_checks': 0,
-            'passed': 0,
-            'needs_review': 0,
-            'rejected': 0
-        }
-        
-        # 初始化组件
-        self.text_analyzer = TextAnalyzer(self.SIMILARITY_THRESHOLD, self.SUSPICIOUS_PATTERNS)
-        self.ai_validator = AIValidator(model_manager, self.ai_validation_config)
-
-    def validate_content(self, original_resume: str,
-                         tailored_content: Dict[str, Any]) -> ValidationResult:
-        """
-        验证定制内容
-
-        Args:
-            original_resume: 原版简历文本
-            tailored_content: 定制内容（包含 original, tailored, evidence）
-
-        Returns:
-            ValidationResult: 验证结果
-        """
-        return self._validate_content(original_resume, tailored_content)
-
-    def validate_resume(self, original_resume: str,
-                        tailored_resume: Dict[str, Any]) -> EvidenceReport:
-        """
-        验证整个定制简历
-
-        Args:
-            original_resume: 原版简历文本
-            tailored_resume: 定制简历结构
-
-        Returns:
-            EvidenceReport: 依据报告
-        """
-        return self._validate_resume(original_resume, tailored_resume)
-
-    def _validate_content(self, original_resume: str,
-                          tailored_content: Dict[str, Any]) -> ValidationResult:
-        item_id = tailored_content.get('id', 'unknown')
-        evidence = tailored_content.get('evidence', {})
-        original = tailored_content.get('original', '')
-        tailored = tailored_content.get('tailored', '')
-
-        self.validation_stats['local_checks'] += 1
-
-        # 第一重：本地文本相似度
-        similarity = self.text_analyzer.fuzzy_match(original, tailored)
-        if similarity < self.SIMILARITY_THRESHOLD:
-            self.validation_stats['rejected'] += 1
-            return ValidationResult(
-                item_id=item_id,
-                valid=False,
-                confidence=evidence.get('confidence', 0.5),
-                action='reject',
-                reason=f'原文匹配度{similarity:.0%}低于阈值{self.SIMILARITY_THRESHOLD:.0%}',
-                details={'similarity': similarity}
-            )
-
-        # 第二重：可疑关键词检查
-        suspicious = self.text_analyzer.check_suspicious_keywords(tailored)
-
-        # 第三重：AI验证（仅对可疑内容）
-        if suspicious and evidence.get('confidence', 1.0) < self.CONFIDENCE_THRESHOLD:
-            ai_result = self.ai_validator.validate(tailored, original_resume)
-            if not ai_result['valid']:
-                self.validation_stats['rejected'] += 1
-                return ValidationResult(
-                    item_id=item_id,
-                    valid=False,
-                    confidence=ai_result['confidence'],
-                    action='reject',
-                    reason=ai_result['reason'],
-                    details={'suspicious_keywords': suspicious}
-                )
-
-        # 计算最终置信度
-        final_confidence = ConfidenceCalculator.calculate(
-            evidence.get('confidence', 0.8),
-            similarity,
-            suspicious
-        )
-
-        # 判断是否需要人工确认
-        if final_confidence < self.CONFIDENCE_THRESHOLD:
-            self.validation_stats['needs_review'] += 1
-            return ValidationResult(
-                item_id=item_id,
-                valid=True,
-                confidence=final_confidence,
-                action='needs_review',
-                reason='置信度较低，建议人工确认',
-                details={'similarity': similarity, 'suspicious_keywords': suspicious}
-            )
-
-        self.validation_stats['passed'] += 1
-        return ValidationResult(
-            item_id=item_id,
-            valid=True,
-            confidence=final_confidence,
-            action='pass',
-            details={'similarity': similarity}
-        )
-
-    def _validate_resume(self, original_resume: str,
-                         tailored_resume: Dict[str, Any]) -> EvidenceReport:
-        report = EvidenceReport()
-
-        # 验证工作经历
-        self._validate_section(tailored_resume.get('work_experience', []), original_resume, report)
-        
-        # 验证项目经历
-        self._validate_section(tailored_resume.get('projects', []), original_resume, report)
-        
-        # 验证技能
-        self._validate_section(tailored_resume.get('skills', []), original_resume, report)
-        
-        # 验证教育背景
-        self._validate_section(tailored_resume.get('education', []), original_resume, report)
-
-        # 统计结果
-        for item in report.items:
-            if item.action == 'pass':
-                report.validated += 1
-            elif item.action == 'needs_review':
-                report.needs_review += 1
-            else:
-                report.rejected += 1
-
-        # 计算覆盖率
-        if report.total_items > 0:
-            report.coverage = report.validated / report.total_items
-
-        logger.info(f"验证完成: 总数={report.total_items}, 通过={report.validated}, "
-                   f"需确认={report.needs_review}, 拒绝={report.rejected}, "
-                   f"覆盖率={report.coverage:.0%}")
-
-        return report
-
-    def _validate_section(self, items: List[Dict[str, Any]], original_resume: str, report: EvidenceReport):
-        """验证简历中的某个章节"""
-        for item in items:
-            result = self._validate_content(original_resume, item)
-            report.items.append(result)
-            report.total_items += 1
 
     def get_stats(self) -> Dict[str, int]:
         """获取验证统计"""

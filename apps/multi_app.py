@@ -71,24 +71,16 @@ def create_app() -> Flask:
         upload_dir.mkdir(parents=True, exist_ok=True)
         ext = Path(filename).suffix.lower()
         file_path = upload_dir / f'original{ext}'
-        try:
-            with open(file_path, 'wb') as f:
-                f.write(content)
-        except IOError as e:
-            logger.error(f"保存上传文件失败: {e}")
-            raise
+        with open(file_path, 'wb') as f:
+            f.write(content)
         return str(file_path)
 
     def save_multi_result(content: bytes, session_id: str, provider_id: str) -> str:
         output_dir = Path('storage/multi_results') / session_id
         output_dir.mkdir(parents=True, exist_ok=True)
         file_path = output_dir / f'{provider_id}_tailored.docx'
-        try:
-            with open(file_path, 'wb') as f:
-                f.write(content)
-        except IOError as e:
-            logger.error(f"保存多模型结果失败: {e}")
-            raise
+        with open(file_path, 'wb') as f:
+            f.write(content)
         return str(file_path)
 
     def allowed_file(filename: str) -> bool:
@@ -226,11 +218,10 @@ def create_app() -> Flask:
 
                 save_multi_result(word_bytes, session_id, provider_id)
 
-                # 修复: 仅返回文件引用，不返回 base64 编码的文件内容
                 results[provider_id] = {
                     'model_used': gen_result.model_used,
                     'provider_id': provider_id,
-                    'file_path': f'/api/download/{session_id}/{provider_id}',
+                    'tailored_word': base64.b64encode(word_bytes).decode('utf-8'),
                     'analysis': {
                         'match_score': analysis_result.results.get(provider_id, {}).matching_strategy.get('match_score', 0) if provider_id in analysis_result.results else 0,
                         'match_level': analysis_result.results.get(provider_id, {}).matching_strategy.get('match_level', '') if provider_id in analysis_result.results else '',
@@ -310,14 +301,13 @@ def create_app() -> Flask:
 
             processing_time_ms = int((time.time() - start_time) * 1000)
 
-            # 修复: 仅返回文件引用，不返回 base64 编码的文件内容
             return jsonify({
                 'session_id': session_id,
                 'status': 'completed',
                 'processing_time': processing_time_ms,
                 'provider_id': provider_id,
                 'model_used': generation.model_used,
-                'file_path': f'/api/download/{session_id}/{provider_id}',
+                'tailored_word': base64.b64encode(word_bytes).decode('utf-8'),
                 'analysis': {
                     'match_score': analysis.matching_strategy.get('match_score', 0),
                     'match_level': analysis.matching_strategy.get('match_level', ''),

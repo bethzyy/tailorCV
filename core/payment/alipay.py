@@ -16,6 +16,7 @@ from .. import config
 
 logger = logging.getLogger(__name__)
 
+
 class AlipayProvider(BasePaymentProvider):
     """支付宝当面付"""
 
@@ -180,7 +181,40 @@ class AlipayProvider(BasePaymentProvider):
             # TODO: 生产环境使用 SDK verify 方法验签
             # 目前沙箱模式直接信任
             if not config.ALIPAY_SANDBOX:
-                if not self._verify_notify_signature(data):
+                logger.warning("TODO: 实现支付宝回调签名验证")
+                sign = data.get('sign', '')
+                if not sign:
+                    logger.error("支付宝回调缺少签名")
+                    return None
+
+                # 构建待验签参数（按字典序排列，排除 sign 和 sign_type）
+                params_to_verify = {k: v for k, v in sorted(data.items())
+                                    if k not in ('sign', 'sign_type') and v}
+
+                from urllib.parse import urlencode
+                sign_content = urlencode(params_to_verify)
+
+                try:
+                    from alipay.aop.api.util.SignatureUtils import verify_with_rsa
+
+                    # 读取支付宝公钥
+                    alipay_public_key = ''
+                    if config.ALIPAY_PUBLIC_KEY_PATH:
+                        pub_key_path = Path(config.ALIPAY_PUBLIC_KEY_PATH)
+                        if pub_key_path.exists():
+                            alipay_public_key = pub_key_path.read_text().strip()
+
+                    if not alipay_public_key:
+                        logger.error("支付宝公钥未配置（ALIPAY_PUBLIC_KEY_PATH），无法验签")
+                        return None
+
+                    if not verify_with_rsa(alipay_public_key, sign_content, sign):
+                        logger.warning("支付宝回调验签失败")
+                        return None
+
+                    logger.info("支付宝回调验签成功")
+                except Exception as e:
+                    logger.error(f"支付宝回调验签异常: {e}")
                     return None
 
             return {
@@ -193,43 +227,3 @@ class AlipayProvider(BasePaymentProvider):
         except Exception as e:
             logger.error(f"支付宝回调处理异常: {e}")
             return None
-
-    def _verify_notify_signature(self, data: Dict[str, Any]) -> bool:
-        """
-        验证支付宝回调签名
-        """
-        sign = data.get('sign', '')
-        if not sign:
-            logger.error("支付宝回调缺少签名")
-            return False
-
-        # 构建待验签参数（按字典序排列，排除 sign 和 sign_type）
-        params_to_verify = {k: v for k, v in sorted(data.items())
-                            if k not in ('sign', 'sign_type') and v}
-
-        from urllib.parse import urlencode
-        sign_content = urlencode(params_to_verify)
-
-        try:
-            from alipay.aop.api.util.SignatureUtils import verify_with_rsa
-
-            # 读取支付宝公钥
-            alipay_public_key = ''
-            if config.ALIPAY_PUBLIC_KEY_PATH:
-                pub_key_path = Path(config.ALIPAY_PUBLIC_KEY_PATH)
-                if pub_key_path.exists():
-                    alipay_public_key = pub_key_path.read_text().strip()
-
-            if not alipay_public_key:
-                logger.error("支付宝公钥未配置（ALIPAY_PUBLIC_KEY_PATH），无法验签")
-                return False
-
-            if not verify_with_rsa(alipay_public_key, sign_content, sign):
-                logger.warning("支付宝回调验签失败")
-                return False
-
-            logger.info("支付宝回调验签成功")
-            return True
-        except Exception as e:
-            logger.error(f"支付宝回调验签异常: {e}")
-            return False

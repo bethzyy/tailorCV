@@ -23,33 +23,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# 将共享逻辑提取到独立模块
-from core.auth import authenticate_user
-from core.cache_manager import CacheManager
-from core.config import config
-from core.database import db
-from apps.simple_app import create_app
-
-# Import test modules to ensure they are discovered and run
-import tests.test_app
-import tests.test_run
-import tests.test_run_multi
-import tests.test_run_simple
-import tests.test_multi_app
-import tests.test_simple_app
-import tests.test___init__
-import tests.test_multi_expert_team
-import tests.test_quota
-import tests.test_alipay
-import tests.test_base
-import tests.test_wechat
-import tests.test_alibaba_provider
-import tests.test_antigravity_provider
-import tests.test_base_provider
-import tests.test_zhipu_provider
-import tests.test_create_builtin_templates
-import tests.test_generate_template_previews
-import tests.test_test_template_manager
 
 def clear_pycache(project_root: Path) -> int:
     """清理所有 __pycache__ 目录"""
@@ -129,6 +102,7 @@ def clear_all_caches(is_development: bool):
             logger.info(f"  cache/: 已清理 {biz_count} 个文件（全量）")
     else:
         try:
+            from core.cache_manager import CacheManager
             cm = CacheManager()
             biz_count = cm.clear_all()
             if biz_count > 0:
@@ -138,6 +112,7 @@ def clear_all_caches(is_development: bool):
 
     # 3. 清理过期 storage 文件（所有模式都清理）
     try:
+        from core.config import config
         retention_days = config.HISTORY_RETENTION_DAYS
     except Exception:
         retention_days = 30
@@ -148,6 +123,7 @@ def clear_all_caches(is_development: bool):
 
     # 4. 清理数据库过期数据（所有模式都清理）
     try:
+        from core.database import db
         db_count = db.cleanup_expired()
         if db_count > 0:
             logger.info(f"  数据库: 已清理 {db_count} 条过期记录")
@@ -158,6 +134,8 @@ def clear_all_caches(is_development: bool):
 
 
 if __name__ == '__main__':
+    from core.config import config
+
     # 判断运行模式
     flask_env = os.getenv('FLASK_ENV', 'production').lower()
     is_development = flask_env == 'development'
@@ -175,6 +153,8 @@ if __name__ == '__main__':
         exit(1)
 
     # 创建并启动应用
+    from apps.simple_app import create_app
+
     app = create_app()
     port = config.SIMPLE_APP_PORT
 

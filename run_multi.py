@@ -16,8 +16,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def main():
-    """主入口函数，使用延迟导入避免循环依赖 run_multi.py <-> core.auth.py"""
+if __name__ == '__main__':
     from core.config import config
 
     # 验证配置
@@ -38,7 +37,6 @@ def main():
     # 显示可用提供者
     from core.multi_model_manager import MultiModelManager
     manager = MultiModelManager()
-    # 使用列表切片创建副本，避免后续修改影响原列表
     providers = list(manager.available_providers.keys())
 
     print(f"\n{'='*50}")
@@ -48,7 +46,3 @@ def main():
     print(f"{'='*50}\n")
 
     app.run(host='0.0.0.0', port=port, debug=True)
-
-
-if __name__ == '__main__':
-    main()

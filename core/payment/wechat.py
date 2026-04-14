@@ -12,9 +12,10 @@ from pathlib import Path
 from flask import Request
 
 from .base import BasePaymentProvider
-from . import config  # 引入配置模块，避免循环导入
+from .. import config
 
 logger = logging.getLogger(__name__)
+
 
 class WechatProvider(BasePaymentProvider):
     """微信支付"""
@@ -22,41 +23,40 @@ class WechatProvider(BasePaymentProvider):
     provider_id = 'wechat'
     provider_name = '微信支付'
 
-    def __init__(self, config):
-        self._config = config
+    def __init__(self):
         self._client = None
         self._init_client()
 
     def _init_client(self):
         """初始化微信支付客户端"""
-        if not self._config.WECHAT_APP_ID or not self._config.WECHAT_KEY_PATH:
+        if not config.WECHAT_APP_ID or not config.WECHAT_KEY_PATH:
             return
 
         try:
             from wechatpayv3 import WeChatPay, WeChatPayType
 
-            cert_path = Path(self._config.WECHAT_CERT_PATH)
+            cert_path = Path(config.WECHAT_CERT_PATH)
             if not cert_path.exists():
-                logger.error(f"微信支付证书文件不存在: {self._config.WECHAT_CERT_PATH}")
+                logger.error(f"微信支付证书文件不存在: {config.WECHAT_CERT_PATH}")
                 return
 
-            serial_path = Path(f'{self._config.WECHAT_CERT_PATH}.serial')
-            key_path = Path(self._config.WECHAT_KEY_PATH)
+            serial_path = Path(f'{config.WECHAT_CERT_PATH}.serial')
+            key_path = Path(config.WECHAT_KEY_PATH)
             if not key_path.exists():
-                logger.error(f"微信支付私钥文件不存在: {self._config.WECHAT_KEY_PATH}")
+                logger.error(f"微信支付私钥文件不存在: {config.WECHAT_KEY_PATH}")
                 return
 
             self._client = WeChatPay(
                 wechatpay_type=WeChatPayType.NATIVE,
-                mchid=self._config.WECHAT_MCH_ID,
-                appid=self._config.WECHAT_APP_ID,
+                mchid=config.WECHAT_MCH_ID,
+                appid=config.WECHAT_APP_ID,
                 private_key=key_path.read_text(),
                 cert_serial_no=serial_path.read_text().strip() if serial_path.exists() else '',
-                app_secret=self._config.WECHAT_API_KEY_V3,
-                notify_url=self._config.WECHAT_NOTIFY_URL,
+                app_secret=config.WECHAT_API_KEY_V3,
+                notify_url=config.WECHAT_NOTIFY_URL,
             )
 
-            logger.info(f"微信支付初始化成功: appid={self._config.WECHAT_APP_ID[:8]}...")
+            logger.info(f"微信支付初始化成功: appid={config.WECHAT_APP_ID[:8]}...")
 
         except ImportError:
             logger.warning("wechatpayv3 SDK 未安装")
@@ -64,7 +64,7 @@ class WechatProvider(BasePaymentProvider):
             logger.error(f"微信支付初始化失败: {e}")
 
     def is_available(self) -> bool:
-        return self._client is not None or self._config.WECHAT_SANDBOX
+        return self._client is not None or config.WECHAT_SANDBOX
 
     def create_qr_order(self, order_no: str, amount: float,
                         description: str) -> Dict[str, Any]:
@@ -73,7 +73,7 @@ class WechatProvider(BasePaymentProvider):
 
         调用微信支付 V3 API 的 JSAPI/Native 下单接口。
         """
-        if self._config.WECHAT_SANDBOX or not self._client:
+        if config.WECHAT_SANDBOX or not self._client:
             logger.info(f"[微信沙箱] 模拟创建订单: {order_no}")
             return {
                 'code_url': f'weixin://wxpay/bizpayurl?pr=sandbox_{order_no[:8]}',
@@ -96,7 +96,7 @@ class WechatProvider(BasePaymentProvider):
 
         except Exception as e:
             logger.error(f"微信支付创建订单失败: {order_no}, {e}")
-            if self._config.WECHAT_SANDBOX:
+            if config.WECHAT_SANDBOX:
                 return {
                     'code_url': f'weixin://wxpay/bizpayurl?pr=sandbox_{order_no[:8]}',
                     'sandbox': True,
@@ -105,7 +105,7 @@ class WechatProvider(BasePaymentProvider):
 
     def query_order(self, order_no: str) -> Optional[str]:
         """查询微信支付订单状态"""
-        if self._config.WECHAT_SANDBOX or not self._client:
+        if config.WECHAT_SANDBOX or not self._client:
             return None
 
         try:
@@ -134,7 +134,7 @@ class WechatProvider(BasePaymentProvider):
         TODO: 生产环境需要实现签名验证和数据解密。
         当前沙箱模式下直接解析。
         """
-        if self._config.WECHAT_SANDBOX:
+        if config.WECHAT_SANDBOX:
             # 沙箱模式：直接解析请求体
             try:
                 data = request.get_json(force=True) or {}

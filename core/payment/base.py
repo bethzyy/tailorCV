@@ -1,119 +1,67 @@
 """
-测试支付 Provider 抽象基类
+支付 Provider 抽象基类
+
+定义统一的支付接口，所有支付提供商（支付宝、微信、Stripe 等）均需实现此接口。
 """
 
-import pytest
-from core.payment.base import BasePaymentProvider
+from abc import ABC, abstractmethod
+from typing import Optional, Dict, Any
+from flask import Request
 
 
-class DummyPaymentProvider(BasePaymentProvider):
-    """用于测试的具体实现"""
+class BasePaymentProvider(ABC):
+    """支付提供商抽象基类"""
 
-    provider_id = 'dummy'
-    provider_name = '测试支付'
+    provider_id: str = ''      # 'alipay' / 'wechat' / 'stripe'
+    provider_name: str = ''    # '支付宝' / '微信支付'
 
+    @abstractmethod
     def create_qr_order(self, order_no: str, amount: float,
-                        description: str):
-        return {'code_url': 'https://example.com/qr'}
+                        description: str) -> Dict[str, Any]:
+        """
+        创建扫码支付订单
 
-    def query_order(self, order_no: str):
-        return 'SUCCESS'
+        Args:
+            order_no: 商户订单号
+            amount: 金额（元）
+            description: 商品描述
 
-    def verify_notify(self, request):
-        return {'order_no': '123', 'transaction_id': 'tx_123'}
+        Returns:
+            dict: {code_url: str, ...} 二维码链接
+        """
 
-    def is_available(self):
-        return True
+    @abstractmethod
+    def query_order(self, order_no: str) -> Optional[str]:
+        """
+        查询订单状态
 
+        Args:
+            order_no: 商户订单号
 
-class UnavailablePaymentProvider(BasePaymentProvider):
-    """不可用的支付提供商"""
+        Returns:
+            'SUCCESS' / 'WAITING' / 'CLOSED' / None(查询失败)
+        """
 
-    provider_id = 'unavailable'
-    provider_name = '不可用支付'
+    @abstractmethod
+    def verify_notify(self, request: Request) -> Optional[Dict[str, Any]]:
+        """
+        验证并解析支付回调通知
 
-    def create_qr_order(self, order_no: str, amount: float,
-                        description: str):
-        return {}
+        Args:
+            request: Flask request 对象
 
-    def query_order(self, order_no: str):
-        return None
+        Returns:
+            dict: {order_no: str, transaction_id: str, ...} 或 None(验签失败)
+        """
 
-    def verify_notify(self, request):
-        return None
+    @abstractmethod
+    def is_available(self) -> bool:
+        """检查是否已配置且可用"""
 
-    def is_available(self):
-        return False
-
-
-class TestBasePaymentProvider:
-    """测试 BasePaymentProvider 抽象基类"""
-
-    def test_cannot_instantiate_abstract_class(self):
-        """抽象基类不能直接实例化"""
-        with pytest.raises(TypeError):
-            BasePaymentProvider()
-
-    def test_concrete_implementation_can_instantiate(self):
-        """具体实现可以实例化"""
-        provider = DummyPaymentProvider()
-        assert provider is not None
-
-    def test_provider_id(self):
-        """测试 provider_id"""
-        provider = DummyPaymentProvider()
-        assert provider.provider_id == 'dummy'
-
-    def test_provider_name(self):
-        """测试 provider_name"""
-        provider = DummyPaymentProvider()
-        assert provider.provider_name == '测试支付'
-
-    def test_get_info_available(self):
-        """测试 get_info 方法 - 可用状态"""
-        provider = DummyPaymentProvider()
-        info = provider.get_info()
-        assert info == {
-            'provider_id': 'dummy',
-            'provider_name': '测试支付',
-            'available': True,
+    def get_info(self) -> Dict[str, str]:
+        """获取 provider 基本信息"""
+        return {
+            'provider_id': self.provider_id,
+            'provider_name': self.provider_name,
+            'available': self.is_available(),
         }
-
-    def test_get_info_unavailable(self):
-        """测试 get_info 方法 - 不可用状态"""
-        provider = UnavailablePaymentProvider()
-        info = provider.get_info()
-        assert info == {
-            'provider_id': 'unavailable',
-            'provider_name': '不可用支付',
-            'available': False,
-        }
-
-    def test_create_qr_order(self):
-        """测试 create_qr_order 方法"""
-        provider = DummyPaymentProvider()
-        result = provider.create_qr_order('order_001', 100.0, '测试商品')
-        assert result == {'code_url': 'https://example.com/qr'}
-
-    def test_query_order(self):
-        """测试 query_order 方法"""
-        provider = DummyPaymentProvider()
-        result = provider.query_order('order_001')
-        assert result == 'SUCCESS'
-
-    def test_verify_notify(self):
-        """测试 verify_notify 方法"""
-        provider = DummyPaymentProvider()
-        result = provider.verify_notify(None)
-        assert result == {'order_no': '123', 'transaction_id': 'tx_123'}
-
-    def test_is_available_true(self):
-        """测试 is_available 方法 - 可用"""
-        provider = DummyPaymentProvider()
-        assert provider.is_available() is True
-
-    def test_is_available_false(self):
-        """测试 is_available 方法 - 不可用"""
-        provider = UnavailablePaymentProvider()
-        assert provider.is_available() is False
-

@@ -547,7 +547,6 @@ def create_app() -> Flask:
         try:
             result = login_or_register(email)
             from flask import session
-            session.clear()  # 防止 session fixation
             session['user_id'] = result['user_id']
             session['email'] = result['email']
             # 设置登录有效期

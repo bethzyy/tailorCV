@@ -43,6 +43,16 @@ python app.py
 
 访问 http://localhost:5000 开始使用。
 
+## 界面预览
+
+### 简历定制
+
+![简历定制主界面](docs/images/tailor-main.png)
+
+### 模板管理
+
+![模板提取、编辑、选择](docs/images/template-editor.png)
+
 ## 使用方式
 
 ### 方式一：文件上传

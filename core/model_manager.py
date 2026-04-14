@@ -14,6 +14,7 @@ from .config import config
 
 logger = logging.getLogger(__name__)
 
+
 class ModelManager:
     """单模型管理器 - 使用提供者模式"""
 
@@ -82,8 +83,8 @@ class ModelManager:
 
         # 模型列表：首选 -> 备选
         models_to_try = [preferred_model] + self.fallback_models
-        # 使用列表切片创建副本
-        models_to_try = models_to_try[:]
+        # 去重
+        models_to_try = list(dict.fromkeys(models_to_try))
 
         last_error = None
 
