@@ -1,66 +1,60 @@
-# Environment
+# Environment & secrets
 .env
-.env.local
-*.env
+.env.*
 !.env.example
+!.env.production.example
 
-# API Keys
-ZHIPU_API_KEY
-apikey*.txt
-
-# Certificates & Keys (NEVER commit private keys)
-*.pem
-*.key
-*.crt
-*.p12
-certs/
-
-# Database
-storage/*.db
-storage/*.sqlite
-
-# User data (runtime)
-data/
-storage/
-
-# Cache
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-.Python
-cache/
-*.cache
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
 
 # IDE
-.vscode/
 .idea/
+.vscode/
 *.swp
 *.swo
-*~
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Build
-dist/
-build/
-*.egg-info/
-
 # Logs
 *.log
-logs/
 
-# Temporary files
+# Debug
+*.pyc
+.env.local
+*.env
+ZHIPU_API_KEY
+apikey*.txt
+*.pem
+*.key
+*.crt
+*.p12
+certs/
+storage/*.db
+storage/*.sqlite
+data/
+.Python
+cache/
+*.cache
+*~
+logs/
 temp/
 tmp/
 *.tmp
-
-# Output files
 output/
 downloads/
-
-# Test data (may contain real user data)
 test_*.json
 test_*.txt
